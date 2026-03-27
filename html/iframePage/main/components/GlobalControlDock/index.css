@@ -1,0 +1,32 @@
+.ajax-tools-global-control-dock {
+  position: fixed;
+  bottom: 12px;
+  right: 8px;
+  z-index: 20;
+  min-width: 220px;
+  padding: 8px 10px;
+  border: 1px solid #d9d9d9;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.1);
+  backdrop-filter: blur(4px);
+}
+
+.ajax-tools-global-control-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.ajax-tools-global-control-item + .ajax-tools-global-control-item {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px dashed #e5e7eb;
+}
+
+.ajax-tools-global-control-label {
+  font-size: 12px;
+  color: #333;
+  white-space: nowrap;
+}

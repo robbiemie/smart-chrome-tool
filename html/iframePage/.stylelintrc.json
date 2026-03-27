@@ -1,0 +1,16 @@
+{
+  "extends": ["stylelint-config-standard-scss"],
+  "plugins": ["stylelint-scss", "stylelint-order"],
+  "rules": {
+    "block-no-empty": true,
+    "color-hex-case": "lower",
+    "order/properties-alphabetical-order": true,
+    "declaration-colon-space-after": "always-single-line",
+    "declaration-colon-space-before": "never",
+    "declaration-block-semicolon-space-before": "never",
+    "declaration-block-semicolon-space-after": "always-single-line",
+    "declaration-block-trailing-semicolon": "always",
+    "no-eol-whitespace": true,
+    "no-missing-end-of-source-newline": true
+  }
+}

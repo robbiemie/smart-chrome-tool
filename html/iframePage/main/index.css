@@ -1,0 +1,23 @@
+body {
+  margin: 0;
+  font-family: 'Avenir Next', 'Trebuchet MS', -apple-system, BlinkMacSystemFont, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background: #f3eee4;
+  overflow-x: hidden;
+}
+code {
+  font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
+  monospace;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+#root {
+  min-height: 100vh;
+  width: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
+}
