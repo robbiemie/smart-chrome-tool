@@ -3,12 +3,15 @@ import { Button, Empty, Tag } from 'antd';
 import { EditOutlined, CodeOutlined, SendOutlined } from '@ant-design/icons';
 import { AjaxGroup, ModifyDataModalOpenProps } from '../../types/registry';
 import { withErrorBoundary } from '../../common/withErrorBoundary';
+import ModuleSection from '../ModuleSection';
 
 interface RuleDetailPanelProps {
   group: AjaxGroup | null;
   groupIndex: number;
   selectedRuleIndex: number;
+  collapsed: boolean;
   onOpenModifyModal: (payload: ModifyDataModalOpenProps) => void;
+  onToggleCollapse: () => void;
 }
 
 const formatText = (value: string) => {
@@ -23,7 +26,9 @@ const RuleDetailPanel = ({
   group,
   groupIndex,
   selectedRuleIndex,
+  collapsed,
   onOpenModifyModal,
+  onToggleCollapse,
 }: RuleDetailPanelProps) => {
   const rule = group?.interfaceList?.[selectedRuleIndex];
 
@@ -52,18 +57,21 @@ const RuleDetailPanel = ({
   };
 
   return (
-    <aside className="rule-detail-panel">
-      <div className="rule-detail-panel__header">
-        <div>
-          <span className="section-kicker">Rule Focus</span>
-          <h2>{rule.requestDes || rule.request || 'Untitled rule'}</h2>
-        </div>
+    <ModuleSection
+      title={rule.requestDes || rule.request || 'Untitled rule'}
+      description="Inspect request matching details and replacement payload values."
+      eyebrow="Rule Focus"
+      className="rule-detail-panel"
+      collapsed={collapsed}
+      extra={(
         <div className="rule-detail-panel__tags">
           <Tag color={rule.open ? 'green' : 'default'}>{rule.open ? 'Enabled' : 'Disabled'}</Tag>
           <Tag color="blue">{rule.matchType}</Tag>
           {rule.matchMethod ? <Tag>{rule.matchMethod}</Tag> : null}
         </div>
-      </div>
+      )}
+      onToggleCollapse={onToggleCollapse}
+    >
 
       <section className="detail-section">
         <span className="detail-section__label">Match Request</span>
@@ -115,7 +123,7 @@ const RuleDetailPanel = ({
           Edit Payload
         </Button>
       </div>
-    </aside>
+    </ModuleSection>
   );
 };
 

@@ -8,6 +8,7 @@ import {
 } from '@ant-design/icons';
 import { AjaxGroup } from '../../types/registry';
 import { withErrorBoundary } from '../../common/withErrorBoundary';
+import ModuleSection from '../ModuleSection';
 
 interface OperationsRailProps {
   ajaxDataList: AjaxGroup[];
@@ -16,11 +17,15 @@ interface OperationsRailProps {
   pageHeadersQuickEnabled: boolean;
   pageHeadersQuickToggling: boolean;
   ajaxToolsExpandAll: boolean;
+  globalControlsCollapsed: boolean;
+  groupNavigatorCollapsed: boolean;
   onSelectGroup: (groupIndex: number) => void;
   onToggleAjaxToolsSwitch: (value: boolean) => void;
   onTogglePageHeadersQuick: (value: boolean) => void;
   onToggleExpandAll: (value: boolean) => void;
   onGroupAdd: () => void;
+  onGlobalControlsCollapseToggle: () => void;
+  onGroupNavigatorCollapseToggle: () => void;
 }
 
 const OperationsRail = ({
@@ -30,18 +35,25 @@ const OperationsRail = ({
   pageHeadersQuickEnabled,
   pageHeadersQuickToggling,
   ajaxToolsExpandAll,
+  globalControlsCollapsed,
+  groupNavigatorCollapsed,
   onSelectGroup,
   onToggleAjaxToolsSwitch,
   onTogglePageHeadersQuick,
   onToggleExpandAll,
   onGroupAdd,
+  onGlobalControlsCollapseToggle,
+  onGroupNavigatorCollapseToggle,
 }: OperationsRailProps) => {
   return (
     <aside className="operations-rail">
-      <section className="rail-panel">
-        <div className="rail-panel__heading">
-          <span>Global Controls</span>
-        </div>
+      <ModuleSection
+        title="Global Controls"
+        description="Manage shared workspace behaviors before editing individual rules."
+        className="rail-panel"
+        collapsed={globalControlsCollapsed}
+        onToggleCollapse={onGlobalControlsCollapseToggle}
+      >
         <div className="rail-switch-list">
           <div className="rail-switch-item">
             <div>
@@ -69,15 +81,20 @@ const OperationsRail = ({
             <Switch checked={ajaxToolsExpandAll} onChange={onToggleExpandAll} />
           </div>
         </div>
-      </section>
+      </ModuleSection>
 
-      <section className="rail-panel">
-        <div className="rail-panel__heading">
-          <span>Group Navigator</span>
+      <ModuleSection
+        title="Group Navigator"
+        description="Jump between groups and inspect rule volume at a glance."
+        className="rail-panel"
+        collapsed={groupNavigatorCollapsed}
+        extra={(
           <Button type="text" icon={<PlusOutlined />} onClick={onGroupAdd}>
             Add
           </Button>
-        </div>
+        )}
+        onToggleCollapse={onGroupNavigatorCollapseToggle}
+      >
         {ajaxDataList.length < 1 ? (
           <Empty
             image={Empty.PRESENTED_IMAGE_SIMPLE}
@@ -88,17 +105,18 @@ const OperationsRail = ({
             {ajaxDataList.map((group, index) => {
               const isActive = index === selectedGroupIndex;
               const enabledCount = group.interfaceList.filter((item) => item.open).length;
+              const isDisabled = enabledCount === 0;
               return (
                 <button
                   key={`${group.summaryText}-${index}`}
                   type="button"
-                  className={`group-nav-card${isActive ? ' group-nav-card--active' : ''}`}
+                  className={`group-nav-card${isActive ? ' group-nav-card--active' : ''}${isDisabled ? ' group-nav-card--disabled' : ''}`}
                   onClick={() => onSelectGroup(index)}
                 >
                   <span className={`group-nav-card__accent ${group.headerClass}`} />
                   <div className="group-nav-card__body">
                     <strong>{group.summaryText || `Group ${index + 1}`}</strong>
-                    <span>{group.interfaceList.length} rules</span>
+                    <span>{isDisabled ? `Disabled · ${group.interfaceList.length} rules` : `${group.interfaceList.length} rules`}</span>
                   </div>
                   <div className="group-nav-card__meta">
                     <span><ApiOutlined /> {enabledCount}</span>
@@ -109,7 +127,7 @@ const OperationsRail = ({
             })}
           </div>
         )}
-      </section>
+      </ModuleSection>
 
     </aside>
   );

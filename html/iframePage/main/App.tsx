@@ -14,6 +14,8 @@ import GroupWorkbench from './components/GroupWorkbench';
 import RuleDetailPanel from './components/RuleDetailPanel';
 import { useWorkbenchMetrics } from './hooks/useWorkbenchMetrics';
 import { AjaxGroup, ModifyDataModalOpenProps } from './types/registry';
+import { useModuleCollapseState } from './hooks/useModuleCollapseState';
+import ModuleSection from './components/ModuleSection';
 
 function App() {
   const modifyDataModalRef = useRef<{ openModal: (props: OpenModalProps) => void } | null>(null);
@@ -67,6 +69,7 @@ function App() {
   } = usePageHeaders();
 
   const metrics = useWorkbenchMetrics(ajaxDataList as AjaxGroup[]);
+  const { moduleCollapseState, updateModuleCollapseState } = useModuleCollapseState();
 
   useEffect(() => {
     if (!chrome.storage || !chrome.runtime || isRegistry) return;
@@ -154,6 +157,35 @@ function App() {
     setSelectedGroupIndex(ajaxDataList.length);
   };
 
+  const handleGroupOpenChange = (groupIndex: number, open: boolean) => {
+    const nextGroupIndex = onGroupOpenChange(groupIndex, open);
+
+    if (typeof nextGroupIndex === 'number') {
+      setSelectedGroupIndex(nextGroupIndex);
+    }
+  };
+
+  const handleInterfaceListChange = (
+    groupIndex: number,
+    interfaceIndex: number,
+    key: string,
+    value: string | boolean
+  ) => {
+    const nextGroupIndex = onInterfaceListChange(groupIndex, interfaceIndex, key, value);
+
+    if (key === 'open' && typeof nextGroupIndex === 'number') {
+      setSelectedGroupIndex(nextGroupIndex);
+    }
+  };
+
+  const handleInterfaceListDelete = (groupIndex: number, key: string) => {
+    const nextGroupIndex = onInterfaceListDelete(groupIndex, key);
+
+    if (typeof nextGroupIndex === 'number') {
+      setSelectedGroupIndex(nextGroupIndex);
+    }
+  };
+
   return (
     <div
       className="ajax-tools-iframe-container"
@@ -170,6 +202,8 @@ function App() {
             pageHeadersQuickEnabled={pageHeadersQuickEnabled}
             pageHeadersQuickToggling={pageHeadersQuickToggling}
             ajaxToolsExpandAll={ajaxToolsExpandAll}
+            globalControlsCollapsed={moduleCollapseState.globalControls}
+            groupNavigatorCollapsed={moduleCollapseState.groupNavigator}
             onSelectGroup={setSelectedGroupIndex}
             onToggleAjaxToolsSwitch={handleToggleAjaxToolsSwitch}
             onTogglePageHeadersQuick={(value) => {
@@ -177,6 +211,12 @@ function App() {
             }}
             onToggleExpandAll={updateAjaxToolsExpandAll}
             onGroupAdd={handleGroupAdd}
+            onGlobalControlsCollapseToggle={() => {
+              updateModuleCollapseState('globalControls', !moduleCollapseState.globalControls);
+            }}
+            onGroupNavigatorCollapseToggle={() => {
+              updateModuleCollapseState('groupNavigator', !moduleCollapseState.groupNavigator);
+            }}
           />
 
           <main className="workbench-main" style={{ opacity: ajaxToolsSwitchOn ? 1 : 0.65 }}>
@@ -191,6 +231,7 @@ function App() {
                   groupIndex={selectedGroupIndex}
                   selectedRuleIndex={selectedRuleIndex}
                   ajaxToolsExpandAll={ajaxToolsExpandAll}
+                  collapsed={moduleCollapseState.groupWorkbench}
                   onSelectRule={(ruleIndex) => {
                     setSelectedRuleIndexMap((previous) => ({
                       ...previous,
@@ -200,31 +241,50 @@ function App() {
                   onGroupSummaryTextChange={onGroupSummaryTextChange}
                   onGroupMove={onGroupMove}
                   onGroupDelete={onGroupDelete}
-                  onGroupOpenChange={onGroupOpenChange}
+                  onGroupOpenChange={handleGroupOpenChange}
+                  onCollapseChange={onCollapseChange}
                   onInterfaceListAdd={onInterfaceListAdd}
-                  onInterfaceListDelete={onInterfaceListDelete}
+                  onInterfaceListDelete={handleInterfaceListDelete}
                   onInterfaceMove={onInterfaceMove}
-                  onInterfaceListChange={onInterfaceListChange}
+                  onInterfaceListChange={handleInterfaceListChange}
                   onOpenModifyModal={handleOpenModifyModal}
+                  onToggleCollapse={() => {
+                    updateModuleCollapseState('groupWorkbench', !moduleCollapseState.groupWorkbench);
+                  }}
                 />
                 <RuleDetailPanel
                   group={selectedGroup}
                   groupIndex={selectedGroupIndex}
                   selectedRuleIndex={selectedRuleIndex}
+                  collapsed={moduleCollapseState.ruleDetailPanel}
                   onOpenModifyModal={handleOpenModifyModal}
+                  onToggleCollapse={() => {
+                    updateModuleCollapseState('ruleDetailPanel', !moduleCollapseState.ruleDetailPanel);
+                  }}
                 />
               </div>
             )}
 
             <section className="workbench-bottom-panel">
-              <WorkbenchHeader
-                metrics={metrics}
-                ajaxToolsSwitchOn={ajaxToolsSwitchOn}
-                pageHeadersQuickEnabled={pageHeadersQuickEnabled}
-                onGroupAdd={handleGroupAdd}
-                onImportClick={onImportClick}
-                onPageHeadersOpen={openPageHeadersModal}
-              />
+              <ModuleSection
+                title="Workspace Overview"
+                description="Review workspace metrics and open common actions."
+                eyebrow="Control Room"
+                className="workbench-header-shell"
+                collapsed={moduleCollapseState.workbenchOverview}
+                onToggleCollapse={() => {
+                  updateModuleCollapseState('workbenchOverview', !moduleCollapseState.workbenchOverview);
+                }}
+              >
+                <WorkbenchHeader
+                  metrics={metrics}
+                  ajaxToolsSwitchOn={ajaxToolsSwitchOn}
+                  pageHeadersQuickEnabled={pageHeadersQuickEnabled}
+                  onGroupAdd={handleGroupAdd}
+                  onImportClick={onImportClick}
+                  onPageHeadersOpen={openPageHeadersModal}
+                />
+              </ModuleSection>
             </section>
           </main>
         </div>
