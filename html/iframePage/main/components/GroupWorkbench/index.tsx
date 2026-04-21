@@ -1,15 +1,12 @@
 import React from 'react';
-import { Button, Dropdown, Empty, Input, Select, Tag } from 'antd';
+import { Button, Empty, Input, Select, Tag } from 'antd';
 import {
   DeleteOutlined,
   PlusOutlined,
-  VerticalAlignTopOutlined,
-  VerticalAlignBottomOutlined,
   EditOutlined,
   CodeOutlined,
   SendOutlined,
   EyeOutlined,
-  MoreOutlined,
   DownOutlined,
   RightOutlined,
 } from '@ant-design/icons';
@@ -87,48 +84,6 @@ const GroupWorkbench = ({
       eyebrow="Group Studio"
       className={`group-workbench${isGroupDisabled ? ' group-workbench--disabled' : ''}`}
       collapsed={collapsed}
-      extra={(
-        <div className="group-workbench__toolbar">
-          <div className="group-workbench__toolbar-group">
-            <Button size="small" onClick={() => onGroupOpenChange(groupIndex, true)}>
-              Enable All
-            </Button>
-            <Button size="small" onClick={() => onGroupOpenChange(groupIndex, false)}>
-              Disable All
-            </Button>
-          </div>
-          <Dropdown
-            trigger={['click']}
-            menu={{
-              items: [
-                {
-                  key: 'move-top',
-                  label: 'Pin Top',
-                  icon: <VerticalAlignTopOutlined />,
-                  onClick: () => onGroupMove(groupIndex, 'top'),
-                },
-                {
-                  key: 'move-bottom',
-                  label: 'Send Bottom',
-                  icon: <VerticalAlignBottomOutlined />,
-                  onClick: () => onGroupMove(groupIndex, 'bottom'),
-                },
-                {
-                  key: 'remove-group',
-                  label: 'Remove Group',
-                  icon: <DeleteOutlined />,
-                  danger: true,
-                  onClick: () => onGroupDelete(groupIndex),
-                },
-              ],
-            }}
-          >
-            <Button size="small" icon={<MoreOutlined />}>
-              More
-            </Button>
-          </Dropdown>
-        </div>
-      )}
       onToggleCollapse={onToggleCollapse}
     >
       <Input
@@ -142,6 +97,7 @@ const GroupWorkbench = ({
         {group.interfaceList.map((rule, interfaceIndex) => {
           const isSelected = interfaceIndex === selectedRuleIndex;
           const isRuleExpanded = group.collapseActiveKeys.includes(rule.key);
+          const ruleTitle = rule.requestDes || rule.request || `Rule ${interfaceIndex + 1}`;
 
           const handleRuleCollapseToggle = (event: React.MouseEvent<HTMLElement>) => {
             event.stopPropagation();
@@ -160,32 +116,18 @@ const GroupWorkbench = ({
               onClick={() => onSelectRule(interfaceIndex)}
             >
               <div className="rule-card__header">
-                <div className="rule-card__identity">
-                  <Tag color={rule.open ? 'green' : 'default'}>{rule.open ? 'Enabled' : 'Disabled'}</Tag>
-                  <Tag color="blue">{rule.matchType || 'regex'}</Tag>
-                  {rule.matchMethod ? <Tag>{rule.matchMethod}</Tag> : null}
+                <div className="rule-card__summary">
+                  <Tag color={rule.open ? 'green' : 'default'}>{rule.open ? 'Active' : 'Disabled'}</Tag>
+                  <div className="rule-card__summary-text">
+                    <strong>{ruleTitle}</strong>
+                    {rule.request && rule.requestDes ? <span>{rule.request}</span> : null}
+                  </div>
                 </div>
                 <div className="rule-card__toolbar">
                   <Button
                     type="text"
                     icon={isRuleExpanded ? <DownOutlined /> : <RightOutlined />}
                     onClick={handleRuleCollapseToggle}
-                  />
-                  <Button
-                    type="text"
-                    icon={<VerticalAlignTopOutlined />}
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      onInterfaceMove(groupIndex, interfaceIndex, 'top');
-                    }}
-                  />
-                  <Button
-                    type="text"
-                    icon={<VerticalAlignBottomOutlined />}
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      onInterfaceMove(groupIndex, interfaceIndex, 'bottom');
-                    }}
                   />
                   <Button
                     type="text"
@@ -201,6 +143,10 @@ const GroupWorkbench = ({
 
               {isRuleExpanded ? (
                 <>
+                  <div className="rule-card__meta">
+                    <Tag color="blue">{rule.matchType || 'regex'}</Tag>
+                    {rule.matchMethod ? <Tag>{rule.matchMethod}</Tag> : null}
+                  </div>
                   <div className="rule-card__grid">
                     <label className="field-block">
                       <span>Method</span>
@@ -349,8 +295,11 @@ const GroupWorkbench = ({
       </div>
 
       <div className="group-workbench__footer">
-        <Button type="dashed" icon={<PlusOutlined />} onClick={() => onInterfaceListAdd(groupIndex)}>
+        <Button type="primary" icon={<PlusOutlined />} onClick={() => onInterfaceListAdd(groupIndex)}>
           Add Rule
+        </Button>
+        <Button danger type="text" onClick={() => onGroupDelete(groupIndex)}>
+          Remove Group
         </Button>
       </div>
     </ModuleSection>

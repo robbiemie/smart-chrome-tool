@@ -42,6 +42,18 @@ async function toggleIframeVisibility() {
   await chrome.storage.local.set({ iframeVisible: Boolean(response?.nextIframeVisible) });
 }
 
+async function sendMessageToActiveTab(message) {
+  const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+  const activeTab = tabs[0];
+
+  if (!activeTab?.id) {
+    return { ok: false, message: 'No active tab found.' };
+  }
+
+  const response = await sendMessageToContentScript(activeTab.id, message);
+  return response || { ok: false, message: 'Active tab did not respond.' };
+}
+
 function setSwitchBadge(switchValue) {
   chrome.action.setBadgeText({ text: switchValue ? 'ON' : 'OFF' });
   chrome.action.setBadgeTextColor({ color: switchValue ? '#ffffff' : '#333333' });
@@ -247,11 +259,21 @@ chrome.storage.onChanged.addListener((changes) => {
 });
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  if (message?.type !== 'SYNC_PAGE_HEADERS_RULES') return false;
-  syncHeaderRules()
-    .then(() => sendResponse({ ok: true }))
-    .catch((error) => sendResponse({ ok: false, message: error?.message || 'sync failed' }));
-  return true;
+  if (message?.type === 'SYNC_PAGE_HEADERS_RULES') {
+    syncHeaderRules()
+      .then(() => sendResponse({ ok: true }))
+      .catch((error) => sendResponse({ ok: false, message: error?.message || 'sync failed' }));
+    return true;
+  }
+
+  if (message?.type === 'GET_PAGE_RENDER_MODE' || message?.type === 'SET_PAGE_RENDER_MODE') {
+    sendMessageToActiveTab(message)
+      .then((response) => sendResponse(response))
+      .catch((error) => sendResponse({ ok: false, message: error?.message || 'render mode sync failed' }));
+    return true;
+  }
+
+  return false;
 });
 
 chrome.runtime.onInstalled.addListener(() => {

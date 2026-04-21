@@ -16,6 +16,9 @@ import { useWorkbenchMetrics } from './hooks/useWorkbenchMetrics';
 import { AjaxGroup, ModifyDataModalOpenProps } from './types/registry';
 import { useModuleCollapseState } from './hooks/useModuleCollapseState';
 import ModuleSection from './components/ModuleSection';
+import { usePageRenderMode } from './hooks/usePageRenderMode';
+
+const SELECTED_GROUP_INDEX_STORAGE_KEY = 'ajaxToolsSelectedGroupIndex';
 
 function App() {
   const modifyDataModalRef = useRef<{ openModal: (props: OpenModalProps) => void } | null>(null);
@@ -67,6 +70,12 @@ function App() {
     save: savePageHeaders,
     toggleQuickEnabled: togglePageHeadersQuickEnabled,
   } = usePageHeaders();
+  const {
+    csrEnabled,
+    loading: csrModeLoading,
+    toggling: csrModeToggling,
+    toggle: toggleCsrMode,
+  } = usePageRenderMode();
 
   const metrics = useWorkbenchMetrics(ajaxDataList as AjaxGroup[]);
   const { moduleCollapseState, updateModuleCollapseState } = useModuleCollapseState();
@@ -77,19 +86,21 @@ function App() {
     // Hydrate the workbench from extension storage exactly once after the iframe boots.
     setIsRegistry(true);
     chrome.storage.local.get(
-      ['ajaxDataList', 'ajaxToolsSwitchOn', 'ajaxToolsSkin', 'ajaxToolsExpandAll'],
+      ['ajaxDataList', 'ajaxToolsSwitchOn', 'ajaxToolsSkin', 'ajaxToolsExpandAll', SELECTED_GROUP_INDEX_STORAGE_KEY],
       (result) => {
         const {
           ajaxDataList = [],
           ajaxToolsSwitchOn = true,
           ajaxToolsSkin = 'light',
           ajaxToolsExpandAll = false,
+          [SELECTED_GROUP_INDEX_STORAGE_KEY]: selectedGroupIndex = 0,
         } = result;
 
         if (ajaxDataList.length > 0) {
           setAjaxDataList(ajaxDataList);
         }
 
+        setSelectedGroupIndex(selectedGroupIndex);
         setAjaxToolsSwitchOn(ajaxToolsSwitchOn);
         setAjaxToolsSkin(ajaxToolsSkin);
         setAjaxToolsExpandAll(ajaxToolsExpandAll);
@@ -107,6 +118,14 @@ function App() {
       setSelectedGroupIndex(ajaxDataList.length - 1);
     }
   }, [ajaxDataList, selectedGroupIndex]);
+
+  useEffect(() => {
+    if (!chrome.storage) return;
+
+    chrome.storage.local.set({
+      [SELECTED_GROUP_INDEX_STORAGE_KEY]: selectedGroupIndex,
+    });
+  }, [selectedGroupIndex]);
 
   const updateAjaxToolsExpandAll = (value: boolean) => {
     // Keep the persisted collapse keys aligned with the global expand state.
@@ -199,23 +218,18 @@ function App() {
             ajaxDataList={ajaxDataList as AjaxGroup[]}
             selectedGroupIndex={selectedGroupIndex}
             ajaxToolsSwitchOn={ajaxToolsSwitchOn}
-            pageHeadersQuickEnabled={pageHeadersQuickEnabled}
-            pageHeadersQuickToggling={pageHeadersQuickToggling}
-            ajaxToolsExpandAll={ajaxToolsExpandAll}
+            csrModeEnabled={csrEnabled}
+            csrModeLoading={csrModeLoading}
+            csrModeToggling={csrModeToggling}
             globalControlsCollapsed={moduleCollapseState.globalControls}
-            groupNavigatorCollapsed={moduleCollapseState.groupNavigator}
             onSelectGroup={setSelectedGroupIndex}
             onToggleAjaxToolsSwitch={handleToggleAjaxToolsSwitch}
-            onTogglePageHeadersQuick={(value) => {
-              void togglePageHeadersQuickEnabled(value);
+            onToggleCsrMode={(value) => {
+              void toggleCsrMode(value);
             }}
-            onToggleExpandAll={updateAjaxToolsExpandAll}
             onGroupAdd={handleGroupAdd}
             onGlobalControlsCollapseToggle={() => {
               updateModuleCollapseState('globalControls', !moduleCollapseState.globalControls);
-            }}
-            onGroupNavigatorCollapseToggle={() => {
-              updateModuleCollapseState('groupNavigator', !moduleCollapseState.groupNavigator);
             }}
           />
 
@@ -280,7 +294,6 @@ function App() {
                   metrics={metrics}
                   ajaxToolsSwitchOn={ajaxToolsSwitchOn}
                   pageHeadersQuickEnabled={pageHeadersQuickEnabled}
-                  onGroupAdd={handleGroupAdd}
                   onImportClick={onImportClick}
                   onPageHeadersOpen={openPageHeadersModal}
                 />

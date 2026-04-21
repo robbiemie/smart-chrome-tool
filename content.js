@@ -308,12 +308,44 @@ function bindPanelMessageListener(container) {
     return;
   }
 
+  const buildRenderModeUrl = (nextCsrEnabled) => {
+    const url = new URL(window.location.href);
+
+    if (nextCsrEnabled) {
+      url.searchParams.set('__csr', '1');
+    } else {
+      url.searchParams.delete('__csr');
+    }
+
+    return url.toString();
+  };
+
   chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     console.log('【content】【robbie-ajax-tools-iframe-show】receive message', request);
-    const {type, iframeVisible} = request;
+    const {type, iframeVisible, csrEnabled} = request;
     if (type === 'iframeToggle') {
       container.style.setProperty('transform', iframeVisible ? 'translateX(0)' : 'translateX(calc(100% + 20px))', 'important');
       sendResponse({nextIframeVisible: !iframeVisible});
+    }
+    if (type === 'GET_PAGE_RENDER_MODE') {
+      sendResponse({
+        ok: true,
+        csrEnabled: new URL(window.location.href).searchParams.get('__csr') === '1',
+        currentUrl: window.location.href,
+      });
+    }
+    if (type === 'SET_PAGE_RENDER_MODE') {
+      const nextUrl = buildRenderModeUrl(Boolean(csrEnabled));
+      sendResponse({
+        ok: true,
+        csrEnabled: Boolean(csrEnabled),
+        currentUrl: nextUrl,
+      });
+      if (nextUrl !== window.location.href) {
+        setTimeout(() => {
+          window.location.replace(nextUrl);
+        }, 0);
+      }
     }
     return true;
   });
