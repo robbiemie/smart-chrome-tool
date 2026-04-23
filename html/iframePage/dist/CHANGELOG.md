@@ -1,5 +1,111 @@
 # Build Changelog
 
+## v0.0.22
+
+- Built At: 2026-04-23T06:50:15.345Z
+- Previous Version: v0.0.21
+- Git Branch: master
+- Git Commit: 9ba31483
+
+### Changed Files
+- content.js
+- html/iframePage/CHANGELOG.md
+- html/iframePage/package-lock.json
+- html/iframePage/package.json
+- manifest.json
+- service_worker.js
+
+
+## v0.0.21
+
+- Built At: 2026-04-23T06:48:48.189Z
+- Previous Version: v0.0.20
+- Git Branch: master
+- Git Commit: 9ba31483
+
+### Changed Files
+- content.js
+- html/iframePage/CHANGELOG.md
+- html/iframePage/package-lock.json
+- html/iframePage/package.json
+- manifest.json
+- service_worker.js
+
+
+## v0.0.20
+
+- Built At: 2026-04-23T06:40:25.158Z
+- Previous Version: v0.0.19
+- Git Branch: master
+- Git Commit: 9ba31483
+
+### Changed Files
+- html/iframePage/CHANGELOG.md
+- html/iframePage/package-lock.json
+- html/iframePage/package.json
+- manifest.json
+- service_worker.js
+
+
+## v0.0.19
+
+- Built At: 2026-04-23T06:35:10.278Z
+- Previous Version: v0.0.18
+- Git Branch: master
+- Git Commit: 9ba31483
+
+### Changed Files
+- html/iframePage/CHANGELOG.md
+- html/iframePage/package-lock.json
+- html/iframePage/package.json
+- manifest.json
+- service_worker.js
+
+
+## v0.0.18
+
+- Built At: 2026-04-23T06:33:32.823Z
+- Previous Version: v0.0.17
+- Git Branch: master
+- Git Commit: 9ba31483
+
+### Changed Files
+- html/iframePage/CHANGELOG.md
+- html/iframePage/package-lock.json
+- html/iframePage/package.json
+- manifest.json
+- service_worker.js
+
+
+## v0.0.17
+
+- Built At: 2026-04-23T06:27:20.383Z
+- Previous Version: v0.0.16
+- Git Branch: master
+- Git Commit: 9ba31483
+
+### Changed Files
+- html/iframePage/CHANGELOG.md
+- html/iframePage/package-lock.json
+- html/iframePage/package.json
+- manifest.json
+- service_worker.js
+
+
+## v0.0.16
+
+- Built At: 2026-04-23T06:16:56.565Z
+- Previous Version: v0.0.15
+- Git Branch: master
+- Git Commit: 9ba31483
+
+### Changed Files
+- html/iframePage/package-lock.json
+- html/iframePage/package.json
+- manifest.json
+- service_worker.js
+
+
 ## v0.0.15
 
 - Built At: 2026-04-23T03:31:32.415Z

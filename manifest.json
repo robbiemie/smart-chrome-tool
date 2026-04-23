@@ -1,6 +1,6 @@
 {
   "name": "Ajax Interceptor Tools",
-  "version": "0.0.15",
+  "version": "0.0.22",
   "description": "Modify the response text of Ajax requests",
   "manifest_version": 3,
   "declarative_net_request": {
@@ -8,6 +8,7 @@
   },
   "permissions": [
     "storage",
+    "scripting",
     "unlimitedStorage",
     "declarativeNetRequest",
     "declarativeNetRequestFeedback",

@@ -1,28 +1,54 @@
 
+const AJAX_TOOLS_RUNTIME_STATE_KEY = '__ajaxToolsRuntimeState__';
+const AJAX_TOOLS_STYLE_ID = 'robbie-ajax-interceptor-runtime-style';
+
+const ajaxToolsRuntimeState = window[AJAX_TOOLS_RUNTIME_STATE_KEY] || (window[AJAX_TOOLS_RUNTIME_STATE_KEY] = {
+  panelContainer: null,
+  panelMessageListenerBound: false,
+  panelMountObserver: null,
+  panelInitBound: false,
+});
+
 // 设置iframeVisible默认值，刷新后重置storage
 chrome.storage.local.set({iframeVisible: true});
 
 function injectedScript (path) {
   // 只在最顶层嵌入  https://github.com/PengChen96/ajax-tools/issues/18
   if (window.self === window.top) {
+    const existingScriptNode = document.documentElement.querySelector(`script[data-ajax-tools-script="${path}"]`);
+    if (existingScriptNode) {
+      return existingScriptNode;
+    }
     const scriptNode = document.createElement('script');
     scriptNode.src= chrome.runtime.getURL(path);
+    scriptNode.dataset.ajaxToolsScript = path;
     document.documentElement.appendChild(scriptNode);
     return scriptNode;
   }
 }
 function injectedCss(path) {
   if (window.self === window.top) {
+    const href = chrome.runtime.getURL(path);
+    const existingLinkElement = document.documentElement.querySelector(`link[data-ajax-tools-css="${path}"]`);
+    if (existingLinkElement) {
+      return existingLinkElement;
+    }
     const linkElement = document.createElement('link');
     linkElement.rel = 'stylesheet';
-    linkElement.href = chrome.runtime.getURL(path);
+    linkElement.href = href;
+    linkElement.dataset.ajaxToolsCss = path;
     document.documentElement.appendChild(linkElement);
     return linkElement;
   }
 }
 function injectedStyle(styleContent) {
   if (window.self === window.top) {
+    const existingStyleElement = document.getElementById(AJAX_TOOLS_STYLE_ID);
+    if (existingStyleElement) {
+      return existingStyleElement;
+    }
     const styleElement = document.createElement('style');
+    styleElement.id = AJAX_TOOLS_STYLE_ID;
     styleElement.textContent = styleContent;
     document.documentElement.appendChild(styleElement);
     return styleElement;
@@ -277,13 +303,15 @@ function actionBar (container) {
   header.appendChild(right);
   return header;
 }
-let panelContainer = null;
-let panelMessageListenerBound = false;
-let panelMountObserver = null;
-
 function createPanelContainer() {
-  if (panelContainer) {
-    return panelContainer;
+  if (ajaxToolsRuntimeState.panelContainer?.isConnected) {
+    return ajaxToolsRuntimeState.panelContainer;
+  }
+
+  const existingContainer = document.getElementById('robbie-ajax-interceptor-container');
+  if (existingContainer) {
+    ajaxToolsRuntimeState.panelContainer = existingContainer;
+    return ajaxToolsRuntimeState.panelContainer;
   }
 
   const container = document.createElement('div');
@@ -299,12 +327,12 @@ function createPanelContainer() {
   iframe.className = 'robbie-ajax-interceptor-iframe';
   container.appendChild(iframe);
 
-  panelContainer = container;
-  return panelContainer;
+  ajaxToolsRuntimeState.panelContainer = container;
+  return ajaxToolsRuntimeState.panelContainer;
 }
 
 function bindPanelMessageListener(container) {
-  if (panelMessageListenerBound) {
+  if (ajaxToolsRuntimeState.panelMessageListenerBound) {
     return;
   }
 
@@ -323,6 +351,10 @@ function bindPanelMessageListener(container) {
   chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     console.log('【content】【robbie-ajax-tools-iframe-show】receive message', request);
     const {type, iframeVisible, csrEnabled} = request;
+    if (type === 'PING_AJAX_TOOLS_PANEL') {
+      sendResponse({ ok: true });
+      return true;
+    }
     if (type === 'iframeToggle') {
       container.style.setProperty('transform', iframeVisible ? 'translateX(0)' : 'translateX(calc(100% + 20px))', 'important');
       sendResponse({nextIframeVisible: !iframeVisible});
@@ -350,7 +382,7 @@ function bindPanelMessageListener(container) {
     return true;
   });
 
-  panelMessageListenerBound = true;
+  ajaxToolsRuntimeState.panelMessageListenerBound = true;
 }
 
 function mountPanelContainer() {
@@ -370,9 +402,9 @@ function mountPanelContainer() {
     mountTarget.appendChild(container);
   }
 
-  if (panelMountObserver) {
-    panelMountObserver.disconnect();
-    panelMountObserver = null;
+  if (ajaxToolsRuntimeState.panelMountObserver) {
+    ajaxToolsRuntimeState.panelMountObserver.disconnect();
+    ajaxToolsRuntimeState.panelMountObserver = null;
   }
 
   return true;
@@ -389,22 +421,23 @@ function initPanelMount() {
   tryMountPanel();
   document.addEventListener('readystatechange', tryMountPanel);
 
-  if (!panelContainer?.isConnected) {
+  if (!ajaxToolsRuntimeState.panelContainer?.isConnected) {
     // Some sites replace document.body during bootstrap, so retry until a mount target is stable.
-    panelMountObserver = new MutationObserver(() => {
+    ajaxToolsRuntimeState.panelMountObserver = new MutationObserver(() => {
       if (mountPanelContainer()) {
-        panelMountObserver?.disconnect();
-        panelMountObserver = null;
+        ajaxToolsRuntimeState.panelMountObserver?.disconnect();
+        ajaxToolsRuntimeState.panelMountObserver = null;
       }
     });
-    panelMountObserver.observe(document.documentElement, {
+    ajaxToolsRuntimeState.panelMountObserver.observe(document.documentElement, {
       childList: true,
       subtree: true,
     });
   }
 }
 
-if (window.self === window.top) {
+if (window.self === window.top && !ajaxToolsRuntimeState.panelInitBound) {
+  ajaxToolsRuntimeState.panelInitBound = true;
   initPanelMount();
 }
 

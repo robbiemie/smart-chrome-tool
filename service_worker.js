@@ -1,6 +1,8 @@
 const HEADER_PROFILES_STORAGE_KEY = 'ajaxToolsHeaderProfiles';
 const LEGACY_PAGE_HEADERS_STORAGE_KEY = 'ajaxToolsPageHeadersMap';
 const MANAGED_RULE_IDS_STORAGE_KEY = 'ajaxToolsManagedHeaderRuleIds';
+const WORKBENCH_TARGET_TAB_ID_STORAGE_KEY = 'ajaxToolsWorkbenchTargetTabId';
+const CONTENT_SCRIPT_BOOTSTRAP_DELAY = 120;
 const RULE_ID_BASE = 930000;
 const RULE_ID_RANGE = 70000;
 const SUPPORTED_RESOURCE_TYPES = ['main_frame', 'sub_frame', 'xmlhttprequest'];
@@ -30,6 +32,14 @@ const FORBIDDEN_REQUEST_HEADERS = new Set([
 function sendMessageToContentScript(tabId, message) {
   return new Promise((resolve) => {
     chrome.tabs.sendMessage(tabId, message, (response) => {
+      if (chrome.runtime.lastError) {
+        resolve({
+          ok: false,
+          message: chrome.runtime.lastError.message,
+        });
+        return;
+      }
+
       resolve(response);
     });
   });
@@ -38,8 +48,22 @@ function sendMessageToContentScript(tabId, message) {
 async function toggleIframeVisibility() {
   const { iframeVisible } = await chrome.storage.local.get({ iframeVisible: true });
   const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
-  const response = await sendMessageToContentScript(tabs[0].id, { type: 'iframeToggle', iframeVisible });
-  await chrome.storage.local.set({ iframeVisible: Boolean(response?.nextIframeVisible) });
+  if (!tabs[0]?.id) {
+    return;
+  }
+
+  const response = await ensurePanelMessageReceiver(tabs[0].id);
+
+  if (!response?.ok) {
+    return;
+  }
+
+  const toggleResponse = await sendMessageToContentScript(tabs[0].id, { type: 'iframeToggle', iframeVisible });
+
+  // Keep the previous state when the current page cannot host the panel.
+  if (typeof toggleResponse?.nextIframeVisible === 'boolean') {
+    await chrome.storage.local.set({ iframeVisible: toggleResponse.nextIframeVisible });
+  }
 }
 
 async function sendMessageToActiveTab(message) {
@@ -52,6 +76,148 @@ async function sendMessageToActiveTab(message) {
 
   const response = await sendMessageToContentScript(activeTab.id, message);
   return response || { ok: false, message: 'Active tab did not respond.' };
+}
+
+async function getActiveTab() {
+  const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+  return tabs[0] || null;
+}
+
+async function getStoredTargetTab() {
+  const storage = await chrome.storage.local.get({ [WORKBENCH_TARGET_TAB_ID_STORAGE_KEY]: null });
+  const targetTabId = storage[WORKBENCH_TARGET_TAB_ID_STORAGE_KEY];
+
+  if (typeof targetTabId !== 'number') {
+    return null;
+  }
+
+  try {
+    return await chrome.tabs.get(targetTabId);
+  } catch (error) {
+    await chrome.storage.local.remove(WORKBENCH_TARGET_TAB_ID_STORAGE_KEY);
+    return null;
+  }
+}
+
+async function getWorkbenchTargetTab() {
+  const storedTargetTab = await getStoredTargetTab();
+
+  if (storedTargetTab?.id && storedTargetTab.url) {
+    return storedTargetTab;
+  }
+
+  const activeTabs = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
+  const fallbackTab = activeTabs.find((tab) => typeof tab.id === 'number' && Boolean(tab.url)) || null;
+
+  if (fallbackTab?.id) {
+    await chrome.storage.local.set({
+      [WORKBENCH_TARGET_TAB_ID_STORAGE_KEY]: fallbackTab.id,
+    });
+  }
+
+  return fallbackTab;
+}
+
+async function delay(duration) {
+  await new Promise((resolve) => {
+    setTimeout(resolve, duration);
+  });
+}
+
+async function ensurePanelMessageReceiver(tabId) {
+  const pingResponse = await sendMessageToContentScript(tabId, { type: 'PING_AJAX_TOOLS_PANEL' });
+
+  if (pingResponse?.ok) {
+    return pingResponse;
+  }
+
+  if (!chrome.scripting?.executeScript) {
+    return { ok: false, message: 'Scripting API is unavailable.' };
+  }
+
+  try {
+    // Re-inject the content runtime on demand so the fixed panel can open even if the page missed the initial load hook.
+    await chrome.scripting.executeScript({
+      target: { tabId, allFrames: false },
+      files: ['content.js'],
+    });
+    await delay(CONTENT_SCRIPT_BOOTSTRAP_DELAY);
+    return await sendMessageToContentScript(tabId, { type: 'PING_AJAX_TOOLS_PANEL' });
+  } catch (error) {
+    return {
+      ok: false,
+      message: error?.message || 'Failed to inject the panel runtime.',
+    };
+  }
+}
+
+function buildRenderModeUrl(currentUrl, csrEnabled) {
+  const parsedUrl = parseUrl(currentUrl);
+
+  if (!parsedUrl) {
+    return null;
+  }
+
+  if (csrEnabled) {
+    parsedUrl.searchParams.set('__csr', '1');
+  } else {
+    parsedUrl.searchParams.delete('__csr');
+  }
+
+  return parsedUrl.toString();
+}
+
+async function getPageRenderMode() {
+  const activeTab = await getWorkbenchTargetTab();
+
+  if (!activeTab?.id) {
+    return { ok: false, message: 'No target tab found.' };
+  }
+
+  if (!activeTab.url) {
+    return { ok: false, message: 'Current tab URL is unavailable.' };
+  }
+
+  const parsedUrl = parseUrl(activeTab.url);
+
+  if (!parsedUrl) {
+    return { ok: false, message: 'Current tab URL is invalid.' };
+  }
+
+  return {
+    ok: true,
+    csrEnabled: parsedUrl.searchParams.get('__csr') === '1',
+    currentUrl: parsedUrl.toString(),
+  };
+}
+
+async function setPageRenderMode(csrEnabled) {
+  const activeTab = await getWorkbenchTargetTab();
+
+  if (!activeTab?.id) {
+    return { ok: false, message: 'No target tab found.' };
+  }
+
+  if (!activeTab.url) {
+    return { ok: false, message: 'Current tab URL is unavailable.' };
+  }
+
+  const nextUrl = buildRenderModeUrl(activeTab.url, Boolean(csrEnabled));
+
+  if (!nextUrl) {
+    return { ok: false, message: 'Current tab URL is invalid.' };
+  }
+
+  if (nextUrl !== activeTab.url) {
+    // Update the top-level tab directly so CSR mode does not depend on a content script receiver.
+    await chrome.tabs.update(activeTab.id, { url: nextUrl });
+  }
+
+  return {
+    ok: true,
+    csrEnabled: Boolean(csrEnabled),
+    currentUrl: nextUrl,
+  };
 }
 
 function setSwitchBadge(switchValue) {
@@ -236,7 +402,15 @@ async function syncHeaderRules() {
   });
 }
 
-chrome.action.onClicked.addListener(async () => {
+chrome.action.onClicked.addListener(async (tab) => {
+  if (!tab?.id) {
+    return;
+  }
+
+  await chrome.storage.local.set({
+    [WORKBENCH_TARGET_TAB_ID_STORAGE_KEY]: tab.id,
+  });
+
   await toggleIframeVisibility();
 });
 
@@ -266,8 +440,15 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 
-  if (message?.type === 'GET_PAGE_RENDER_MODE' || message?.type === 'SET_PAGE_RENDER_MODE') {
-    sendMessageToActiveTab(message)
+  if (message?.type === 'GET_PAGE_RENDER_MODE') {
+    getPageRenderMode()
+      .then((response) => sendResponse(response))
+      .catch((error) => sendResponse({ ok: false, message: error?.message || 'render mode sync failed' }));
+    return true;
+  }
+
+  if (message?.type === 'SET_PAGE_RENDER_MODE') {
+    setPageRenderMode(message?.csrEnabled)
       .then((response) => sendResponse(response))
       .catch((error) => sendResponse({ ok: false, message: error?.message || 'render mode sync failed' }));
     return true;
