@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { Button, Empty, Input, Select, Tag } from 'antd';
 import {
   DeleteOutlined,
@@ -9,6 +9,7 @@ import {
   EyeOutlined,
   DownOutlined,
   RightOutlined,
+  VerticalAlignTopOutlined,
 } from '@ant-design/icons';
 import { AjaxGroup, ModifyDataModalOpenProps } from '../../types/registry';
 import { withErrorBoundary } from '../../common/withErrorBoundary';
@@ -75,6 +76,59 @@ const GroupWorkbench = ({
   const enabledRuleCount = group.interfaceList.filter((rule) => rule.open).length;
   const isGroupDisabled = enabledRuleCount === 0;
 
+  useEffect(() => {
+    if (collapsed) return;
+
+    const isTypingTarget = (eventTarget: EventTarget | null) => {
+      const target = eventTarget as HTMLElement | null;
+
+      if (!target) return false;
+
+      const tagName = target.tagName?.toLowerCase();
+      return tagName === 'input' || tagName === 'textarea' || tagName === 'select' || target.isContentEditable;
+    };
+
+    const getShortcutIndex = (key: string) => {
+      if (key >= '1' && key <= '9') {
+        return Number(key) - 1;
+      }
+
+      if (key === '0') {
+        return 9;
+      }
+
+      return -1;
+    };
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (isTypingTarget(event.target) || event.metaKey || event.ctrlKey || event.altKey) {
+        return;
+      }
+
+      if (event.key.toLowerCase() === 't' && group.interfaceList[selectedRuleIndex]) {
+        event.preventDefault();
+        onInterfaceMove(groupIndex, selectedRuleIndex, 'top');
+        return;
+      }
+
+      const shortcutIndex = getShortcutIndex(event.key);
+      const targetRule = group.interfaceList[shortcutIndex];
+
+      if (!targetRule) {
+        return;
+      }
+
+      event.preventDefault();
+      onInterfaceListChange(groupIndex, shortcutIndex, 'open', !targetRule.open);
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [collapsed, group.interfaceList, groupIndex, onInterfaceListChange, onInterfaceMove, selectedRuleIndex]);
+
   return (
     <ModuleSection
       title={group.summaryText || `Group ${groupIndex + 1}`}
@@ -98,6 +152,7 @@ const GroupWorkbench = ({
           const isSelected = interfaceIndex === selectedRuleIndex;
           const isRuleExpanded = group.collapseActiveKeys.includes(rule.key);
           const ruleTitle = rule.requestDes || rule.request || `Rule ${interfaceIndex + 1}`;
+          const shortcutLabel = interfaceIndex < 9 ? String(interfaceIndex + 1) : interfaceIndex === 9 ? '0' : '';
 
           const handleRuleCollapseToggle = (event: React.MouseEvent<HTMLElement>) => {
             event.stopPropagation();
@@ -119,11 +174,23 @@ const GroupWorkbench = ({
                 <div className="rule-card__summary">
                   <Tag color={rule.open ? 'green' : 'default'}>{rule.open ? 'Active' : 'Disabled'}</Tag>
                   <div className="rule-card__summary-text">
-                    <strong>{ruleTitle}</strong>
+                    <strong>
+                      {ruleTitle}
+                      {shortcutLabel ? <span className="rule-card__shortcut-chip">{shortcutLabel}</span> : null}
+                      {isSelected ? <span className="rule-card__shortcut-hint">T Pin</span> : null}
+                    </strong>
                     {rule.request && rule.requestDes ? <span>{rule.request}</span> : null}
                   </div>
                 </div>
                 <div className="rule-card__toolbar">
+                  <Button
+                    type="text"
+                    icon={<VerticalAlignTopOutlined />}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onInterfaceMove(groupIndex, interfaceIndex, 'top');
+                    }}
+                  />
                   <Button
                     type="text"
                     icon={isRuleExpanded ? <DownOutlined /> : <RightOutlined />}

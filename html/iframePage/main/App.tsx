@@ -205,6 +205,24 @@ function App() {
     }
   };
 
+  const handleInterfaceMove = (groupIndex: number, interfaceIndex: number, placement: string) => {
+    onInterfaceMove(groupIndex, interfaceIndex, placement);
+
+    setSelectedRuleIndexMap((previous) => {
+      const interfaceCount = ajaxDataList[groupIndex]?.interfaceList?.length || 0;
+      const nextRuleIndex = placement === 'top'
+        ? 0
+        : placement === 'bottom'
+          ? Math.max(interfaceCount - 1, 0)
+          : interfaceIndex;
+
+      return {
+        ...previous,
+        [groupIndex]: nextRuleIndex,
+      };
+    });
+  };
+
   return (
     <div
       className="ajax-tools-iframe-container"
@@ -259,7 +277,7 @@ function App() {
                   onCollapseChange={onCollapseChange}
                   onInterfaceListAdd={onInterfaceListAdd}
                   onInterfaceListDelete={handleInterfaceListDelete}
-                  onInterfaceMove={onInterfaceMove}
+                  onInterfaceMove={handleInterfaceMove}
                   onInterfaceListChange={handleInterfaceListChange}
                   onOpenModifyModal={handleOpenModifyModal}
                   onToggleCollapse={() => {
