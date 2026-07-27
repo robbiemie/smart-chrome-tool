@@ -10,6 +10,7 @@ The extension ships with a React + TypeScript iframe workbench that allows you t
 - Rewrite request URL, method, and headers
 - Inject request payload transformation scripts
 - Configure current-page request headers with one-click enable and disable
+- Toggle CSR (client-side rendering) mode for the active tab via a `__csr=1` URL parameter
 - Import and export rule configurations
 
 ## Table of Contents
@@ -28,6 +29,7 @@ The extension ships with a React + TypeScript iframe workbench that allows you t
 - [How Request Rewriting Works](#how-request-rewriting-works)
 - [How Request Payload Scripts Work](#how-request-payload-scripts-work)
 - [How Current Page Headers Work](#how-current-page-headers-work)
+- [How CSR Mode Works](#how-csr-mode-works)
 - [Import and Export](#import-and-export)
 - [Typical Debugging Workflows](#typical-debugging-workflows)
 - [Troubleshooting](#troubleshooting)
@@ -46,7 +48,7 @@ Main runtime pieces:
 - `content.js`
   Runs on matched pages and injects runtime capabilities into the page context.
 - `devtoolsPage/`
-  Provides the DevTools integration entry.
+  Provides the DevTools integration entry. Registers a panel named `U-Network` that loads the built iframe workbench.
 - `html/iframePage/`
   Contains the React + TypeScript iframe application used as the management UI.
 
@@ -59,6 +61,7 @@ smart-chrome-tool/
 ├── manifest.json
 ├── service_worker.js
 ├── content.js
+├── build.js
 ├── devtoolsPage/
 ├── pageScripts/
 ├── icons/
@@ -67,11 +70,15 @@ smart-chrome-tool/
     └── iframePage/
         ├── main/
         │   ├── App.tsx
+        │   ├── index.tsx
         │   ├── hooks/
         │   ├── components/
         │   ├── common/
-        │   └── types/
+        │   ├── pages/
+        │   ├── types/
+        │   └── utils/
         ├── common/
+        ├── declarativeNetRequest/
         ├── index.html
         ├── package.json
         └── vite.config.js
@@ -85,6 +92,16 @@ Important frontend files:
   Core rule-group storage and mutation logic.
 - `html/iframePage/main/hooks/usePageHeaders.ts`
   Current-page header profile management logic.
+- `html/iframePage/main/hooks/usePageRenderMode.ts`
+  CSR mode toggle logic for the active tab.
+- `html/iframePage/main/components/OperationsRail/`
+  Left rail with global interceptor switch, CSR mode switch, and group selector.
+- `html/iframePage/main/components/WorkbenchHeader/`
+  Top header with status tags, Import JSON, and Page Headers entry points.
+- `html/iframePage/main/components/GroupWorkbench/`
+  Active group editor with rule cards, Add Rule, and Remove Group.
+- `html/iframePage/main/components/RuleDetailPanel/`
+  Right detail panel for the focused rule with Edit Response / Edit Request / Edit Payload.
 - `html/iframePage/main/components/ModifyDataModal/`
   Advanced request and response editor modal backed by Monaco Editor.
 
@@ -189,7 +206,7 @@ Typical flow:
 
 1. Open the target webpage.
 2. Press `F12` or open Chrome DevTools manually.
-3. Locate the extension panel provided by this tool.
+3. Locate the `U-Network` panel provided by this tool.
 4. Open the panel to access the network interception workbench.
 
 If the panel does not appear:
@@ -200,51 +217,44 @@ If the panel does not appear:
 
 ## Workbench Overview
 
-After the UI refactor, the main screen is organized into three areas:
+After the UI refactor, the main screen is organized into four areas:
 
 ### 1. Header overview
 
-The top area shows:
+The top area (`WorkbenchHeader`, labeled `Rewrite Console`) shows:
 
-- Global status of the interceptor
-- Current page header quick-toggle status
-- Group count
-- Rule count
-- Enabled rule count
-- Regex rule count
+- Interceptor status tag (`Interceptor Live` / `Interceptor Paused`)
+- Page headers status tag (`Headers Armed` / `Headers Idle`)
+- Group count, rule count, and enabled rule count
 
-It also exposes quick actions:
+It also exposes actions:
 
-- `Create Group`
 - `Import JSON`
 - `Page Headers`
 
 ### 2. Left operations rail
 
-The left panel contains:
+The left panel (`OperationsRail` / `Global Controls`) contains:
 
-- Global interceptor enable/disable switch
-- Current page header quick toggle
-- Global expand/collapse control
-- Group navigator
+- `Interceptor` switch — global interceptor enable/disable
+- `CSR Mode` switch — toggle CSR mode for the active tab
+- `Groups` selector — dropdown to switch between groups with an `Add` button to create a new group
 
 Use it to switch between groups quickly instead of scanning the full rule list.
 
 ### 3. Main workspace
 
-The middle panel is the active group editor. It allows you to:
+The middle panel (`GroupWorkbench`) is the active group editor. It allows you to:
 
-- Rename a group
-- Move a group to top or bottom
-- Enable all rules in a group
-- Disable all rules in a group
-- Remove a group
+- Edit the group summary text
+- Add a new rule via `Add Rule`
+- Remove the group via `Remove Group`
 - Edit rule fields inline
-- Open advanced request/response editors
+- Open advanced request/response editors from each rule card
 
 ### 4. Right detail panel
 
-The right panel shows the currently focused rule:
+The right panel (`RuleDetailPanel`) shows the currently focused rule:
 
 - Request matcher
 - Replacement URL
@@ -253,7 +263,7 @@ The right panel shows the currently focused rule:
 - Payload script
 - Response definition
 
-This makes it easier to inspect the active rule without repeatedly opening modal editors.
+It also exposes `Edit Response`, `Edit Request`, and `Edit Payload` shortcuts so you can inspect the active rule without repeatedly opening modal editors.
 
 ## How to Create and Manage Rule Groups
 
@@ -261,8 +271,8 @@ This makes it easier to inspect the active rule without repeatedly opening modal
 
 There are multiple entry points:
 
-- Click `Create Group` in the top header
-- Click `Add` in the group navigator
+- Click `Add` next to the `Groups` selector in the left operations rail
+- The currently selected group is the one new rules will be added to
 
 Each group is a container for related rules. A good convention is to group rules by:
 
@@ -280,17 +290,10 @@ Examples:
 
 ### Rename a group
 
-1. Select the group in the left navigator
-2. Edit the title field in the main workspace
+1. Select the group in the left operations rail
+2. Edit the summary text field in the main workspace
 
 Use a clear semantic name. The UI stores the change automatically.
-
-### Reorder groups
-
-Inside the active group header:
-
-- Click `Pin Top` to move the group to the first position
-- Click `Send Bottom` to move the group to the last position
 
 ### Delete a group
 
@@ -300,12 +303,9 @@ Inside the active group header:
 
 Be careful because removing a group also removes all rules inside it from local storage.
 
-### Enable or disable all rules in a group
+### Enable or disable rules within a group
 
-Inside the active group header:
-
-- Click `Enable All`
-- Click `Disable All`
+Each rule has its own enable switch on the rule card. Toggle it individually to control whether that rule takes effect.
 
 This is useful when you want to quickly compare real backend behavior and mocked behavior.
 
@@ -314,7 +314,7 @@ This is useful when you want to quickly compare real backend behavior and mocked
 ### Create a rule
 
 1. Select a group
-2. Click `Add Rule`
+2. Click `Add Rule` inside the active group workspace
 
 Each rule contains several important fields.
 
@@ -381,8 +381,7 @@ This becomes especially valuable when many temporary rules exist in the same env
 
 Inside each rule card:
 
-- Click `Enable`
-- Click `Disable`
+- Toggle the rule's enable switch
 
 Disabling a rule keeps the configuration but stops it from taking effect.
 
@@ -581,13 +580,11 @@ Open it by:
 
 - Clicking `Page Headers` in the top header
 
-Or use:
-
-- `Quick Headers` switch in the left operations rail
+The page origin is passed to the iframe via a `pageOrigin` query parameter, and rules are stored per origin in extension local storage under the `ajaxToolsHeaderProfiles` key.
 
 ### What this feature does
 
-It creates page-origin-based request header rules and synchronizes them through extension storage.
+It creates page-origin-based request header rules and synchronizes them through extension storage as `declarativeNetRequest` dynamic rules.
 
 This is useful when you want a temporary header policy for one site, for example:
 
@@ -613,11 +610,34 @@ Header Value: 1
 
 ### How quick toggle works
 
-The `Quick Headers` switch:
+The `Quick Headers` switch in the left operations rail:
 
 - Enables configured headers immediately if a profile already exists
-- Creates a default header rule when enabling without a previous config
+- Creates a default header rule (`x-debug-mode: 1`) when enabling without a previous config
 - Disables the active page-header rule when switched off
+
+## How CSR Mode Works
+
+The left operations rail exposes a `CSR Mode` switch that toggles client-side rendering mode for the active tab.
+
+### What this feature does
+
+When enabled, the extension appends a `__csr=1` query parameter to the current tab URL through `chrome.tabs.update`. When disabled, the parameter is removed. The page then reloads with the new URL so the backend or page runtime can pick up the render mode.
+
+This is useful when the target site branches its rendering pipeline (SSR vs CSR) based on the presence of `__csr`, and you want to force the CSR branch for debugging without editing the URL by hand.
+
+### How to use it
+
+1. Open the target page
+2. Open the extension workbench (the `U-Network` panel)
+3. In the left operations rail, toggle `CSR Mode`
+4. The tab reloads with the updated URL
+
+### Notes
+
+- The toggle sends a `SET_PAGE_RENDER_MODE` message to the background service worker, which performs the tab navigation.
+- The current state is read from the active tab URL via `GET_PAGE_RENDER_MODE`.
+- If no target tab can be resolved, an error notification is shown.
 
 ## Import and Export
 
@@ -634,7 +654,7 @@ Recommended workflow:
 
 1. Export or back up current rules first
 2. Import a JSON file
-3. Verify the imported groups in the navigator
+3. Verify the imported groups in the groups selector
 
 ### Export
 
@@ -651,8 +671,8 @@ Recommended export scenarios:
 
 ### 1. Mock a static API response
 
-1. Create a group such as `Product Detail Mock`
-2. Add a rule
+1. In the left operations rail, click `Add` next to `Groups` to create a group such as `Product Detail Mock`
+2. In the main workspace, click `Add Rule`
 3. Set the request matcher to the target API
 4. Open `Response`
 5. Enter a JSON response
@@ -685,7 +705,7 @@ Example:
 ### 4. Force request headers for one environment
 
 1. Open the target page
-2. Open `Page Headers`
+2. Open `Page Headers` from the top header
 3. Add required key/value pairs
 4. Save and enable
 5. Reload the page and inspect the network panel
@@ -697,6 +717,13 @@ Example:
 3. Add a script to modify request parameters
 4. Save the rule
 5. Trigger the UI action and inspect the actual outgoing request
+
+### 6. Force CSR rendering for debugging
+
+1. Open the target page
+2. Open the extension workbench (the `U-Network` panel)
+3. In the left operations rail, toggle `CSR Mode` on
+4. The tab reloads with `__csr=1` and the page enters its CSR branch
 
 ## Troubleshooting
 
@@ -753,6 +780,8 @@ Check the following:
 - The iframe app is built separately and must exist in `html/iframePage/dist` for extension runtime usage.
 - Monaco Editor makes the bundle relatively large. This is expected for now.
 - Rule data is stored in Chrome local storage, so clearing extension storage can remove saved rules.
+- Page header rules are persisted under `ajaxToolsHeaderProfiles` and applied as `declarativeNetRequest` dynamic rules.
+- CSR Mode simply toggles the `__csr=1` query parameter on the active tab; whether it has any effect depends on the target site.
 - Request and response rewriting are powerful features. Use them carefully in shared environments.
 
 ## Recommended Operating Conventions

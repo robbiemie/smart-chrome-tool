@@ -1,5 +1,32 @@
 # Build Changelog
 
+## v0.0.24
+
+- Built At: 2026-04-23T07:34:25.922Z
+- Previous Version: v0.0.23
+- Git Branch: master
+- Git Commit: b9bc535a
+
+### Changed Files
+- html/iframePage/CHANGELOG.md
+- html/iframePage/package-lock.json
+- html/iframePage/package.json
+- manifest.json
+
+
+## v0.0.23
+
+- Built At: 2026-04-23T07:15:40.722Z
+- Previous Version: v0.0.22
+- Git Branch: master
+- Git Commit: b9bc535a
+
+### Changed Files
+- html/iframePage/package-lock.json
+- html/iframePage/package.json
+- manifest.json
+
+
 ## v0.0.22
 
 - Built At: 2026-04-23T06:50:15.345Z
