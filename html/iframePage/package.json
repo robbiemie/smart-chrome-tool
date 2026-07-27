@@ -1,7 +1,7 @@
 {
   "name": "iframepage",
   "private": true,
-  "version": "0.0.24",
+  "version": "0.0.1",
   "scripts": {
     "start": "vite --port 4001",
     "prebuild": "node scripts/build-meta.js prebuild",
