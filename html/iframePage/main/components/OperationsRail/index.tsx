@@ -1,6 +1,6 @@
 import React from 'react';
 import { Button, Empty, Select, Switch } from 'antd';
-import { PlusOutlined } from '@ant-design/icons';
+import { PlusOutlined, UploadOutlined, SettingOutlined, CompressOutlined, ExpandOutlined } from '@ant-design/icons';
 import { AjaxGroup } from '../../types/registry';
 import { withErrorBoundary } from '../../common/withErrorBoundary';
 import ModuleSection from '../ModuleSection';
@@ -15,6 +15,10 @@ interface OperationsRailProps {
   globalControlsCollapsed: boolean;
   floatingRulesEnabled: boolean;
   onToggleFloatingRules: (value: boolean) => void;
+  allModulesCollapsed: boolean;
+  onToggleCollapseAll: () => void;
+  onImportClick: () => void;
+  onPageHeadersOpen: () => void;
   onSelectGroup: (groupIndex: number) => void;
   onToggleAjaxToolsSwitch: (value: boolean) => void;
   onToggleCsrMode: (value: boolean) => void;
@@ -32,6 +36,10 @@ const OperationsRail = ({
   globalControlsCollapsed,
   floatingRulesEnabled,
   onToggleFloatingRules,
+  allModulesCollapsed,
+  onToggleCollapseAll,
+  onImportClick,
+  onPageHeadersOpen,
   onSelectGroup,
   onToggleAjaxToolsSwitch,
   onToggleCsrMode,
@@ -73,6 +81,22 @@ const OperationsRail = ({
               onChange={onToggleFloatingRules}
             />
           </div>
+        </div>
+
+        <div className="rail-actions">
+          <Button
+            size="small"
+            icon={allModulesCollapsed ? <ExpandOutlined /> : <CompressOutlined />}
+            onClick={onToggleCollapseAll}
+          >
+            {allModulesCollapsed ? 'Expand All' : 'Collapse All'}
+          </Button>
+          <Button size="small" icon={<UploadOutlined />} onClick={onImportClick}>
+            Import
+          </Button>
+          <Button size="small" icon={<SettingOutlined />} onClick={onPageHeadersOpen}>
+            Headers
+          </Button>
         </div>
 
         <div className="group-switcher">

@@ -132,6 +132,11 @@ injectedStyle(`
     font-size: 13px;
     background: #fafafa;
     flex-shrink: 0;
+    cursor: grab;
+    user-select: none;
+  }
+  .robbie-ajax-floating-rules__header--dragging {
+    cursor: grabbing;
   }
   .robbie-ajax-floating-rules__header-left {
     display: flex;
@@ -143,6 +148,29 @@ injectedStyle(`
     font-weight: 400;
     font-size: 11px;
     color: #999;
+  }
+  .robbie-ajax-floating-rules__header-actions {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex-shrink: 0;
+  }
+  .robbie-ajax-floating-rules__csr-btn {
+    height: 22px;
+    padding: 0 8px;
+    border: 1px solid #d9d9d9;
+    border-radius: 11px;
+    background: #fff;
+    cursor: pointer;
+    font-size: 10px;
+    font-weight: 600;
+    color: #555;
+    line-height: 20px;
+  }
+  .robbie-ajax-floating-rules__csr-btn--on {
+    background: #1a9b7f;
+    border-color: #1a9b7f;
+    color: #fff;
   }
   .robbie-ajax-floating-rules__collapse-btn {
     flex-shrink: 0;
@@ -182,6 +210,20 @@ injectedStyle(`
     flex-shrink: 0;
     margin-top: 1px;
     cursor: pointer;
+  }
+  .robbie-ajax-floating-rules__item-edit {
+    flex-shrink: 0;
+    padding: 2px 6px;
+    border: none;
+    border-radius: 4px;
+    background: transparent;
+    cursor: pointer;
+    color: #1a9b7f;
+    font-size: 11px;
+    line-height: 1.4;
+  }
+  .robbie-ajax-floating-rules__item-edit:hover {
+    background: rgb(26 155 127 / 10%);
   }
   .robbie-ajax-floating-rules__item-body {
     flex: 1;
@@ -471,27 +513,17 @@ function newTabButton () {
 function actionBar (container) {
   const header = document.createElement('header');
   header.className = 'ajax-interceptor-action-bar';
-  // left
+  // left: close + fullscreen
   const left = document.createElement('div');
   const closeBtn = closeButton(container);
   left.appendChild(closeBtn);
-  const zoomBtn = zoomButton(container);
-  left.appendChild(zoomBtn);
   const fullscreenBtn = fullscreenButton(container);
   left.appendChild(fullscreenBtn);
-  const pipBtn = pipButton(container);
-  left.appendChild(pipBtn);
   header.appendChild(left);
-  // right
+  // right: theme mode
   const right = document.createElement('div');
   const themeModeBtn = themeModeButton(container);
   right.appendChild(themeModeBtn);
-  const discussionsBtn = discussionsButton();
-  right.appendChild(discussionsBtn);
-  const codeNetBtn = codeNetButton();
-  right.appendChild(codeNetBtn);
-  const newTabBtn = newTabButton();
-  right.appendChild(newTabBtn);
   header.appendChild(right);
   return header;
 }
@@ -536,6 +568,92 @@ function toggleFloatingRulesCollapsed() {
   ajaxToolsRuntimeState.floatingRulesCollapsed = next;
   applyFloatingPanelState();
   chrome.storage.local.set({ [FLOATING_COLLAPSED_KEY]: next });
+}
+
+// Drag the floating panel by its header. Position is kept in memory only —
+// a page refresh resets it to the default bottom-right corner.
+function bindFloatingPanelDrag(panel) {
+  const header = panel.querySelector('.robbie-ajax-floating-rules__header');
+  if (!header || header.dataset.dragBound === '1') return;
+  header.dataset.dragBound = '1';
+
+  let startX = 0;
+  let startY = 0;
+  let originLeft = 0;
+  let originTop = 0;
+  let dragging = false;
+
+  const onMove = (event) => {
+    if (!dragging) return;
+    const nextLeft = originLeft + (event.clientX - startX);
+    const nextTop = originTop + (event.clientY - startY);
+    // Clamp to the viewport so the panel cannot be dragged fully off-screen.
+    const maxLeft = window.innerWidth - 60;
+    const maxTop = window.innerHeight - 60;
+    panel.style.left = `${Math.max(0, Math.min(nextLeft, maxLeft))}px`;
+    panel.style.top = `${Math.max(0, Math.min(nextTop, maxTop))}px`;
+    panel.style.right = 'auto';
+    panel.style.bottom = 'auto';
+  };
+
+  const onUp = () => {
+    if (!dragging) return;
+    dragging = false;
+    header.classList.remove('robbie-ajax-floating-rules__header--dragging');
+    document.removeEventListener('mousemove', onMove);
+    document.removeEventListener('mouseup', onUp);
+  };
+
+  header.addEventListener('mousedown', (event) => {
+    // Ignore drag when clicking on buttons (collapse / csr) inside the header.
+    if (event.target.closest('button')) return;
+    dragging = true;
+    header.classList.add('robbie-ajax-floating-rules__header--dragging');
+    const rect = panel.getBoundingClientRect();
+    originLeft = rect.left;
+    originTop = rect.top;
+    startX = event.clientX;
+    startY = event.clientY;
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+    event.preventDefault();
+  });
+}
+
+// CSR/SSR toggle: delegates to the service worker which rewrites the tab URL.
+// Local state is mirrored on the button so the user gets immediate feedback.
+function syncFloatingCsrBtnState(btn) {
+  if (!chrome.runtime?.sendMessage) return;
+  chrome.runtime.sendMessage({ type: 'GET_PAGE_RENDER_MODE' }, (response) => {
+    if (!response?.ok) return;
+    const on = Boolean(response.csrEnabled);
+    btn.textContent = on ? 'CSR' : 'SSR';
+    btn.title = on ? 'Currently CSR. Click to switch to SSR.' : 'Currently SSR. Click to switch to CSR.';
+    btn.classList.toggle('robbie-ajax-floating-rules__csr-btn--on', on);
+  });
+}
+
+function createFloatingCsrButton() {
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'robbie-ajax-floating-rules__csr-btn';
+  btn.textContent = 'SSR';
+  btn.title = 'Toggle CSR/SSR render mode';
+  btn.addEventListener('click', () => {
+    if (!chrome.runtime?.sendMessage) return;
+    chrome.runtime.sendMessage({ type: 'GET_PAGE_RENDER_MODE' }, (response) => {
+      if (!response?.ok) return;
+      const nextCsr = !response.csrEnabled;
+      chrome.runtime.sendMessage({ type: 'SET_PAGE_RENDER_MODE', csrEnabled: nextCsr }, (setResponse) => {
+        if (!setResponse?.ok) return;
+        // Optimistic UI update — the page will reload shortly.
+        btn.textContent = nextCsr ? 'CSR' : 'SSR';
+        btn.classList.toggle('robbie-ajax-floating-rules__csr-btn--on', nextCsr);
+      });
+    });
+  });
+  syncFloatingCsrBtnState(btn);
+  return btn;
 }
 
 function renderFloatingRules() {
@@ -625,16 +743,7 @@ function renderFloatingRules() {
 
       const urlLine = document.createElement('div');
       urlLine.className = 'robbie-ajax-floating-rules__item-url';
-
-      const methodTag = document.createElement('span');
-      methodTag.className = 'robbie-ajax-floating-rules__item-method';
-      methodTag.textContent = ruleItem.matchMethod || 'ANY';
-      urlLine.appendChild(methodTag);
-
-      const urlText = document.createElement('span');
-      urlText.textContent = ruleItem.request || '(empty)';
-      urlLine.appendChild(urlText);
-
+      urlLine.textContent = ruleItem.request || '(empty)';
       body.appendChild(urlLine);
 
       if (ruleItem.requestDes) {
@@ -644,8 +753,32 @@ function renderFloatingRules() {
         body.appendChild(note);
       }
 
+      // Edit entry: reveal the main side panel (so the modal is visible)
+      // and ask the iframe to open the edit modal for this rule.
+      const editBtn = document.createElement('button');
+      editBtn.type = 'button';
+      editBtn.className = 'robbie-ajax-floating-rules__item-edit';
+      editBtn.textContent = 'Edit';
+      editBtn.title = 'Edit this rule in the workbench';
+      editBtn.addEventListener('click', (event) => {
+        event.stopPropagation();
+        const mainPanel = ajaxToolsRuntimeState.panelContainer;
+        if (mainPanel) {
+          mainPanel.style.setProperty('transform', 'translateX(0)', 'important');
+          chrome.storage.local.set({ iframeVisible: true });
+        }
+        const iframe = document.querySelector('.robbie-ajax-interceptor-iframe');
+        if (iframe?.contentWindow) {
+          iframe.contentWindow.postMessage(
+            { type: 'AJAX_TOOLS_OPEN_EDIT', groupIndex, ruleIndex },
+            '*'
+          );
+        }
+      });
+
       row.appendChild(toggle);
       row.appendChild(body);
+      row.appendChild(editBtn);
       listEl.appendChild(row);
     });
   });
@@ -680,14 +813,22 @@ function createFloatingRulesPanel() {
   headerLeft.appendChild(count);
   header.appendChild(headerLeft);
 
+  const headerActions = document.createElement('div');
+  headerActions.className = 'robbie-ajax-floating-rules__header-actions';
+  const csrBtn = createFloatingCsrButton();
+  headerActions.appendChild(csrBtn);
   const collapseBtn = document.createElement('button');
   collapseBtn.className = 'robbie-ajax-floating-rules__collapse-btn';
   collapseBtn.type = 'button';
   collapseBtn.title = 'Collapse';
   collapseBtn.textContent = '—';
   collapseBtn.addEventListener('click', toggleFloatingRulesCollapsed);
-  header.appendChild(collapseBtn);
+  headerActions.appendChild(collapseBtn);
+  header.appendChild(headerActions);
   panel.appendChild(header);
+
+  // Enable header-drag repositioning (position kept in memory only).
+  bindFloatingPanelDrag(panel);
 
   const list = document.createElement('div');
   list.className = 'robbie-ajax-floating-rules__list';

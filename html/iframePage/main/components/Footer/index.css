@@ -11,3 +11,13 @@
   background: rgb(255 255 255 / 64%);
   backdrop-filter: blur(16px);
 }
+
+.ajax-tools-iframe-footer__link {
+  color: #1a9b7f;
+  text-decoration: none;
+  font-weight: 600;
+}
+
+.ajax-tools-iframe-footer__link:hover {
+  text-decoration: underline;
+}

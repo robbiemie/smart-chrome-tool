@@ -8,14 +8,11 @@ import { useToggle } from './hooks/useToggle';
 import { useRegistry } from './hooks/useRegistry';
 import { usePageHeaders } from './hooks/usePageHeaders';
 import PageHeadersModal from './components/PageHeadersModal';
-import WorkbenchHeader from './components/WorkbenchHeader';
 import OperationsRail from './components/OperationsRail';
 import GroupWorkbench from './components/GroupWorkbench';
 import RuleDetailPanel from './components/RuleDetailPanel';
-import { useWorkbenchMetrics } from './hooks/useWorkbenchMetrics';
 import { AjaxGroup, ModifyDataModalOpenProps } from './types/registry';
 import { useModuleCollapseState } from './hooks/useModuleCollapseState';
-import ModuleSection from './components/ModuleSection';
 import { usePageRenderMode } from './hooks/usePageRenderMode';
 import { useFloatingRules } from './hooks/useFloatingRules';
 
@@ -58,8 +55,6 @@ function App() {
   const {
     visible: pageHeadersVisible,
     enabled: pageHeadersEnabled,
-    quickEnabled: pageHeadersQuickEnabled,
-    quickToggling: pageHeadersQuickToggling,
     pageOrigin,
     headerPairs,
     setVisible: setPageHeadersVisible,
@@ -69,7 +64,6 @@ function App() {
     updateHeaderPair,
     openModal: openPageHeadersModal,
     save: savePageHeaders,
-    toggleQuickEnabled: togglePageHeadersQuickEnabled,
   } = usePageHeaders();
   const {
     csrEnabled,
@@ -82,8 +76,7 @@ function App() {
     setFloatingRulesEnabled,
   } = useFloatingRules();
 
-  const metrics = useWorkbenchMetrics(ajaxDataList as AjaxGroup[]);
-  const { moduleCollapseState, updateModuleCollapseState } = useModuleCollapseState();
+  const { moduleCollapseState, updateModuleCollapseState, allModulesCollapsed, toggleCollapseAll } = useModuleCollapseState();
 
   useEffect(() => {
     if (!chrome.storage || !chrome.runtime || isRegistry) return;
@@ -176,6 +169,46 @@ function App() {
     modifyDataModalRef.current?.openModal(payload);
   };
 
+  // Allow the floating rules panel (rendered by content.js on the host page)
+  // to open the edit modal. content.js posts { groupIndex, ruleIndex } to the
+  // iframe window; we look up the rule and forward it to the modal.
+  useEffect(() => {
+    const handleMessage = (event: MessageEvent) => {
+      const data = event.data;
+      if (!data || data.type !== 'AJAX_TOOLS_OPEN_EDIT') return;
+
+      const { groupIndex, ruleIndex } = data;
+      const targetGroup = ajaxDataList[groupIndex];
+      const targetRule = targetGroup?.interfaceList?.[ruleIndex];
+      if (!targetGroup || !targetRule) return;
+
+      // Ensure the group/rule owning the edit target is selected so the
+      // workbench context matches what the modal is editing.
+      setSelectedGroupIndex(groupIndex);
+      setSelectedRuleIndexMap((previous) => ({
+        ...previous,
+        [groupIndex]: ruleIndex,
+      }));
+
+      handleOpenModifyModal({
+        groupIndex,
+        interfaceIndex: ruleIndex,
+        activeTab: 'Response',
+        request: targetRule.request,
+        replacementMethod: targetRule.replacementMethod,
+        replacementUrl: targetRule.replacementUrl,
+        replacementStatusCode: targetRule.replacementStatusCode,
+        headersText: targetRule.headers,
+        requestPayloadText: targetRule.requestPayloadText,
+        responseLanguage: targetRule.language,
+        responseText: targetRule.responseText,
+      });
+    };
+
+    window.addEventListener('message', handleMessage);
+    return () => window.removeEventListener('message', handleMessage);
+  }, [ajaxDataList]);
+
   const handleGroupAdd = () => {
     onGroupAdd();
     setSelectedGroupIndex(ajaxDataList.length);
@@ -247,6 +280,10 @@ function App() {
             globalControlsCollapsed={moduleCollapseState.globalControls}
             floatingRulesEnabled={floatingRulesEnabled}
             onToggleFloatingRules={setFloatingRulesEnabled}
+            allModulesCollapsed={allModulesCollapsed}
+            onToggleCollapseAll={toggleCollapseAll}
+            onImportClick={onImportClick}
+            onPageHeadersOpen={openPageHeadersModal}
             onSelectGroup={setSelectedGroupIndex}
             onToggleAjaxToolsSwitch={handleToggleAjaxToolsSwitch}
             onToggleCsrMode={(value) => {
@@ -303,27 +340,6 @@ function App() {
                 />
               </div>
             )}
-
-            <section className="workbench-bottom-panel">
-              <ModuleSection
-                title="Workspace Overview"
-                description="Review workspace metrics and open common actions."
-                eyebrow="Control Room"
-                className="workbench-header-shell"
-                collapsed={moduleCollapseState.workbenchOverview}
-                onToggleCollapse={() => {
-                  updateModuleCollapseState('workbenchOverview', !moduleCollapseState.workbenchOverview);
-                }}
-              >
-                <WorkbenchHeader
-                  metrics={metrics}
-                  ajaxToolsSwitchOn={ajaxToolsSwitchOn}
-                  pageHeadersQuickEnabled={pageHeadersQuickEnabled}
-                  onImportClick={onImportClick}
-                  onPageHeadersOpen={openPageHeadersModal}
-                />
-              </ModuleSection>
-            </section>
           </main>
         </div>
 

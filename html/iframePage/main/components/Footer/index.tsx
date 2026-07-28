@@ -5,7 +5,14 @@ import './index.css';
 function Footer() {
   return (
     <footer className="ajax-tools-iframe-footer">
-      Copyright © 2022-{(new Date()).getFullYear()}
+      <a
+        className="ajax-tools-iframe-footer__link"
+        href="https://github.com/robbiemie/smart-chrome-tool/releases"
+        target="_blank"
+        rel="noreferrer"
+      >
+        Releases
+      </a>
     </footer>
   );
 }

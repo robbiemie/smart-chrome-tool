@@ -180,6 +180,13 @@
   gap: 12px;
 }
 
+.rail-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
 .rail-switch-item {
   gap: 16px;
   border-radius: 16px;
