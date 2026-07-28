@@ -1,6 +1,6 @@
 import React, { ForwardedRef, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import { Select, Space, Dropdown, MenuProps } from 'antd';
-import { AlignLeftOutlined, DownOutlined } from '@ant-design/icons';
+import { AlignLeftOutlined, DownOutlined, CompressOutlined, ExpandOutlined } from '@ant-design/icons';
 import * as monaco from 'monaco-editor/esm/vs/editor/editor.api';
 // @ts-ignore
 import editorWorker from 'monaco-editor/esm/vs/editor/editor.worker?worker';
@@ -81,6 +81,11 @@ const MonacoEditor = (props: MonacoEditorProps, ref: ForwardedRef<{ editorInstan
   } = props;
   const [editor, setEditor] = useState<any>(null);
   const [language, setLanguage] = useState<string>(props.language || 'json');
+  // Track the document-level fold state so the header button can toggle
+  // between "fold all" and "unfold all". Reset whenever the model content
+  // is replaced (e.g. clicking an Example) because Monaco restores the
+  // default expanded state on setValue.
+  const [folded, setFolded] = useState(false);
   useEffect(() => {
     if (!editor) {
       const editor = monaco.editor.create(editorRef.current!, {
@@ -124,6 +129,9 @@ const MonacoEditor = (props: MonacoEditorProps, ref: ForwardedRef<{ editorInstan
   useEffect(() => {
     if (editor) {
       editor.getModel().setValue(props.text || '');
+      // Content replacement resets Monaco's fold state to expanded, so keep
+      // the local mirror in sync to avoid a stale button label.
+      setFolded(false);
       const timer = setTimeout(() => {
         clearTimeout(timer);
         // 格式化代码
@@ -135,6 +143,16 @@ const MonacoEditor = (props: MonacoEditorProps, ref: ForwardedRef<{ editorInstan
   // 格式化代码
   const formatDocumentAction = () => {
     if (editor) editor.getAction('editor.action.formatDocument').run();
+  };
+
+  // One-click fold/unfold the whole document. Uses Monaco's built-in
+  // folding contributions (imported above) and toggles the local state so
+  // the icon reflects the next action.
+  const toggleFoldAll = () => {
+    if (!editor) return;
+    const actionId = folded ? 'editor.unfoldAll' : 'editor.foldAll';
+    editor.getAction(actionId)?.run();
+    setFolded(!folded);
   };
 
   const onLanguageChange = (_language: string) => {
@@ -195,6 +213,17 @@ const MonacoEditor = (props: MonacoEditorProps, ref: ForwardedRef<{ editorInstan
             title="Format Document"
             onClick={formatDocumentAction}
           />
+          {folded ? (
+            <ExpandOutlined
+              title="Unfold All"
+              onClick={toggleFoldAll}
+            />
+          ) : (
+            <CompressOutlined
+              title="Fold All"
+              onClick={toggleFoldAll}
+            />
+          )}
           { headerRightRightNode }
         </Space>
       </div>
