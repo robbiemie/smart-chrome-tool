@@ -11,6 +11,10 @@ const ajaxToolsRuntimeState = window[AJAX_TOOLS_RUNTIME_STATE_KEY] || (window[AJ
   floatingPanelBound: false,
   floatingRulesEnabled: true,
   floatingRulesCollapsed: false,
+  // Mirror of the global interceptor switch. The floating rules panel is
+  // hidden when the master switch is off, because there is nothing for the
+  // panel to toggle when interception is globally paused.
+  ajaxToolsSwitchOn: true,
   domainWhitelist: ['*'],
   hitRuleKeys: Object.create(null),
 });
@@ -442,6 +446,9 @@ if (pageScripts) {
         ? result.ajaxToolsDomainWhitelist
         : ['*'];
       ajaxToolsRuntimeState.domainWhitelist = domainWhitelist;
+      // Keep the runtime mirror of the global interceptor switch in sync so
+      // applyFloatingPanelState() can hide the floating panel when paused.
+      ajaxToolsRuntimeState.ajaxToolsSwitchOn = ajaxToolsSwitchOn;
       applyFloatingPanelState();
       postMessage({type: 'ajaxTools', to: 'pageScript', key: 'ajaxDataList', value: ajaxDataList});
       postMessage({type: 'ajaxTools', to: 'pageScript', key: 'ajaxToolsSwitchOn', value: ajaxToolsSwitchOn});
@@ -684,6 +691,14 @@ function applyFloatingPanelState() {
 
   // Never show the floating panel on hostnames the user did not allowlist.
   if (!currentHostWhitelisted()) {
+    panel.style.display = 'none';
+    return;
+  }
+
+  // Hide the floating panel when the global interceptor switch is off —
+  // without interception active, the panel's toggles have no effect, so
+  // showing it would be misleading.
+  if (!ajaxToolsRuntimeState.ajaxToolsSwitchOn) {
     panel.style.display = 'none';
     return;
   }
@@ -1189,6 +1204,12 @@ chrome.storage.onChanged.addListener(function (changes, namespace) {
         key,
         value: newValue,
       });
+    }
+    // Global interceptor switch: forward to the page script and mirror it
+    // locally so the floating rules panel can hide when interception pauses.
+    if (key === 'ajaxToolsSwitchOn') {
+      ajaxToolsRuntimeState.ajaxToolsSwitchOn = newValue !== false;
+      applyFloatingPanelState();
     }
     // Domain whitelist: forward to the page script so the mock layer can
     // gate XHR/fetch override, and update the floating panel visibility.
