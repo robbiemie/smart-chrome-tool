@@ -197,19 +197,48 @@ export const useRegistry = () => {
     if (language !== undefined) onInterfaceListChange(groupIndex, interfaceIndex, 'language', language);
   };
 
-  // placement: top|bottom
+  // Pinned rules stick to the top of the group. Limit the count so the
+  // pinned section stays scannable.
+  const MAX_PINNED = 3;
+
+  // placement: top toggles pin state; bottom moves to end of list.
   const onInterfaceMove = (groupIndex: number, interfaceIndex: number, placement: string ) => {
     if (!chrome.storage) return;
     const nextAjaxDataList = [...ajaxDataList];
-    const { interfaceList = [] } = nextAjaxDataList[groupIndex];
-    const movedItem = interfaceList.splice(interfaceIndex, 1)[0];
+    const targetGroup = nextAjaxDataList[groupIndex];
+    const { interfaceList = [] } = targetGroup;
+    const targetRule = interfaceList[interfaceIndex];
+    if (!targetRule) return;
+
     if (placement === 'top') {
-      interfaceList.unshift(movedItem);
+      // Toggle pin. Enforce the cap when pinning a new rule.
+      const willPin = !targetRule.pinned;
+      if (willPin) {
+        const currentPinnedCount = interfaceList.filter((item) => item.pinned).length;
+        if (currentPinnedCount >= MAX_PINNED) return;
+      }
+      const nextInterfaceList = interfaceList.map((item, idx) =>
+        idx === interfaceIndex ? { ...item, pinned: willPin } : item
+      );
+      // Stable sort: pinned rules rise to the top, preserving relative order
+      // within each group so existing arrangement is not disturbed.
+      nextInterfaceList.sort((a, b) => {
+        const pa = a.pinned ? 0 : 1;
+        const pb = b.pinned ? 0 : 1;
+        return pa - pb;
+      });
+      targetGroup.interfaceList = nextInterfaceList;
     } else if (placement === 'bottom') {
+      const movedItem = interfaceList.splice(interfaceIndex, 1)[0];
+      // Moving to bottom clears pin state so the rule does not jump back up.
+      movedItem.pinned = false;
       interfaceList.push(movedItem);
     }
-    nextAjaxDataList[groupIndex].interfaceList = interfaceList;
     persistAjaxDataList(nextAjaxDataList);
+  };
+
+  const onToggleRulePin = (groupIndex: number, interfaceIndex: number) => {
+    onInterfaceMove(groupIndex, interfaceIndex, 'top');
   };
 
   return {
@@ -224,6 +253,7 @@ export const useRegistry = () => {
     onGroupDelete,
     setAjaxDataList,
     onInterfaceMove,
+    onToggleRulePin,
     setAjaxToolsSkin,
     onCollapseChange,
     onGroupOpenChange,

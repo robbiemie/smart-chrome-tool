@@ -256,11 +256,12 @@ function App() {
 
     setSelectedRuleIndexMap((previous) => {
       const interfaceCount = ajaxDataList[groupIndex]?.interfaceList?.length || 0;
-      const nextRuleIndex = placement === 'top'
-        ? 0
-        : placement === 'bottom'
-          ? Math.max(interfaceCount - 1, 0)
-          : interfaceIndex;
+      // Pinning reorders the list (pinned rules rise to the top via a stable
+      // sort), so the selected index may shift. Rather than guess the new
+      // position, keep the current selection — the user can re-click if needed.
+      const nextRuleIndex = placement === 'bottom'
+        ? Math.max(interfaceCount - 1, 0)
+        : interfaceIndex;
 
       return {
         ...previous,

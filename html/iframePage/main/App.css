@@ -509,6 +509,37 @@
   padding: 8px 12px;
 }
 
+/* Pinned rules: green accent rail + tinted background so they stand out
+   from regular rules, especially when the group is collapsed. */
+.rule-card--pinned {
+  position: relative;
+  border-color: rgb(26 155 127 / 35%);
+  background: linear-gradient(135deg, rgb(26 155 127 / 6%), rgb(255 255 255 / 96%));
+  box-shadow: 0 2px 8px rgb(26 155 127 / 12%);
+}
+
+.rule-card--pinned::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 6px;
+  bottom: 6px;
+  width: 3px;
+  border-radius: 0 3px 3px 0;
+  background: linear-gradient(180deg, #1a9b7f, rgb(26 155 127 / 60%));
+}
+
+.rule-card--pinned.rule-card--selected {
+  border-color: rgb(26 155 127 / 55%);
+  background: linear-gradient(135deg, rgb(26 155 127 / 12%), rgb(255 255 255 / 96%));
+}
+
+/* Collapsed pinned cards are even more compact, so the accent rail + badge
+   are the primary visual cues that the rule is pinned. */
+.rule-card--pinned.rule-card--collapsed {
+  padding-left: 16px;
+}
+
 .rule-card--selected {
   border-color: rgb(26 155 127 / 28%);
   background: linear-gradient(135deg, rgb(26 155 127 / 8%), rgb(255 255 255 / 96%));
@@ -591,6 +622,35 @@
   padding: 4px 8px;
   background: rgb(26 155 127 / 10%);
   color: #1a9b7f;
+}
+
+/* PIN badge shown next to the title of pinned rules. */
+.rule-card__pin-badge {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 8px;
+  padding: 3px 7px;
+  border-radius: 999px;
+  background: #1a9b7f;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  line-height: 1;
+  vertical-align: middle;
+}
+
+/* Pin toggle button: filled green when pinned, muted otherwise. */
+.rule-card__pin-btn.ant-btn {
+  color: rgb(27 40 34 / 35%);
+}
+
+.rule-card--pinned .rule-card__pin-btn.ant-btn {
+  color: #1a9b7f;
+}
+
+.rule-card__summary {
+  cursor: pointer;
 }
 
 .rule-card__summary-text span {

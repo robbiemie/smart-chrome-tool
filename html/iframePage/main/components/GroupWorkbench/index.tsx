@@ -9,7 +9,8 @@ import {
   EyeOutlined,
   DownOutlined,
   RightOutlined,
-  VerticalAlignTopOutlined,
+  PushpinOutlined,
+  PushpinFilled,
 } from '@ant-design/icons';
 import { AjaxGroup, ModifyDataModalOpenProps } from '../../types/registry';
 import { withErrorBoundary } from '../../common/withErrorBoundary';
@@ -107,6 +108,7 @@ const GroupWorkbench = ({
 
       if (event.key.toLowerCase() === 't' && group.interfaceList[selectedRuleIndex]) {
         event.preventDefault();
+        // 'top' placement toggles the pin state in useRegistry.
         onInterfaceMove(groupIndex, selectedRuleIndex, 'top');
         return;
       }
@@ -164,20 +166,37 @@ const GroupWorkbench = ({
             onCollapseChange(groupIndex, nextActiveKeys);
           };
 
+          // Clicking the summary area both selects the rule and toggles its
+          // expanded/collapsed state, so the whole header row acts as a hot
+          // zone — not just the small arrow button.
+          const handleSummaryClick = (event: React.MouseEvent<HTMLElement>) => {
+            event.stopPropagation();
+            onSelectRule(interfaceIndex);
+            const nextActiveKeys = isRuleExpanded
+              ? group.collapseActiveKeys.filter((activeKey) => activeKey !== rule.key)
+              : [...group.collapseActiveKeys, rule.key];
+            onCollapseChange(groupIndex, nextActiveKeys);
+          };
+
           return (
             <article
               key={rule.key}
-              className={`rule-card${isSelected ? ' rule-card--selected' : ''}${!rule.open ? ' rule-card--disabled' : ''}${!isRuleExpanded ? ' rule-card--collapsed' : ''}`}
+              className={`rule-card${isSelected ? ' rule-card--selected' : ''}${!rule.open ? ' rule-card--disabled' : ''}${!isRuleExpanded ? ' rule-card--collapsed' : ''}${rule.pinned ? ' rule-card--pinned' : ''}`}
               onClick={() => onSelectRule(interfaceIndex)}
             >
               <div className="rule-card__header">
-                <div className="rule-card__summary">
+                <div
+                  className="rule-card__summary"
+                  onClick={handleSummaryClick}
+                  role="button"
+                  tabIndex={0}
+                >
                   <Tag color={rule.open ? 'green' : 'default'}>{rule.open ? 'Active' : 'Disabled'}</Tag>
                   <div className="rule-card__summary-text">
                     <strong>
                       {ruleTitle}
                       {shortcutLabel ? <span className="rule-card__shortcut-chip">{shortcutLabel}</span> : null}
-                      {isSelected ? <span className="rule-card__shortcut-hint">T Pin</span> : null}
+                      {rule.pinned ? <span className="rule-card__pin-badge">PIN</span> : null}
                     </strong>
                     {rule.request && rule.requestDes ? <span>{rule.request}</span> : null}
                   </div>
@@ -185,7 +204,9 @@ const GroupWorkbench = ({
                 <div className="rule-card__toolbar">
                   <Button
                     type="text"
-                    icon={<VerticalAlignTopOutlined />}
+                    className="rule-card__pin-btn"
+                    icon={rule.pinned ? <PushpinFilled /> : <PushpinOutlined />}
+                    title={rule.pinned ? 'Unpin' : 'Pin to top'}
                     onClick={(event) => {
                       event.stopPropagation();
                       onInterfaceMove(groupIndex, interfaceIndex, 'top');

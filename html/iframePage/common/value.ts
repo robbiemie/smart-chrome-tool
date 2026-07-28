@@ -12,6 +12,7 @@ export interface DefaultInterfaceObject {
   matchMethod: string, // GET、POST、PUT、DELETE、HEAD、OPTIONS、CONNECT、TRACE、PATCH
   request: string, // matched url
   requestDes: string,
+  pinned?: boolean, // pinned rules stick to the top of the group (max 3)
   // modify ⬇️
   replacementMethod: string,
   replacementUrl: string,
@@ -30,6 +31,7 @@ export const defaultInterface: DefaultInterfaceObject = {
   matchMethod: '',
   request: '',
   requestDes: '',
+  pinned: false,
   // modify ⬇️
   replacementMethod: '',
   replacementUrl: '',
