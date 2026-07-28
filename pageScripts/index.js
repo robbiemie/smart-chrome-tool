@@ -3,6 +3,7 @@ const ajax_tools_space = {
   ajaxToolsSwitchOn: true,
   ajaxToolsSwitchOnNot200: true,
   ajaxDataList: [],
+  domainWhitelist: ['*'],
   originalXHR: window.XMLHttpRequest,
   normalizeHeadersToObject: (headersInput) => {
     if (!headersInput) return {};
@@ -358,13 +359,39 @@ const ajax_tools_space = {
   }
 }
 
+// --- Domain whitelist matching -------------------------------------------------
+// The mock layer only activates on hostnames the user explicitly allowlisted.
+// Patterns: '*' = all, '*.foo.com' = foo.com + subdomains, 'foo.com' = exact.
+function patternToRegExp(pattern) {
+  if (!pattern) return /^$/;
+  if (pattern === '*') return /^.*$/;
+  const escaped = pattern.replace(/[.+?^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*');
+  if (pattern.startsWith('*.')) {
+    const rest = escaped.substring(4);
+    return new RegExp('^(?:.*\\.)?' + rest + '$', 'i');
+  }
+  return new RegExp('^' + escaped + '$', 'i');
+}
+
+function isHostnameWhitelisted(hostname, patterns) {
+  if (!hostname) return false;
+  if (!patterns || patterns.length === 0) return false;
+  return patterns.some(function (pattern) {
+    try { return patternToRegExp(pattern).test(hostname); } catch (e) { return false; }
+  });
+}
+
+function currentHostWhitelisted() {
+  return isHostnameWhitelisted(window.location.hostname, ajax_tools_space.domainWhitelist);
+}
+
 window.addEventListener("message", function (event) {
   const data = event.data;
   if (data.type === 'ajaxTools' && data.to === 'pageScript') {
     // console.log('【pageScripts/index.js】', data);
     ajax_tools_space[data.key] = data.value;
   }
-  if (ajax_tools_space.ajaxToolsSwitchOn) {
+  if (ajax_tools_space.ajaxToolsSwitchOn && currentHostWhitelisted()) {
     // https://github.com/PengChen96/ajax-tools/pull/14
     for (const k in ajax_tools_space.originalXHR) {
       ajax_tools_space.myXHR[k] = ajax_tools_space.originalXHR[k]

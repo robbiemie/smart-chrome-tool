@@ -11,7 +11,34 @@ const ajaxToolsRuntimeState = window[AJAX_TOOLS_RUNTIME_STATE_KEY] || (window[AJ
   floatingPanelBound: false,
   floatingRulesEnabled: true,
   floatingRulesCollapsed: false,
+  domainWhitelist: ['*'],
 });
+
+// --- Domain whitelist matching -------------------------------------------------
+// The floating panel only renders on allowlisted hostnames. Patterns:
+//   '*' = all, '*.foo.com' = foo.com + subdomains, 'foo.com' = exact.
+function patternToRegExp(pattern) {
+  if (!pattern) return /^$/;
+  if (pattern === '*') return /^.*$/;
+  const escaped = pattern.replace(/[.+?^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*');
+  if (pattern.startsWith('*.')) {
+    const rest = escaped.substring(4);
+    return new RegExp('^(?:.*\\.)?' + rest + '$', 'i');
+  }
+  return new RegExp('^' + escaped + '$', 'i');
+}
+
+function isHostnameWhitelisted(hostname, patterns) {
+  if (!hostname) return false;
+  if (!patterns || patterns.length === 0) return false;
+  return patterns.some(function (pattern) {
+    try { return patternToRegExp(pattern).test(hostname); } catch (e) { return false; }
+  });
+}
+
+function currentHostWhitelisted() {
+  return isHostnameWhitelisted(window.location.hostname, ajaxToolsRuntimeState.domainWhitelist);
+}
 
 // 设置iframeVisible默认值，刷新后重置storage
 chrome.storage.local.set({iframeVisible: true});
@@ -394,12 +421,18 @@ injectedScript('html/iframePage/mock.js');
 const pageScripts = injectedScript('pageScripts/index.js');
 if (pageScripts) {
   pageScripts.addEventListener('load', () => {
-    chrome.storage.local.get(['iframeVisible', 'ajaxToolsSwitchOn', 'ajaxToolsSwitchOnNot200', 'ajaxDataList', 'ajaxToolsSkin'], (result) => {
+    chrome.storage.local.get(['iframeVisible', 'ajaxToolsSwitchOn', 'ajaxToolsSwitchOnNot200', 'ajaxDataList', 'ajaxToolsSkin', 'ajaxToolsDomainWhitelist'], (result) => {
       // console.log('【ajaxTools content.js】【storage】', result);
       const {ajaxToolsSwitchOn = true, ajaxToolsSwitchOnNot200 = true, ajaxDataList = []} = result;
+      const domainWhitelist = Array.isArray(result.ajaxToolsDomainWhitelist) && result.ajaxToolsDomainWhitelist.length > 0
+        ? result.ajaxToolsDomainWhitelist
+        : ['*'];
+      ajaxToolsRuntimeState.domainWhitelist = domainWhitelist;
+      applyFloatingPanelState();
       postMessage({type: 'ajaxTools', to: 'pageScript', key: 'ajaxDataList', value: ajaxDataList});
       postMessage({type: 'ajaxTools', to: 'pageScript', key: 'ajaxToolsSwitchOn', value: ajaxToolsSwitchOn});
       postMessage({type: 'ajaxTools', to: 'pageScript', key: 'ajaxToolsSwitchOnNot200', value: ajaxToolsSwitchOnNot200});
+      postMessage({type: 'ajaxTools', to: 'pageScript', key: 'domainWhitelist', value: domainWhitelist});
     });
   });
 }
@@ -621,6 +654,12 @@ const FLOATING_COLLAPSED_KEY = 'ajaxToolsFloatingRulesCollapsed';
 function applyFloatingPanelState() {
   const panel = ajaxToolsRuntimeState.floatingPanel;
   if (!panel) return;
+
+  // Never show the floating panel on hostnames the user did not allowlist.
+  if (!currentHostWhitelisted()) {
+    panel.style.display = 'none';
+    return;
+  }
 
   if (!ajaxToolsRuntimeState.floatingRulesEnabled) {
     panel.style.display = 'none';
@@ -1096,6 +1135,19 @@ chrome.storage.onChanged.addListener(function (changes, namespace) {
         to: 'pageScript',
         key,
         value: newValue,
+      });
+    }
+    // Domain whitelist: forward to the page script so the mock layer can
+    // gate XHR/fetch override, and update the floating panel visibility.
+    if (key === 'ajaxToolsDomainWhitelist') {
+      const next = Array.isArray(newValue) && newValue.length > 0 ? newValue : ['*'];
+      ajaxToolsRuntimeState.domainWhitelist = next;
+      applyFloatingPanelState();
+      postMessage({
+        type: 'ajaxTools',
+        to: 'pageScript',
+        key: 'domainWhitelist',
+        value: next,
       });
     }
     // Re-render the floating rules panel when rule data or the selected

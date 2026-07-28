@@ -15,6 +15,7 @@ import { AjaxGroup, ModifyDataModalOpenProps } from './types/registry';
 import { useModuleCollapseState } from './hooks/useModuleCollapseState';
 import { usePageRenderMode } from './hooks/usePageRenderMode';
 import { useFloatingRules } from './hooks/useFloatingRules';
+import { useDomainWhitelist } from './hooks/useDomainWhitelist';
 
 const SELECTED_GROUP_INDEX_STORAGE_KEY = 'ajaxToolsSelectedGroupIndex';
 
@@ -75,6 +76,13 @@ function App() {
     floatingRulesEnabled,
     setFloatingRulesEnabled,
   } = useFloatingRules();
+  const {
+    domainWhitelist,
+    currentHostname,
+    currentTabMatched,
+    addDomain,
+    removeDomain,
+  } = useDomainWhitelist();
 
   const { moduleCollapseState, updateModuleCollapseState, allModulesCollapsed, toggleCollapseAll } = useModuleCollapseState();
 
@@ -280,6 +288,11 @@ function App() {
             globalControlsCollapsed={moduleCollapseState.globalControls}
             floatingRulesEnabled={floatingRulesEnabled}
             onToggleFloatingRules={setFloatingRulesEnabled}
+            domainWhitelist={domainWhitelist}
+            currentHostname={currentHostname}
+            currentTabMatched={currentTabMatched}
+            onAddDomain={addDomain}
+            onRemoveDomain={removeDomain}
             allModulesCollapsed={allModulesCollapsed}
             onToggleCollapseAll={toggleCollapseAll}
             onImportClick={onImportClick}
