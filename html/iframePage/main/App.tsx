@@ -17,6 +17,7 @@ import { useModuleCollapseState } from './hooks/useModuleCollapseState';
 import { usePageRenderMode } from './hooks/usePageRenderMode';
 import { useFloatingRules } from './hooks/useFloatingRules';
 import { useDomainWhitelist } from './hooks/useDomainWhitelist';
+import { useRequestSniffer, CapturedRequest } from './hooks/useRequestSniffer';
 
 const SELECTED_GROUP_INDEX_STORAGE_KEY = 'ajaxToolsSelectedGroupIndex';
 
@@ -41,6 +42,7 @@ function App() {
     onGroupAdd,
     onGroupMove,
     onBatchImport,
+    onMockCapture,
     setIsRegistry,
     onGroupDelete,
     setAjaxDataList,
@@ -87,6 +89,10 @@ function App() {
   } = useDomainWhitelist();
 
   const { moduleCollapseState, updateModuleCollapseState, allModulesCollapsed, toggleCollapseAll } = useModuleCollapseState();
+
+  // Live-captured XHR/fetch traffic from the host page. Each entry can be
+  // promoted to a mock rule via onMockCapturedRequest below.
+  const { requests: capturedRequests, clearRequests: clearCapturedRequests } = useRequestSniffer();
 
   useEffect(() => {
     if (!chrome.storage || !chrome.runtime || isRegistry) return;
@@ -234,6 +240,15 @@ function App() {
     }
   };
 
+  // Promote a captured request into a mock rule appended to the currently
+  // selected group. Falls back gracefully if the selected group is missing.
+  const handleMockCapturedRequest = (capture: CapturedRequest) => {
+    if (ajaxDataList.length < 1) {
+      return;
+    }
+    onMockCapture(selectedGroupIndex, capture);
+  };
+
   const handleGroupOpenChange = (groupIndex: number, open: boolean) => {
     const nextGroupIndex = onGroupOpenChange(groupIndex, open);
 
@@ -319,6 +334,14 @@ function App() {
             onGlobalControlsCollapseToggle={() => {
               updateModuleCollapseState('globalControls', !moduleCollapseState.globalControls);
             }}
+            capturedRequests={capturedRequests}
+            snifferCollapsed={moduleCollapseState.requestSniffer}
+            onToggleSnifferCollapse={() => {
+              updateModuleCollapseState('requestSniffer', !moduleCollapseState.requestSniffer);
+            }}
+            onClearCapturedRequests={clearCapturedRequests}
+            onMockCapturedRequest={handleMockCapturedRequest}
+            hasSelectedGroup={Boolean(selectedGroup)}
           />
 
           <main className="workbench-main" style={{ opacity: ajaxToolsSwitchOn ? 1 : 0.65 }}>

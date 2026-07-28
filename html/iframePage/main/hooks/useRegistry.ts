@@ -179,6 +179,48 @@ export const useRegistry = () => {
     persistAjaxDataList(nextAjaxDataList);
   };
 
+  // One-click "mock from capture": build a rule pre-filled with the captured
+  // request/response and append it to the target group. The match type is
+  // set to 'normal' with the raw URL so the rule lights up for the exact
+  // endpoint the user just inspected — they can switch to regex later.
+  // responseText is JSON-pretty-printed when possible so the Monaco editor
+  // shows a readable body instead of a minified blob.
+  const onMockCapture = (groupIndex: number, capture: {
+    method: string;
+    url: string;
+    status: number;
+    responseText: string;
+  }) => {
+    if (!chrome.storage) return;
+    if (!ajaxDataList[groupIndex]) return;
+
+    const key = String(Date.now());
+    let prettyResponse = capture.responseText || '';
+    try {
+      prettyResponse = JSON.stringify(JSON.parse(prettyResponse), null, 4);
+    } catch (e) {
+      // Not JSON — keep the raw text as-is.
+    }
+
+    const interfaceItem = {
+      ...defaultInterface,
+      key,
+      open: true,
+      matchType: 'normal',
+      matchMethod: capture.method || '',
+      request: capture.url,
+      requestDes: 'Mocked from Request Sniffer',
+      replacementStatusCode: String(capture.status || 200),
+      responseText: prettyResponse,
+      language: 'json',
+    };
+
+    const nextAjaxDataList = [...ajaxDataList];
+    nextAjaxDataList[groupIndex].collapseActiveKeys.push(key);
+    nextAjaxDataList[groupIndex].interfaceList.push(interfaceItem);
+    persistAjaxDataList(nextAjaxDataList);
+  };
+
   const onInterfaceListDelete = (groupIndex: number, key: string) => {
     if (!chrome.storage) return;
     const nextAjaxDataList = [...ajaxDataList];
@@ -259,6 +301,7 @@ export const useRegistry = () => {
     onGroupMove,
     onImportClick,
     onBatchImport,
+    onMockCapture,
     setIsRegistry,
     onGroupDelete,
     setAjaxDataList,

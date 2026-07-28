@@ -110,6 +110,20 @@ const ajax_tools_space = {
     if (!ruleKey) return;
     window.postMessage({ type: 'AJAX_TOOLS_RULE_HIT', to: 'contentScript', ruleKey }, '*');
   },
+  // Relay captured XHR/fetch traffic to the content script so the iframe
+  // workbench's Request Sniffer can list it. We forward method, url, status
+  // and response text; the consumer filters out static-resource URLs.
+  // Static assets (js/css/img/font/etc.) are filtered here to avoid noise.
+  emitCapturedRequest: function (payload) {
+    if (!payload || !payload.url) return;
+    try {
+      window.postMessage({
+        type: 'AJAX_TOOLS_REQUEST_CAPTURED',
+        to: 'contentScript',
+        payload,
+      }, '*');
+    } catch (e) {}
+  },
   myXHR: function () {
     const modifyResponse = () => {
       const [method, requestUrl] = this._openArgs;
@@ -152,6 +166,15 @@ const ajax_tools_space = {
           if (this.readyState === this.DONE) {
             // 开启拦截
             modifyResponse();
+            // Emit captured request/response to the sniffer. Use the override
+            // result so the panel reflects what the page actually received.
+            ajax_tools_space.emitCapturedRequest({
+              source: 'xhr',
+              method: this._openArgs && this._openArgs[0],
+              url: this._openArgs && this._openArgs[1],
+              status: this.status,
+              responseText: this.responseText,
+            });
           }
           this.onreadystatechange && this.onreadystatechange.apply(this, args);
         }
@@ -325,16 +348,17 @@ const ajax_tools_space = {
     }
     return ajax_tools_space.originalFetch(...args).then(async (response) => {
       let overrideText = undefined;
+      let originalResponseText = '';
       if (matchedInterface && matchedInterface.responseText) {
         const queryStringParameters = ajax_tools_space.getRequestParams(requestUrl);
-        const originalResponse = await getOriginalResponse(response.body);
+        originalResponseText = await getOriginalResponse(response.body);
         const funcArgs = {
           method: data.method,
           payload: {
             queryStringParameters,
             requestPayload: data.body
           },
-          originalResponse
+          originalResponse: originalResponseText
         };
         overrideText = ajax_tools_space.getOverrideText(matchedInterface.responseText, funcArgs);
         // console.info('ⓢ ►►►►►►►►►►►►►►►►►►►►►►►►►►►►►►►► ⓢ');
@@ -343,7 +367,26 @@ const ajax_tools_space = {
         console.info('%cModified Response Payload：', 'background-color: #ff5500; color: white;', JSON.parse(overrideText));
         console.groupEnd();
         // console.info('ⓔ ▣▣▣▣▣▣▣▣▣▣▣▣▣▣▣▣▣▣▣▣▣▣▣▣▣▣▣▣▣▣▣▣ ⓔ')
+      } else {
+        // Non-matched fetch: clone the response so we can read its body for
+        // the Request Sniffer without consuming the original stream that the
+        // page will read.
+        try {
+          const cloneForSniffer = response.clone();
+          originalResponseText = await getOriginalResponse(cloneForSniffer.body);
+        } catch (e) {
+          originalResponseText = '';
+        }
       }
+      // Emit captured fetch traffic to the sniffer. Prefer the override text
+      // so the panel shows what the page actually received.
+      ajax_tools_space.emitCapturedRequest({
+        source: 'fetch',
+        method: data && data.method,
+        url: requestUrl,
+        status: response.status,
+        responseText: overrideText !== undefined ? overrideText : originalResponseText,
+      });
       if (overrideText !== undefined) {
         const stream = new ReadableStream({
           start(controller) {

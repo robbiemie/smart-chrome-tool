@@ -1,9 +1,11 @@
 import React, { useState } from 'react';
 import { Button, Empty, Input, Select, Switch, Tag } from 'antd';
-import { PlusOutlined, SwapOutlined, SettingOutlined, CompressOutlined, ExpandOutlined, CloseOutlined } from '@ant-design/icons';
+import { PlusOutlined, SwapOutlined, SettingOutlined, CompressOutlined, ExpandOutlined, CloseOutlined, RadarChartOutlined } from '@ant-design/icons';
 import { AjaxGroup } from '../../types/registry';
 import { withErrorBoundary } from '../../common/withErrorBoundary';
 import ModuleSection from '../ModuleSection';
+import RequestSniffer from '../RequestSniffer';
+import { CapturedRequest } from '../../hooks/useRequestSniffer';
 
 interface OperationsRailProps {
   ajaxDataList: AjaxGroup[];
@@ -29,6 +31,13 @@ interface OperationsRailProps {
   onToggleCsrMode: (value: boolean) => void;
   onGroupAdd: () => void;
   onGlobalControlsCollapseToggle: () => void;
+  // Request Sniffer
+  capturedRequests: CapturedRequest[];
+  snifferCollapsed: boolean;
+  onToggleSnifferCollapse: () => void;
+  onClearCapturedRequests: () => void;
+  onMockCapturedRequest: (capture: CapturedRequest) => void;
+  hasSelectedGroup: boolean;
 }
 
 const OperationsRail = ({
@@ -55,6 +64,12 @@ const OperationsRail = ({
   onToggleCsrMode,
   onGroupAdd,
   onGlobalControlsCollapseToggle,
+  capturedRequests,
+  snifferCollapsed,
+  onToggleSnifferCollapse,
+  onClearCapturedRequests,
+  onMockCapturedRequest,
+  hasSelectedGroup,
 }: OperationsRailProps) => {
   const [domainInput, setDomainInput] = useState('');
 
@@ -199,6 +214,26 @@ const OperationsRail = ({
             />
           )}
         </div>
+      </ModuleSection>
+
+      {/* Request Sniffer: live-captured XHR/fetch traffic on the current
+          page. Each row can be promoted to a mock rule in the selected
+          group with one click. */}
+      <ModuleSection
+        title="Request Sniffer"
+        eyebrow="Live Capture"
+        description={`${capturedRequests.length} request(s) captured on this page. Click Mock to add a rule to the current group.`}
+        className="rail-panel"
+        collapsed={snifferCollapsed}
+        onToggleCollapse={onToggleSnifferCollapse}
+        extra={<RadarChartOutlined style={{ color: '#1a9b7f' }} />}
+      >
+        <RequestSniffer
+          requests={capturedRequests}
+          onClear={onClearCapturedRequests}
+          onMockRequest={onMockCapturedRequest}
+          disabled={!hasSelectedGroup}
+        />
       </ModuleSection>
     </aside>
   );

@@ -674,12 +674,30 @@ const FLOATING_COLLAPSED_KEY = 'ajaxToolsFloatingRulesCollapsed';
 // keys are kept in memory only — they reset on page reload.
 window.addEventListener('message', (event) => {
   const data = event.data;
-  if (!data || data.type !== 'AJAX_TOOLS_RULE_HIT' || data.to !== 'contentScript') return;
-  if (!data.ruleKey) return;
-  if (ajaxToolsRuntimeState.hitRuleKeys[data.ruleKey]) return;
-  ajaxToolsRuntimeState.hitRuleKeys[data.ruleKey] = true;
-  // Update only the dot indicators without a full re-render.
-  refreshFloatingHitDots();
+  if (!data || data.to !== 'contentScript') return;
+
+  if (data.type === 'AJAX_TOOLS_RULE_HIT') {
+    if (!data.ruleKey) return;
+    if (ajaxToolsRuntimeState.hitRuleKeys[data.ruleKey]) return;
+    ajaxToolsRuntimeState.hitRuleKeys[data.ruleKey] = true;
+    // Update only the dot indicators without a full re-render.
+    refreshFloatingHitDots();
+    return;
+  }
+
+  // Forward captured XHR/fetch traffic to the iframe workbench so the
+  // Request Sniffer module can list it. The page script runs in the page
+  // context and cannot message the iframe directly.
+  if (data.type === 'AJAX_TOOLS_REQUEST_CAPTURED' && data.payload) {
+    const iframe = document.querySelector('.robbie-ajax-interceptor-iframe');
+    if (iframe && iframe.contentWindow) {
+      iframe.contentWindow.postMessage({
+        type: 'AJAX_TOOLS_REQUEST_CAPTURED',
+        payload: data.payload,
+      }, '*');
+    }
+    return;
+  }
 });
 
 // Apply the current enabled/collapsed state to the floating panel DOM.

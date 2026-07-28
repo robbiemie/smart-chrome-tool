@@ -4,7 +4,8 @@ type ModuleCollapseKey =
   | 'globalControls'
   | 'groupNavigator'
   | 'groupWorkbench'
-  | 'ruleDetailPanel';
+  | 'ruleDetailPanel'
+  | 'requestSniffer';
 
 type ModuleCollapseState = Record<ModuleCollapseKey, boolean>;
 
@@ -15,6 +16,7 @@ const defaultModuleCollapseState: ModuleCollapseState = {
   groupNavigator: false,
   groupWorkbench: false,
   ruleDetailPanel: false,
+  requestSniffer: false,
 };
 
 // Keys toggled by the "collapse all" shortcut. globalControls is excluded so

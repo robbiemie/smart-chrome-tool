@@ -1,0 +1,96 @@
+.request-sniffer {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.request-sniffer__toolbar {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.request-sniffer__search {
+  flex: 1;
+  min-width: 0;
+}
+
+/* Fixed-height scrollable list so the module occupies a bounded region
+   regardless of how many requests were captured. */
+.request-sniffer__list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 280px;
+  min-height: 120px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-right: 4px;
+}
+
+.request-sniffer__list::-webkit-scrollbar {
+  width: 6px;
+}
+
+.request-sniffer__list::-webkit-scrollbar-thumb {
+  background: rgb(27 40 34 / 14%);
+  border-radius: 999px;
+}
+
+.request-sniffer__list::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.request-sniffer__empty {
+  margin: 24px 0;
+}
+
+.request-sniffer__item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid rgb(27 40 34 / 7%);
+  border-radius: 12px;
+  padding: 8px 10px;
+  background: #fbf8f2;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.request-sniffer__item:hover {
+  border-color: rgb(26 155 127 / 28%);
+  box-shadow: 0 2px 8px rgb(26 155 127 / 10%);
+}
+
+.request-sniffer__item-main {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.request-sniffer__item-meta {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.request-sniffer__source-tag,
+.request-sniffer__method-tag,
+.request-sniffer__status-tag {
+  margin: 0;
+  font-size: 10px;
+  line-height: 1.4;
+  padding: 0 6px;
+}
+
+.request-sniffer__url {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: Menlo, Monaco, Consolas, monospace;
+  font-size: 11px;
+  color: rgb(27 40 34 / 82%);
+  line-height: 1.4;
+}
