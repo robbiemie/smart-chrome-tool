@@ -14,6 +14,9 @@ The extension ships with a React + TypeScript iframe workbench that allows you t
 - Gate the mock layer and floating panel with a domain whitelist
 - Import and export rule configurations
 
+> 中文文档请见 [README-ZH.md](./README-ZH.md)。
+> For a simplified quick-start guide (Chinese), see [使用说明.md](./使用说明.md).
+
 ## Screenshots
 
 | Mode | Preview |
