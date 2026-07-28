@@ -1,5 +1,18 @@
 # Build Changelog
 
+## v0.0.3
+
+- Built At: 2026-07-28T03:54:40.535Z
+- Previous Version: v0.0.2
+- Git Branch: master
+- Git Commit: ff6e3d13
+
+### Changed Files
+- html/iframePage/package-lock.json
+- html/iframePage/package.json
+- manifest.json
+
+
 ## v0.0.2
 
 - Built At: 2026-07-27T13:07:13.200Z

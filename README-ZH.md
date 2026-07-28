@@ -44,13 +44,11 @@
 主要运行时组成：
 
 - `manifest.json`
-  声明权限、content scripts、后台 service worker、devtools 页面以及 web accessible resources。
+  声明权限、content scripts、后台 service worker 以及 web accessible resources。
 - `service_worker.js`
   处理后台运行时逻辑与 Chrome 扩展集成。
 - `content.js`
   在匹配的页面中运行，在页面上下文中注入运行时能力。
-- `devtoolsPage/`
-  提供 DevTools 集成入口，注册名为 `U-Network` 的面板。
 - `html/iframePage/`
   包含基于 React + TypeScript 的 iframe 应用，作为管理 UI。
 
@@ -63,7 +61,6 @@ smart-chrome-tool/
 ├── manifest.json
 ├── service_worker.js
 ├── content.js
-├── devtoolsPage/
 ├── pageScripts/
 ├── icons/
 ├── assets/
@@ -183,24 +180,25 @@ smart-chrome-tool/
 
 1. 重新构建 `html/iframePage`
 2. 重新加载扩展
-3. 如有需要，重新打开 DevTools
+3. 刷新目标页面并重新打开工作台
 
 ## 如何打开工具
 
-本扩展集成于 Chrome DevTools。
+工作台以侧边面板的形式注入到当前页面中。
 
 典型流程：
 
 1. 打开目标网页。
-2. 按 `F12` 或手动打开 Chrome DevTools。
-3. 找到本扩展提供的面板（面板名为 `U-Network`）。
-4. 打开面板即可进入网络拦截工作台。
+2. 点击浏览器工具栏上的扩展图标（`Ajax Interceptor Tools`）。
+3. 工作台面板会从页面右侧滑入。
+4. 再次点击扩展图标（或面板的关闭按钮）即可隐藏面板。
 
 如果面板未出现：
 
 - 确认未打包扩展已成功加载
-- 确认加载或重新加载扩展后已重新打开 DevTools
-- 确认 iframe 应用已成功构建
+- 确认当前标签页是普通的 http/https 页面（`chrome://` 等页面无法注入面板）
+- 确认 iframe 应用已成功构建（`html/iframePage/dist` 存在）
+- 重新加载扩展后刷新目标页面
 
 ## 工作台概览
 
@@ -704,14 +702,15 @@ Header Value: 1
 
 ## 常见问题排查
 
-### DevTools 中没有出现扩展面板
+### 工作台面板没有出现
 
 请检查：
 
 - 扩展已在 `chrome://extensions` 中成功加载
-- 重新加载扩展后已重新打开 DevTools
+- 当前标签页是普通的 http/https 页面（`chrome://` 等页面无法注入面板）
 - `html/iframePage/dist` 目录存在
 - `manifest.json` 配置合法
+- 重新加载扩展后已刷新目标页面
 
 ### 规则不生效
 
@@ -739,8 +738,8 @@ Header Value: 1
 
 1. 重新构建 iframe 应用
 2. 重新加载未打包扩展
-3. 关闭并重新打开 DevTools
-4. 刷新目标页面
+3. 刷新目标页面
+4. 再次点击扩展工具栏图标重新打开工作台
 
 ### `npm install` 或 `npm run build` 失败
 

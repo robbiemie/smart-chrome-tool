@@ -3,10 +3,17 @@
 /**
  * Build script for smart-chrome-tool.
  *
- * Default:  node build.js            -> build iframe app, then zip the runtime
- * Publish:  node build.js --publish  -> above + create a GitHub Release with the zip attached
+ * Default:  node build.js            -> build iframe app, then zip the runtime (no version change)
+ * Bump:     node build.js --bump     -> bump manifest version, sync package.json, build, then zip
+ * Publish:  node build.js --publish  -> bump + build + zip + create a GitHub Release with the zip attached
  *   --force                          -> with --publish, delete an existing tag/release and recreate
  *   --notes "<text>"                 -> override auto-generated release notes
+ *
+ * Version model:
+ *   - manifest.json is the single source of truth for the extension version.
+ *   - package.json / package-lock.json versions are mirrors, synced from manifest
+ *     before every build so npm's lifecycle banners and the zip name agree.
+ *   - Bumping is explicit (--bump / --publish); plain builds never mutate the version.
  *
  * Publish prerequisites:
  *   - GitHub CLI installed (brew install gh) and authenticated (gh auth login)
@@ -19,6 +26,10 @@ const path = require('path');
 
 const projectRoot = __dirname;
 const iframePageRoot = path.resolve(projectRoot, 'html/iframePage');
+const manifestJsonPath = path.resolve(projectRoot, 'manifest.json');
+const packageJsonPath = path.resolve(iframePageRoot, 'package.json');
+const packageLockPath = path.resolve(iframePageRoot, 'package-lock.json');
+const buildMetaPath = path.resolve(iframePageRoot, '.build-meta.json');
 
 // Files and directories required by the extension at runtime.
 // Anything not listed here (source, configs, node_modules, docs) is excluded from the archive.
@@ -26,7 +37,6 @@ const RUNTIME_ENTRIES = [
   'manifest.json',
   'service_worker.js',
   'content.js',
-  'devtoolsPage',
   'pageScripts',
   'icons',
   'html/iframePage/mock.js',
@@ -42,11 +52,86 @@ const EXCLUDE_PATTERNS = [
 
 const argv = process.argv.slice(2);
 const shouldPublish = argv.includes('--publish') || argv.includes('--release');
+// Version bumping is explicit: --bump or --publish. Plain builds keep the current version.
+const shouldBump = shouldPublish || argv.includes('--bump');
 const forcePublish = argv.includes('--force');
 const notesIndex = argv.indexOf('--notes');
 const customNotes = notesIndex !== -1 ? argv[notesIndex + 1] : null;
 
+const readJsonFile = (filePath) => JSON.parse(fs.readFileSync(filePath, 'utf8'));
+
+const writeJsonFile = (filePath, content) => {
+  fs.writeFileSync(filePath, `${JSON.stringify(content, null, 2)}\n`, 'utf8');
+};
+
+const incrementPatchVersion = (version) => {
+  const versionParts = version.split('.');
+
+  if (versionParts.length !== 3) {
+    throw new Error(`Unsupported version format: ${version}`);
+  }
+
+  const [major, minor, patch] = versionParts.map((part) => Number(part));
+
+  if ([major, minor, patch].some((part) => Number.isNaN(part))) {
+    throw new Error(`Unsupported version format: ${version}`);
+  }
+
+  return `${major}.${minor}.${patch + 1}`;
+};
+
+// Mirror manifest.json's version into package.json + package-lock.json so npm's
+// lifecycle banners (which read package.json before any script runs) report the
+// same version as the zip (which reads manifest.json). This is what previously
+// made a single build appear to emit two different version numbers.
+const syncPackageVersionFromManifest = (manifestVersion) => {
+  const packageJson = readJsonFile(packageJsonPath);
+  if (packageJson.version === manifestVersion) return;
+
+  packageJson.version = manifestVersion;
+  writeJsonFile(packageJsonPath, packageJson);
+
+  if (fs.existsSync(packageLockPath)) {
+    const packageLockJson = readJsonFile(packageLockPath);
+    packageLockJson.version = manifestVersion;
+    if (packageLockJson.packages && packageLockJson.packages['']) {
+      packageLockJson.packages[''].version = manifestVersion;
+    }
+    writeJsonFile(packageLockPath, packageLockJson);
+  }
+};
+
+const bumpVersion = () => {
+  const manifestJson = readJsonFile(manifestJsonPath);
+  const previousVersion = manifestJson.version;
+  const nextVersion = incrementPatchVersion(previousVersion);
+
+  // manifest.json is the authoritative version; package.json/lock are mirrors.
+  manifestJson.version = nextVersion;
+  writeJsonFile(manifestJsonPath, manifestJson);
+  syncPackageVersionFromManifest(nextVersion);
+
+  // Hand off build metadata so the iframe app's postbuild step can append a
+  // matching changelog entry.
+  writeJsonFile(buildMetaPath, {
+    previousVersion,
+    nextVersion,
+    builtAt: new Date().toISOString(),
+  });
+
+  console.log(`Version bumped: v${previousVersion} -> v${nextVersion}`);
+};
+
 const runBuild = () => {
+  // Resolve the version BEFORE spawning `npm run build`. Bumping here (rather
+  // than in npm's prebuild hook) guarantees npm's lifecycle banners and the
+  // final zip name reference the same version in a single build run.
+  if (shouldBump) {
+    bumpVersion();
+  } else {
+    syncPackageVersionFromManifest(readJsonFile(manifestJsonPath).version);
+  }
+
   const buildProcess = spawn('npm', ['run', 'build'], {
     cwd: iframePageRoot,
     stdio: 'inherit',

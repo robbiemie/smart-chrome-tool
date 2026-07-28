@@ -4,34 +4,9 @@ const { execSync } = require('child_process');
 
 const projectRoot = path.resolve(__dirname, '..');
 const repoRoot = path.resolve(projectRoot, '..', '..');
-const packageJsonPath = path.join(projectRoot, 'package.json');
-const packageLockPath = path.join(projectRoot, 'package-lock.json');
-const manifestJsonPath = path.join(repoRoot, 'manifest.json');
 const changelogPath = path.join(projectRoot, 'CHANGELOG.md');
 const distChangelogPath = path.join(projectRoot, 'dist', 'CHANGELOG.md');
 const buildMetaPath = path.join(projectRoot, '.build-meta.json');
-
-const readJsonFile = (filePath) => JSON.parse(fs.readFileSync(filePath, 'utf8'));
-
-const writeJsonFile = (filePath, content) => {
-  fs.writeFileSync(filePath, `${JSON.stringify(content, null, 2)}\n`, 'utf8');
-};
-
-const incrementPatchVersion = (version) => {
-  const versionParts = version.split('.');
-
-  if (versionParts.length !== 3) {
-    throw new Error(`Unsupported version format: ${version}`);
-  }
-
-  const [major, minor, patch] = versionParts.map((part) => Number(part));
-
-  if ([major, minor, patch].some((part) => Number.isNaN(part))) {
-    throw new Error(`Unsupported version format: ${version}`);
-  }
-
-  return `${major}.${minor}.${patch + 1}`;
-};
 
 const runGitCommand = (command) => {
   try {
@@ -41,29 +16,6 @@ const runGitCommand = (command) => {
     }).toString().trim();
   } catch (error) {
     return '';
-  }
-};
-
-const syncVersions = (nextVersion) => {
-  const packageJson = readJsonFile(packageJsonPath);
-  packageJson.version = nextVersion;
-  writeJsonFile(packageJsonPath, packageJson);
-
-  if (fs.existsSync(packageLockPath)) {
-    const packageLockJson = readJsonFile(packageLockPath);
-    packageLockJson.version = nextVersion;
-
-    if (packageLockJson.packages && packageLockJson.packages['']) {
-      packageLockJson.packages[''].version = nextVersion;
-    }
-
-    writeJsonFile(packageLockPath, packageLockJson);
-  }
-
-  if (fs.existsSync(manifestJsonPath)) {
-    const manifestJson = readJsonFile(manifestJsonPath);
-    manifestJson.version = nextVersion;
-    writeJsonFile(manifestJsonPath, manifestJson);
   }
 };
 
@@ -106,53 +58,42 @@ const buildChangelogEntry = (buildMeta) => {
   ].join('\n');
 };
 
-const runPrebuild = () => {
-  const packageJson = readJsonFile(packageJsonPath);
-  const previousVersion = packageJson.version;
-  const nextVersion = incrementPatchVersion(previousVersion);
-
-  syncVersions(nextVersion);
-
-  // Persist build metadata so postbuild can generate a matching changelog entry.
-  writeJsonFile(buildMetaPath, {
-    previousVersion,
-    nextVersion,
-    builtAt: new Date().toISOString(),
-  });
-};
-
 const runPostbuild = () => {
-  if (!fs.existsSync(buildMetaPath)) {
-    throw new Error('Missing build metadata. Run the prebuild step first.');
+  // Only append a changelog entry when the outer build.js recorded a version bump.
+  // Plain `node build.js` runs (no bump) skip the entry but still mirror the
+  // existing changelog into dist/ so the committed dist artifact stays intact.
+  if (fs.existsSync(buildMetaPath)) {
+    const buildMeta = JSON.parse(fs.readFileSync(buildMetaPath, 'utf8'));
+    const nextEntry = buildChangelogEntry(buildMeta);
+    const previousChangelog = fs.existsSync(changelogPath) ? fs.readFileSync(changelogPath, 'utf8') : '';
+    const changelogContent = [
+      '# Build Changelog',
+      '',
+      nextEntry,
+      previousChangelog.replace(/^# Build Changelog\s*/, '').trim(),
+    ]
+      .filter(Boolean)
+      .join('\n\n')
+      .trimEnd() + '\n';
+
+    fs.writeFileSync(changelogPath, changelogContent, 'utf8');
+    fs.unlinkSync(buildMetaPath);
   }
 
-  const buildMeta = readJsonFile(buildMetaPath);
-  const nextEntry = buildChangelogEntry(buildMeta);
-  const previousChangelog = fs.existsSync(changelogPath) ? fs.readFileSync(changelogPath, 'utf8') : '';
-  const changelogContent = [
-    '# Build Changelog',
-    '',
-    nextEntry,
-    previousChangelog.replace(/^# Build Changelog\s*/, '').trim(),
-  ]
-    .filter(Boolean)
-    .join('\n\n')
-    .trimEnd() + '\n';
-
-  fs.writeFileSync(changelogPath, changelogContent, 'utf8');
-
-  if (fs.existsSync(path.join(projectRoot, 'dist'))) {
-    fs.writeFileSync(distChangelogPath, changelogContent, 'utf8');
+  // Vite empties dist/ on each build; re-create the dist changelog mirror so
+  // the committed dist/CHANGELOG.md does not silently disappear.
+  if (fs.existsSync(path.join(projectRoot, 'dist')) && fs.existsSync(changelogPath)) {
+    fs.writeFileSync(
+      distChangelogPath,
+      fs.readFileSync(changelogPath, 'utf8'),
+      'utf8'
+    );
   }
-
-  fs.unlinkSync(buildMetaPath);
 };
 
 const mode = process.argv[2];
 
-if (mode === 'prebuild') {
-  runPrebuild();
-} else if (mode === 'postbuild') {
+if (mode === 'postbuild') {
   runPostbuild();
 } else {
   throw new Error(`Unsupported mode: ${mode}`);

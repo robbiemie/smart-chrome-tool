@@ -17,7 +17,7 @@ const Empty = (props: EmptyPorps) => {
     subTitle={<>
         Create a rule by clicking the <Button size="small" type="primary" onClick={onGroupAdd}>Add Group</Button> button <br/>
         Or importing a <strong>.json</strong> file by clicking the <Button size="small" style={{ marginTop: 6 }} onClick={onImportClick}><UploadOutlined/>Import</Button> button<br/>
-        Or F12 opens devtools and selects the U-Network panel to get started quickly.
+        Or click the extension toolbar icon to open this workbench.
     </>}
   />);
 };

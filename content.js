@@ -155,6 +155,31 @@ function zoomButton (container) {
   })
   return zoomIcon;
 }
+function fullscreenButton (container) {
+  let isFullscreen = false;
+  const fullscreenIcon = document.createElement('i');
+  fullscreenIcon.className = 'c-iconfont c-icon-fullscreen ajax-interceptor-icon ajax-interceptor-mr-8';
+  fullscreenIcon.title = 'Fullscreen';
+  fullscreenIcon.addEventListener('click', function () {
+    isFullscreen = !isFullscreen;
+    if (isFullscreen) {
+      // Expand the side panel to cover the entire viewport.
+      container.style.setProperty('width', '100%', 'important');
+      container.style.setProperty('height', '100%', 'important');
+      container.style.setProperty('inset', '0', 'important');
+      fullscreenIcon.title = 'Exit fullscreen';
+      fullscreenIcon.className = 'c-iconfont c-icon-reduce ajax-interceptor-icon ajax-interceptor-mr-8';
+    } else {
+      // Restore the default right-docked side panel size.
+      container.style.setProperty('width', '580px', 'important');
+      container.style.setProperty('height', '100%', 'important');
+      container.style.setProperty('inset', '0 0 auto auto', 'important');
+      fullscreenIcon.title = 'Fullscreen';
+      fullscreenIcon.className = 'c-iconfont c-icon-fullscreen ajax-interceptor-icon ajax-interceptor-mr-8';
+    }
+  });
+  return fullscreenIcon;
+}
 function pipButton (container) {
   const pipIcon = document.createElement('i');
   pipIcon.title = 'Picture in picture';
@@ -287,6 +312,8 @@ function actionBar (container) {
   left.appendChild(closeBtn);
   const zoomBtn = zoomButton(container);
   left.appendChild(zoomBtn);
+  const fullscreenBtn = fullscreenButton(container);
+  left.appendChild(fullscreenBtn);
   const pipBtn = pipButton(container);
   left.appendChild(pipBtn);
   header.appendChild(left);

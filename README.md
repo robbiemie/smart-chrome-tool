@@ -42,13 +42,11 @@ This project is a Chrome Manifest V3 extension.
 Main runtime pieces:
 
 - `manifest.json`
-  Defines permissions, content scripts, background service worker, devtools page, and web accessible resources.
+  Defines permissions, content scripts, background service worker, and web accessible resources.
 - `service_worker.js`
   Handles background runtime logic and Chrome extension integration.
 - `content.js`
   Runs on matched pages and injects runtime capabilities into the page context.
-- `devtoolsPage/`
-  Provides the DevTools integration entry. Registers a panel named `U-Network` that loads the built iframe workbench.
 - `html/iframePage/`
   Contains the React + TypeScript iframe application used as the management UI.
 
@@ -62,7 +60,6 @@ smart-chrome-tool/
 ├── service_worker.js
 ├── content.js
 ├── build.js
-├── devtoolsPage/
 ├── pageScripts/
 ├── icons/
 ├── assets/
@@ -196,24 +193,25 @@ When you change the iframe React app:
 
 1. Rebuild `html/iframePage`
 2. Reload the extension
-3. Reopen DevTools if needed
+3. Refresh the target page and reopen the workbench
 
 ## How to Open the Tool
 
-This extension integrates with Chrome DevTools.
+The workbench is surfaced as a side panel injected into the active page.
 
 Typical flow:
 
 1. Open the target webpage.
-2. Press `F12` or open Chrome DevTools manually.
-3. Locate the `U-Network` panel provided by this tool.
-4. Open the panel to access the network interception workbench.
+2. Click the extension's toolbar icon (the `Ajax Interceptor Tools` action icon).
+3. The workbench panel slides in from the right side of the page.
+4. Click the toolbar icon again (or the panel's close button) to hide it.
 
 If the panel does not appear:
 
 - Confirm the unpacked extension loaded successfully
-- Confirm DevTools has been reopened after loading or reloading the extension
-- Confirm the iframe app has been built successfully
+- Confirm the active tab is a normal http/https page (the panel cannot be injected into `chrome://` pages)
+- Confirm the iframe app has been built successfully (`html/iframePage/dist` exists)
+- Reload the page after reloading the extension
 
 ## Workbench Overview
 
@@ -629,7 +627,7 @@ This is useful when the target site branches its rendering pipeline (SSR vs CSR)
 ### How to use it
 
 1. Open the target page
-2. Open the extension workbench (the `U-Network` panel)
+2. Open the extension workbench (click the extension toolbar icon)
 3. In the left operations rail, toggle `CSR Mode`
 4. The tab reloads with the updated URL
 
@@ -721,20 +719,21 @@ Example:
 ### 6. Force CSR rendering for debugging
 
 1. Open the target page
-2. Open the extension workbench (the `U-Network` panel)
+2. Open the extension workbench (click the extension toolbar icon)
 3. In the left operations rail, toggle `CSR Mode` on
 4. The tab reloads with `__csr=1` and the page enters its CSR branch
 
 ## Troubleshooting
 
-### The extension panel does not appear in DevTools
+### The workbench panel does not appear
 
 Check the following:
 
 - The extension is loaded successfully in `chrome://extensions`
-- DevTools was reopened after extension reload
+- The active tab is a normal http/https page (the panel cannot open on `chrome://` pages)
 - `html/iframePage/dist` exists
 - `manifest.json` is valid
+- Reload the page after reloading the extension
 
 ### Rules do not take effect
 
@@ -762,8 +761,8 @@ Check the following:
 
 1. Rebuild the iframe app
 2. Reload the unpacked extension
-3. Close and reopen DevTools
-4. Refresh the target page
+3. Refresh the target page
+4. Click the extension toolbar icon again to reopen the workbench
 
 ### `npm install` or `npm run build` fails
 
