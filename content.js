@@ -9,6 +9,8 @@ const ajaxToolsRuntimeState = window[AJAX_TOOLS_RUNTIME_STATE_KEY] || (window[AJ
   panelInitBound: false,
   floatingPanel: null,
   floatingPanelBound: false,
+  floatingRulesEnabled: true,
+  floatingRulesCollapsed: false,
 });
 
 // 设置iframeVisible默认值，刷新后重置storage
@@ -105,7 +107,7 @@ injectedStyle(`
   }
   .robbie-ajax-floating-rules {
     position: fixed !important;
-    right: calc(580px + 24px) !important;
+    right: 24px !important;
     bottom: 24px !important;
     width: 360px !important;
     max-height: 420px !important;
@@ -131,10 +133,35 @@ injectedStyle(`
     background: #fafafa;
     flex-shrink: 0;
   }
+  .robbie-ajax-floating-rules__header-left {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    min-width: 0;
+  }
   .robbie-ajax-floating-rules__count {
     font-weight: 400;
     font-size: 11px;
     color: #999;
+  }
+  .robbie-ajax-floating-rules__collapse-btn {
+    flex-shrink: 0;
+    width: 22px;
+    height: 22px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: none;
+    border-radius: 6px;
+    background: transparent;
+    cursor: pointer;
+    color: #888;
+    font-size: 14px;
+    line-height: 1;
+  }
+  .robbie-ajax-floating-rules__collapse-btn:hover {
+    background: #eaeaea;
+    color: #333;
   }
   .robbie-ajax-floating-rules__list {
     overflow-y: auto;
@@ -191,6 +218,53 @@ injectedStyle(`
     text-align: center;
     color: #999;
     font-size: 12px;
+  }
+  /* Collapsed state: shrink to a compact mock grid widget. */
+  .robbie-ajax-floating-rules--collapsed {
+    width: auto !important;
+    max-height: none !important;
+    padding: 8px !important;
+    border-radius: 14px !important;
+  }
+  .robbie-ajax-floating-rules--collapsed .robbie-ajax-floating-rules__header,
+  .robbie-ajax-floating-rules--collapsed .robbie-ajax-floating-rules__list {
+    display: none !important;
+  }
+  .robbie-ajax-floating-rules__mock {
+    display: none;
+    cursor: pointer;
+    flex-direction: column;
+    align-items: center;
+    gap: 5px;
+    padding: 2px;
+  }
+  .robbie-ajax-floating-rules--collapsed .robbie-ajax-floating-rules__mock {
+    display: flex;
+  }
+  .robbie-ajax-floating-rules__mock-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 8px);
+    grid-auto-rows: 8px;
+    gap: 3px;
+  }
+  .robbie-ajax-floating-rules__mock-cell {
+    width: 8px;
+    height: 8px;
+    border-radius: 2px;
+    background: #f0f0f0;
+  }
+  .robbie-ajax-floating-rules__mock-cell--on {
+    background: #1a9b7f;
+  }
+  .robbie-ajax-floating-rules__mock-cell--off {
+    background: #d9d9d9;
+  }
+  .robbie-ajax-floating-rules__mock-count {
+    font-size: 10px;
+    font-weight: 600;
+    color: #1b2822;
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
   }
 `);
 injectedCss('icons/iconfont/iconfont.css');
@@ -422,9 +496,47 @@ function actionBar (container) {
   return header;
 }
 // Floating rules panel: a compact, fixed-position overlay that lists the
-// current group's rules with toggles. Synchronizes visibility with the main
-// side panel and reads/writes the same chrome.storage data.
+// current group's rules with toggles. Display is independent of the main
+// side panel — it is gated only by the master toggle below and its own
+// collapse state. Synchronizes data via the same chrome.storage keys.
 const FLOATING_SELECTED_GROUP_KEY = 'ajaxToolsSelectedGroupIndex';
+const FLOATING_ENABLED_KEY = 'ajaxToolsFloatingRulesEnabled';
+const FLOATING_COLLAPSED_KEY = 'ajaxToolsFloatingRulesCollapsed';
+
+// Apply the current enabled/collapsed state to the floating panel DOM.
+// The panel is hidden entirely when the master toggle is off; otherwise it
+// toggles between the expanded list view and the collapsed mock grid.
+function applyFloatingPanelState() {
+  const panel = ajaxToolsRuntimeState.floatingPanel;
+  if (!panel) return;
+
+  if (!ajaxToolsRuntimeState.floatingRulesEnabled) {
+    panel.style.display = 'none';
+    return;
+  }
+
+  panel.style.display = 'flex';
+  panel.classList.toggle(
+    'robbie-ajax-floating-rules--collapsed',
+    ajaxToolsRuntimeState.floatingRulesCollapsed
+  );
+}
+
+function loadFloatingRulesState(callback) {
+  chrome.storage.local.get([FLOATING_ENABLED_KEY, FLOATING_COLLAPSED_KEY], (result) => {
+    ajaxToolsRuntimeState.floatingRulesEnabled = result[FLOATING_ENABLED_KEY] !== false;
+    ajaxToolsRuntimeState.floatingRulesCollapsed = result[FLOATING_COLLAPSED_KEY] === true;
+    applyFloatingPanelState();
+    if (typeof callback === 'function') callback();
+  });
+}
+
+function toggleFloatingRulesCollapsed() {
+  const next = !ajaxToolsRuntimeState.floatingRulesCollapsed;
+  ajaxToolsRuntimeState.floatingRulesCollapsed = next;
+  applyFloatingPanelState();
+  chrome.storage.local.set({ [FLOATING_COLLAPSED_KEY]: next });
+}
 
 function renderFloatingRules() {
   const panel = ajaxToolsRuntimeState.floatingPanel;
@@ -445,6 +557,33 @@ function renderFloatingRules() {
 
     const interfaceList = group?.interfaceList || [];
     if (countEl) countEl.textContent = `${interfaceList.length} rules`;
+
+    // Render the collapsed mock grid: a 3x3 cell matrix visualizing rule
+    // states (green = enabled, gray = disabled, faint = empty slot) plus an
+    // enabled/total counter. Shown only when the panel is collapsed.
+    const mockGridEl = panel.querySelector('.robbie-ajax-floating-rules__mock-grid');
+    const mockCountEl = panel.querySelector('.robbie-ajax-floating-rules__mock-count');
+    if (mockGridEl) {
+      mockGridEl.innerHTML = '';
+      const enabledCount = interfaceList.filter((r) => r.open !== false).length;
+      for (let i = 0; i < 9; i += 1) {
+        const cell = document.createElement('span');
+        cell.className = 'robbie-ajax-floating-rules__mock-cell';
+        const rule = interfaceList[i];
+        if (rule) {
+          cell.classList.add(
+            rule.open !== false
+              ? 'robbie-ajax-floating-rules__mock-cell--on'
+              : 'robbie-ajax-floating-rules__mock-cell--off'
+          );
+        }
+        mockGridEl.appendChild(cell);
+      }
+    }
+    if (mockCountEl) {
+      const enabledCount = interfaceList.filter((r) => r.open !== false).length;
+      mockCountEl.textContent = `${enabledCount}/${interfaceList.length}`;
+    }
 
     if (!listEl) return;
 
@@ -529,19 +668,45 @@ function createFloatingRulesPanel() {
 
   const header = document.createElement('div');
   header.className = 'robbie-ajax-floating-rules__header';
+  const headerLeft = document.createElement('div');
+  headerLeft.className = 'robbie-ajax-floating-rules__header-left';
   const title = document.createElement('span');
   title.className = 'robbie-ajax-floating-rules__title';
   title.textContent = 'Rules';
   const count = document.createElement('span');
   count.className = 'robbie-ajax-floating-rules__count';
   count.textContent = '0 rules';
-  header.appendChild(title);
-  header.appendChild(count);
+  headerLeft.appendChild(title);
+  headerLeft.appendChild(count);
+  header.appendChild(headerLeft);
+
+  const collapseBtn = document.createElement('button');
+  collapseBtn.className = 'robbie-ajax-floating-rules__collapse-btn';
+  collapseBtn.type = 'button';
+  collapseBtn.title = 'Collapse';
+  collapseBtn.textContent = '—';
+  collapseBtn.addEventListener('click', toggleFloatingRulesCollapsed);
+  header.appendChild(collapseBtn);
   panel.appendChild(header);
 
   const list = document.createElement('div');
   list.className = 'robbie-ajax-floating-rules__list';
   panel.appendChild(list);
+
+  // Mock grid widget — shown only in collapsed state. Clicking it expands
+  // the panel back to the full list view.
+  const mock = document.createElement('div');
+  mock.className = 'robbie-ajax-floating-rules__mock';
+  mock.title = 'Expand rules panel';
+  const mockGrid = document.createElement('div');
+  mockGrid.className = 'robbie-ajax-floating-rules__mock-grid';
+  const mockCount = document.createElement('span');
+  mockCount.className = 'robbie-ajax-floating-rules__mock-count';
+  mockCount.textContent = '0/0';
+  mock.appendChild(mockGrid);
+  mock.appendChild(mockCount);
+  mock.addEventListener('click', toggleFloatingRulesCollapsed);
+  panel.appendChild(mock);
 
   ajaxToolsRuntimeState.floatingPanel = panel;
   return panel;
@@ -601,11 +766,9 @@ function bindPanelMessageListener(container) {
     }
     if (type === 'iframeToggle') {
       container.style.setProperty('transform', iframeVisible ? 'translateX(0)' : 'translateX(calc(100% + 20px))', 'important');
-      // Sync the floating rules panel visibility with the main panel.
-      const floatingPanel = ajaxToolsRuntimeState.floatingPanel;
-      if (floatingPanel) {
-        floatingPanel.style.display = iframeVisible ? 'flex' : 'none';
-      }
+      // The floating rules panel is independent of the main side panel —
+      // its visibility is controlled only by the master toggle and its
+      // own collapse state, so we do not touch it here.
       sendResponse({nextIframeVisible: !iframeVisible});
     }
     if (type === 'GET_PAGE_RENDER_MODE') {
@@ -651,13 +814,14 @@ function mountPanelContainer() {
     mountTarget.appendChild(container);
   }
 
-  // Mount the floating rules panel alongside the main panel so they share
-  // the same lifecycle (visibility toggled together via iframeToggle).
+  // Mount the floating rules panel independently of the main side panel —
+  // its visibility is gated only by the master toggle (stored in
+  // ajaxToolsFloatingRulesEnabled) and its own collapse state.
   const floatingPanel = createFloatingRulesPanel();
   if (!floatingPanel.isConnected) {
     mountTarget.appendChild(floatingPanel);
   }
-  renderFloatingRules();
+  loadFloatingRulesState(() => renderFloatingRules());
 
   if (ajaxToolsRuntimeState.panelMountObserver) {
     ajaxToolsRuntimeState.panelMountObserver.disconnect();
@@ -717,6 +881,17 @@ chrome.storage.onChanged.addListener(function (changes, namespace) {
     // group changes so it stays in sync with the React workbench.
     if (key === 'ajaxDataList' || key === FLOATING_SELECTED_GROUP_KEY) {
       renderFloatingRules();
+    }
+    // Master toggle for the floating panel — react immediately so the
+    // panel appears/disappears even when the main side panel is closed.
+    if (key === FLOATING_ENABLED_KEY) {
+      ajaxToolsRuntimeState.floatingRulesEnabled = newValue !== false;
+      applyFloatingPanelState();
+    }
+    // Collapse state can be driven from elsewhere; keep the DOM in sync.
+    if (key === FLOATING_COLLAPSED_KEY) {
+      ajaxToolsRuntimeState.floatingRulesCollapsed = newValue === true;
+      applyFloatingPanelState();
     }
   }
 });

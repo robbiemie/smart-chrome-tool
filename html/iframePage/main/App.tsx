@@ -17,6 +17,7 @@ import { AjaxGroup, ModifyDataModalOpenProps } from './types/registry';
 import { useModuleCollapseState } from './hooks/useModuleCollapseState';
 import ModuleSection from './components/ModuleSection';
 import { usePageRenderMode } from './hooks/usePageRenderMode';
+import { useFloatingRules } from './hooks/useFloatingRules';
 
 const SELECTED_GROUP_INDEX_STORAGE_KEY = 'ajaxToolsSelectedGroupIndex';
 
@@ -76,6 +77,10 @@ function App() {
     toggling: csrModeToggling,
     toggle: toggleCsrMode,
   } = usePageRenderMode();
+  const {
+    floatingRulesEnabled,
+    setFloatingRulesEnabled,
+  } = useFloatingRules();
 
   const metrics = useWorkbenchMetrics(ajaxDataList as AjaxGroup[]);
   const { moduleCollapseState, updateModuleCollapseState } = useModuleCollapseState();
@@ -240,6 +245,8 @@ function App() {
             csrModeLoading={csrModeLoading}
             csrModeToggling={csrModeToggling}
             globalControlsCollapsed={moduleCollapseState.globalControls}
+            floatingRulesEnabled={floatingRulesEnabled}
+            onToggleFloatingRules={setFloatingRulesEnabled}
             onSelectGroup={setSelectedGroupIndex}
             onToggleAjaxToolsSwitch={handleToggleAjaxToolsSwitch}
             onToggleCsrMode={(value) => {

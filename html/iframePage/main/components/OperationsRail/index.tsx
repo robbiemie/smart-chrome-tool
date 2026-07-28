@@ -13,6 +13,8 @@ interface OperationsRailProps {
   csrModeLoading: boolean;
   csrModeToggling: boolean;
   globalControlsCollapsed: boolean;
+  floatingRulesEnabled: boolean;
+  onToggleFloatingRules: (value: boolean) => void;
   onSelectGroup: (groupIndex: number) => void;
   onToggleAjaxToolsSwitch: (value: boolean) => void;
   onToggleCsrMode: (value: boolean) => void;
@@ -28,6 +30,8 @@ const OperationsRail = ({
   csrModeLoading,
   csrModeToggling,
   globalControlsCollapsed,
+  floatingRulesEnabled,
+  onToggleFloatingRules,
   onSelectGroup,
   onToggleAjaxToolsSwitch,
   onToggleCsrMode,
@@ -58,6 +62,15 @@ const OperationsRail = ({
               loading={csrModeLoading || csrModeToggling}
               checked={csrModeEnabled}
               onChange={onToggleCsrMode}
+            />
+          </div>
+          <div className="rail-switch-item">
+            <div>
+              <strong>Floating Rules</strong>
+            </div>
+            <Switch
+              checked={floatingRulesEnabled}
+              onChange={onToggleFloatingRules}
             />
           </div>
         </div>
