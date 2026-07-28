@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Empty } from 'antd';
 import ModifyDataModal, { OpenModalProps } from './components/ModifyDataModal';
+import BatchImportExport from './components/BatchImportExport';
 import 'antd/dist/antd.css';
 import './App.css';
 import Footer from './components/Footer';
@@ -23,6 +24,7 @@ function App() {
   const modifyDataModalRef = useRef<{ openModal: (props: OpenModalProps) => void } | null>(null);
   const [selectedGroupIndex, setSelectedGroupIndex] = useState(0);
   const [selectedRuleIndexMap, setSelectedRuleIndexMap] = useState<Record<number, number>>({});
+  const [importExportVisible, setImportExportVisible] = useState(false);
 
   const {
     ajaxToolsSwitchOn,
@@ -38,7 +40,7 @@ function App() {
     ajaxToolsSkin,
     onGroupAdd,
     onGroupMove,
-    onImportClick,
+    onBatchImport,
     setIsRegistry,
     onGroupDelete,
     setAjaxDataList,
@@ -222,6 +224,16 @@ function App() {
     setSelectedGroupIndex(ajaxDataList.length);
   };
 
+  // Append imported groups and jump the selection to the first newly added
+  // group so the user lands on the data they just imported.
+  const handleBatchImport = (groups: AjaxGroup[]) => {
+    const startIndex = ajaxDataList.length;
+    onBatchImport(groups);
+    if (groups.length > 0) {
+      setSelectedGroupIndex(startIndex);
+    }
+  };
+
   const handleGroupOpenChange = (groupIndex: number, open: boolean) => {
     const nextGroupIndex = onGroupOpenChange(groupIndex, open);
 
@@ -296,7 +308,7 @@ function App() {
             onRemoveDomain={removeDomain}
             allModulesCollapsed={allModulesCollapsed}
             onToggleCollapseAll={toggleCollapseAll}
-            onImportClick={onImportClick}
+            onOpenImportExport={() => setImportExportVisible(true)}
             onPageHeadersOpen={openPageHeadersModal}
             onSelectGroup={setSelectedGroupIndex}
             onToggleAjaxToolsSwitch={handleToggleAjaxToolsSwitch}
@@ -361,6 +373,13 @@ function App() {
       </div>
 
       <ModifyDataModal ref={modifyDataModalRef} onSave={onInterfaceListSave} />
+      <BatchImportExport
+        visible={importExportVisible}
+        onClose={() => setImportExportVisible(false)}
+        ajaxDataList={ajaxDataList as AjaxGroup[]}
+        selectedGroup={selectedGroup}
+        onBatchImport={handleBatchImport}
+      />
       <PageHeadersModal
         visible={pageHeadersVisible}
         enabled={pageHeadersEnabled}

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Button, Empty, Input, Select, Switch, Tag } from 'antd';
-import { PlusOutlined, UploadOutlined, SettingOutlined, CompressOutlined, ExpandOutlined, CloseOutlined } from '@ant-design/icons';
+import { PlusOutlined, SwapOutlined, SettingOutlined, CompressOutlined, ExpandOutlined, CloseOutlined } from '@ant-design/icons';
 import { AjaxGroup } from '../../types/registry';
 import { withErrorBoundary } from '../../common/withErrorBoundary';
 import ModuleSection from '../ModuleSection';
@@ -22,7 +22,7 @@ interface OperationsRailProps {
   onRemoveDomain: (domain: string) => void;
   allModulesCollapsed: boolean;
   onToggleCollapseAll: () => void;
-  onImportClick: () => void;
+  onOpenImportExport: () => void;
   onPageHeadersOpen: () => void;
   onSelectGroup: (groupIndex: number) => void;
   onToggleAjaxToolsSwitch: (value: boolean) => void;
@@ -48,7 +48,7 @@ const OperationsRail = ({
   onRemoveDomain,
   allModulesCollapsed,
   onToggleCollapseAll,
-  onImportClick,
+  onOpenImportExport,
   onPageHeadersOpen,
   onSelectGroup,
   onToggleAjaxToolsSwitch,
@@ -67,6 +67,19 @@ const OperationsRail = ({
 
   return (
     <aside className="operations-rail">
+      {/* Prominent batch import/export entry. Sits at the top of the rail so
+          it is the first thing operators see for backup and restore flows. */}
+      <button type="button" className="rail-hero-entry" onClick={onOpenImportExport}>
+        <span className="rail-hero-entry__icon">
+          <SwapOutlined />
+        </span>
+        <span className="rail-hero-entry__text">
+          <strong>Import / Export</strong>
+          <span>Backup or restore rules in batch</span>
+        </span>
+        <span className="rail-hero-entry__cta">Open</span>
+      </button>
+
       <ModuleSection
         title="Global Controls"
         description="Manage shared workspace behaviors and switch groups quickly."
@@ -109,9 +122,6 @@ const OperationsRail = ({
             onClick={onToggleCollapseAll}
           >
             {allModulesCollapsed ? 'Expand All' : 'Collapse All'}
-          </Button>
-          <Button size="small" icon={<UploadOutlined />} onClick={onImportClick}>
-            Import
           </Button>
           <Button size="small" icon={<SettingOutlined />} onClick={onPageHeadersOpen}>
             Headers

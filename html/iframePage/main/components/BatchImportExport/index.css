@@ -1,0 +1,97 @@
+.batch-io {
+  display: flex;
+  flex-direction: column;
+}
+
+.batch-io__section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.batch-io__section-head {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.batch-io__section-head strong {
+  font-size: 14px;
+}
+
+.batch-io__hint {
+  color: rgb(27 40 34 / 58%);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.batch-io__row {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.batch-io__row .ant-btn {
+  flex: 1 1 180px;
+}
+
+.batch-io__template-link {
+  align-self: flex-start;
+  padding: 0;
+  height: auto;
+  font-size: 12px;
+}
+
+.batch-io__dragger {
+  border-radius: 16px;
+}
+
+.batch-io__file-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 12px 0 0;
+  padding: 0;
+  list-style: none;
+  max-height: 180px;
+  overflow: auto;
+}
+
+.batch-io__file-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  border: 1px solid rgb(27 40 34 / 8%);
+  border-radius: 12px;
+  padding: 8px 12px;
+  background: rgb(255 255 255 / 64%);
+}
+
+.batch-io__file-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+}
+
+.batch-io__warn {
+  margin-top: 10px;
+  border-radius: 10px;
+  padding: 8px 12px;
+  background: rgb(255 77 79 / 8%);
+  color: #cf1322;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.batch-io__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 14px;
+}
