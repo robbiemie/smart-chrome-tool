@@ -113,6 +113,36 @@ const MonacoEditor = (props: MonacoEditorProps, ref: ForwardedRef<{ editorInstan
     }
   }, []);
 
+  // Keep Monaco's internal layout in sync with its container. Without this,
+  // resizing the container (e.g. toggling the side panel to fullscreen,
+  // opening picture-in-picture, or resizing the window) leaves the editor's
+  // internal canvas at the old width/height, producing a large blank strip
+  // on the right and a stale scroll area. ResizeObserver covers most cases;
+  // the window resize listener is a belt-and-suspenders fallback.
+  useEffect(() => {
+    if (!editor) return;
+    const container = editorRef.current;
+    if (!container) return;
+
+    const relayout = () => editor.layout();
+
+    let resizeObserver: ResizeObserver | null = null;
+    if (typeof ResizeObserver !== 'undefined') {
+      resizeObserver = new ResizeObserver(() => {
+        relayout();
+      });
+      resizeObserver.observe(container);
+    }
+    window.addEventListener('resize', relayout);
+
+    return () => {
+      if (resizeObserver) {
+        resizeObserver.disconnect();
+      }
+      window.removeEventListener('resize', relayout);
+    };
+  }, [editor]);
+
   useEffect(() => {
     if (editor) {
       if (onDidChangeContent) {
