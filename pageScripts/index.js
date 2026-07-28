@@ -86,16 +86,29 @@ const ajax_tools_space = {
     return keyValueObj;
   },
   getMatchedInterface: ({thisRequestUrl = '', thisMethod = ''}) => {
-    const interfaceList = [];
-    ajax_tools_space.ajaxDataList.forEach((item) => {
-      interfaceList.push(...(item.interfaceList || []));
-    });
-    return interfaceList.find(({ open = true, matchType = 'normal', matchMethod, request }) => {
-      const matchedMethod = !matchMethod || matchMethod === thisMethod.toUpperCase();
-      if(typeof thisRequestUrl !== 'string') return false
-      const matchedRequest = request && (matchType === 'normal' ? thisRequestUrl.includes(request) : thisRequestUrl.match(ajax_tools_space.strToRegExp(request)));
-      return open && matchedMethod && matchedRequest;
-    });
+    const result = { matchedInterface: null, groupIndex: -1, ruleIndex: -1 };
+    for (let g = 0; g < ajax_tools_space.ajaxDataList.length; g += 1) {
+      const interfaceList = ajax_tools_space.ajaxDataList[g].interfaceList || [];
+      for (let r = 0; r < interfaceList.length; r += 1) {
+        const { open = true, matchType = 'normal', matchMethod, request } = interfaceList[r];
+        const matchedMethod = !matchMethod || matchMethod === thisMethod.toUpperCase();
+        if (typeof thisRequestUrl !== 'string') continue;
+        const matchedRequest = request && (matchType === 'normal' ? thisRequestUrl.includes(request) : thisRequestUrl.match(ajax_tools_space.strToRegExp(request)));
+        if (open && matchedMethod && matchedRequest) {
+          result.matchedInterface = interfaceList[r];
+          result.groupIndex = g;
+          result.ruleIndex = r;
+          return result;
+        }
+      }
+    }
+    return result;
+  },
+  // Notify the content script (which owns the floating panel) that a rule
+  // was hit, so it can light up the matching row with a green dot.
+  notifyRuleHit: function (ruleKey) {
+    if (!ruleKey) return;
+    window.postMessage({ type: 'AJAX_TOOLS_RULE_HIT', to: 'contentScript', ruleKey }, '*');
   },
   myXHR: function () {
     const modifyResponse = () => {
@@ -156,8 +169,13 @@ const ajax_tools_space = {
         this.open = (...args) => {
           this._openArgs = args;
           const [method, requestUrl] = args;
-          this._matchedInterface = ajax_tools_space.getMatchedInterface({thisRequestUrl: requestUrl, thisMethod: method});
+          const matchResult = ajax_tools_space.getMatchedInterface({thisRequestUrl: requestUrl, thisMethod: method});
+          this._matchedInterface = matchResult.matchedInterface;
           const matchedInterface = this._matchedInterface;
+          // Notify the floating panel so it can mark this rule as hit.
+          if (matchedInterface) {
+            ajax_tools_space.notifyRuleHit(matchedInterface.key);
+          }
           // modify request
           if (matchedInterface) {
             const { replacementUrl, replacementMethod, headers, requestPayloadText } = matchedInterface;
@@ -257,7 +275,12 @@ const ajax_tools_space = {
     if (!args[1]) {
       args[1] = data;
     }
-    const matchedInterface = ajax_tools_space.getMatchedInterface({thisRequestUrl: requestUrl, thisMethod: data && data.method});
+    const matchResult = ajax_tools_space.getMatchedInterface({thisRequestUrl: requestUrl, thisMethod: data && data.method});
+    const matchedInterface = matchResult.matchedInterface;
+    // Notify the floating panel so it can mark this rule as hit.
+    if (matchedInterface) {
+      ajax_tools_space.notifyRuleHit(matchedInterface.key);
+    }
     let ruleHeaders = {};
     if (matchedInterface && args) {
       const { replacementUrl, replacementMethod, headers, requestPayloadText } = matchedInterface;

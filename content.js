@@ -12,6 +12,7 @@ const ajaxToolsRuntimeState = window[AJAX_TOOLS_RUNTIME_STATE_KEY] || (window[AJ
   floatingRulesEnabled: true,
   floatingRulesCollapsed: false,
   domainWhitelist: ['*'],
+  hitRuleKeys: Object.create(null),
 });
 
 // --- Domain whitelist matching -------------------------------------------------
@@ -333,6 +334,19 @@ injectedStyle(`
     background: rgb(26 155 127 / 12%);
     color: #1a9b7f;
   }
+  /* Hit indicator: green dot that lights up once the rule matches a request. */
+  .robbie-ajax-floating-rules__item-hit {
+    flex-shrink: 0;
+    width: 8px;
+    height: 8px;
+    border-radius: 999px;
+    background: rgb(27 40 34 / 12%);
+    transition: background 0.2s ease, box-shadow 0.2s ease;
+  }
+  .robbie-ajax-floating-rules__item-hit--on {
+    background: #1a9b7f;
+    box-shadow: 0 0 6px rgb(26 155 127 / 55%);
+  }
   .robbie-ajax-floating-rules__item-body {
     flex: 1;
     min-width: 0;
@@ -648,6 +662,19 @@ const FLOATING_SELECTED_GROUP_KEY = 'ajaxToolsSelectedGroupIndex';
 const FLOATING_ENABLED_KEY = 'ajaxToolsFloatingRulesEnabled';
 const FLOATING_COLLAPSED_KEY = 'ajaxToolsFloatingRulesCollapsed';
 
+// Receive rule-hit notifications from the page script (pageScripts/index.js)
+// and mark the corresponding floating-panel row with a green dot. The hit
+// keys are kept in memory only — they reset on page reload.
+window.addEventListener('message', (event) => {
+  const data = event.data;
+  if (!data || data.type !== 'AJAX_TOOLS_RULE_HIT' || data.to !== 'contentScript') return;
+  if (!data.ruleKey) return;
+  if (ajaxToolsRuntimeState.hitRuleKeys[data.ruleKey]) return;
+  ajaxToolsRuntimeState.hitRuleKeys[data.ruleKey] = true;
+  // Update only the dot indicators without a full re-render.
+  refreshFloatingHitDots();
+});
+
 // Apply the current enabled/collapsed state to the floating panel DOM.
 // The panel is hidden entirely when the master toggle is off; otherwise it
 // toggles between the expanded list view and the collapsed mock grid.
@@ -833,6 +860,16 @@ function renderFloatingRules() {
     interfaceList.forEach((ruleItem, ruleIndex) => {
       const row = document.createElement('div');
       row.className = 'robbie-ajax-floating-rules__item';
+      row.dataset.ruleKey = ruleItem.key || '';
+
+      // Hit indicator: a green dot shown when this rule has matched at
+      // least one request during the current page session.
+      const hitDot = document.createElement('span');
+      hitDot.className = 'robbie-ajax-floating-rules__item-hit';
+      hitDot.title = 'This rule has matched a request';
+      if (ajaxToolsRuntimeState.hitRuleKeys[ruleItem.key]) {
+        hitDot.classList.add('robbie-ajax-floating-rules__item-hit--on');
+      }
 
       // Toggle switch — writes back to storage so the React workbench syncs.
       const toggle = document.createElement('input');
@@ -895,11 +932,27 @@ function renderFloatingRules() {
         }
       });
 
+      row.appendChild(hitDot);
       row.appendChild(toggle);
       row.appendChild(body);
       row.appendChild(editBtn);
       listEl.appendChild(row);
     });
+  });
+}
+
+// Update the hit-dot indicators without rebuilding the whole list. Called
+// when a rule-hit notification arrives from the page script.
+function refreshFloatingHitDots() {
+  const panel = ajaxToolsRuntimeState.floatingPanel;
+  if (!panel) return;
+  const dots = panel.querySelectorAll('.robbie-ajax-floating-rules__item-hit');
+  dots.forEach((dot) => {
+    const row = dot.closest('.robbie-ajax-floating-rules__item');
+    const key = row?.dataset?.ruleKey;
+    if (key && ajaxToolsRuntimeState.hitRuleKeys[key]) {
+      dot.classList.add('robbie-ajax-floating-rules__item-hit--on');
+    }
   });
 }
 
