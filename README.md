@@ -11,7 +11,16 @@ The extension ships with a React + TypeScript iframe workbench that allows you t
 - Inject request payload transformation scripts
 - Configure current-page request headers with one-click enable and disable
 - Toggle CSR (client-side rendering) mode for the active tab via a `__csr=1` URL parameter
+- Gate the mock layer and floating panel with a domain whitelist
 - Import and export rule configurations
+
+## Screenshots
+
+| Mode | Preview |
+| --- | --- |
+| Fullscreen mode | ![Fullscreen mode](./assets/example1.png) |
+| Normal mode | ![Normal mode](./assets/example2.png) |
+| Floating rules panel | ![Floating rules panel](./assets/example3.png) |
 
 ## Table of Contents
 
@@ -23,6 +32,8 @@ The extension ships with a React + TypeScript iframe workbench that allows you t
 - [Load the Extension in Chrome](#load-the-extension-in-chrome)
 - [How to Open the Tool](#how-to-open-the-tool)
 - [Workbench Overview](#workbench-overview)
+- [Floating Rules Panel](#floating-rules-panel)
+- [Domain Whitelist](#domain-whitelist)
 - [How to Create and Manage Rule Groups](#how-to-create-and-manage-rule-groups)
 - [How to Create and Edit Rules](#how-to-create-and-edit-rules)
 - [How Response Rewriting Works](#how-response-rewriting-works)
@@ -225,10 +236,7 @@ The top area (`WorkbenchHeader`, labeled `Rewrite Console`) shows:
 - Page headers status tag (`Headers Armed` / `Headers Idle`)
 - Group count, rule count, and enabled rule count
 
-It also exposes actions:
-
-- `Import JSON`
-- `Page Headers`
+The `Import JSON` and `Page Headers` entry points now live in the left operations rail (as `Import` and `Headers`).
 
 ### 2. Left operations rail
 
@@ -236,6 +244,11 @@ The left panel (`OperationsRail` / `Global Controls`) contains:
 
 - `Interceptor` switch — global interceptor enable/disable
 - `CSR Mode` switch — toggle CSR mode for the active tab
+- `Floating Rules` switch — master toggle for the [floating rules overlay](#floating-rules-panel)
+- `Collapse All` / `Expand All` — collapse or expand the group workbench and rule detail panel together
+- `Import` — import a JSON ruleset
+- `Headers` — open the current-page headers editor
+- `Domain Whitelist` — edit the [domain whitelist](#domain-whitelist) and see whether the current tab is matched
 - `Groups` selector — dropdown to switch between groups with an `Add` button to create a new group
 
 Use it to switch between groups quickly instead of scanning the full rule list.
@@ -262,6 +275,62 @@ The right panel (`RuleDetailPanel`) shows the currently focused rule:
 - Response definition
 
 It also exposes `Edit Response`, `Edit Request`, and `Edit Payload` shortcuts so you can inspect the active rule without repeatedly opening modal editors.
+
+## Floating Rules Panel
+
+Independent of the main side panel, a floating rules overlay is rendered at the bottom-right corner of the page (see [Screenshot - Floating rules panel](#screenshots)). It lets you toggle and edit rules for the active group without keeping the full workbench open.
+
+### Visibility rules
+
+- It only renders on hostnames that match the [Domain Whitelist](#domain-whitelist).
+- The master switch lives in the left operations rail under `Floating Rules`. Turning it off hides the overlay everywhere.
+- The overlay is independent of the main side panel: collapsing the workbench does not hide it.
+
+### Header actions
+
+- The header is **draggable** — reposition the panel anywhere in the viewport. The position is kept in memory only and resets to the bottom-right corner on page reload.
+- The `CSR` / `SSR` pill switches the active tab's render mode in one click (equivalent to the `CSR Mode` switch in the rail).
+- The `—` button collapses the panel into a compact 3x3 mock grid widget showing the enabled/total rule count at a glance. Click the grid to expand.
+
+### Rule rows
+
+- Each row shows the matched URL and an optional note.
+- A custom pill toggle enables/disables the rule (writes back to storage, so the workbench stays in sync).
+- An `Edit` button appears on hover — clicking it reveals the main side panel and opens the edit modal for that rule.
+
+## Domain Whitelist
+
+The mock layer (XHR/fetch override) and the floating rules panel are gated by a domain whitelist so the extension never silently intercepts traffic on unintended sites.
+
+### Default behavior
+
+- The whitelist ships with `*`, which matches every hostname. Out of the box the extension behaves as before.
+- If you remove every entry, the list falls back to `*` so the extension never blocks all pages by accident.
+
+### Supported patterns
+
+| Pattern | Matches |
+| --- | --- |
+| `*` | All hostnames |
+| `foo.com` | `foo.com` exactly |
+| `*.foo.com` | `foo.com` and any subdomain (`a.foo.com`, `a.b.foo.com`) |
+| `a*.foo.com` | hostnames starting with `a` under `foo.com` (`ab.foo.com`, `ac.foo.com`) |
+
+Patterns are case-insensitive.
+
+### How to configure
+
+1. Open the extension workbench.
+2. In the left operations rail, find the **Domain Whitelist** card.
+3. The current tab's hostname is shown with a live `✓ matched` / `✕ blocked` indicator.
+4. Add a new pattern in the input and press Enter (or click the `+` button).
+5. Remove a pattern by clicking the `×` on its tag.
+
+### What is gated
+
+- **pageScripts/index.js** only overrides `XMLHttpRequest` and `fetch` when `currentHostWhitelisted()` returns true.
+- **content.js** hides the floating rules panel on non-matched hostnames.
+- The whitelist is persisted under `ajaxToolsDomainWhitelist` and broadcast to the page script via `storage.onChanged`, so changes take effect on the next request without a reload.
 
 ## How to Create and Manage Rule Groups
 
