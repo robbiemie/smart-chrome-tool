@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { defaultAjaxDataList, defaultInterface } from '../../common/value';
 import { openImportJsonModal } from '../utils/importJson';
 import { colorMap } from '../common/constants';
@@ -10,6 +10,22 @@ export const useRegistry = () => {
   const [ajaxToolsSkin, setAjaxToolsSkin] = useState('light');
   const [ajaxDataList, setAjaxDataList] = useState(defaultAjaxDataList);
   const [isRegistry, setIsRegistry] = useState(false);
+
+  // Listen for external storage changes (e.g. the floating rules panel
+  // toggling a rule's open state) so the React workbench stays in sync
+  // without requiring a reload.
+  useEffect(() => {
+    if (!chrome.storage?.onChanged) return;
+
+    const handleStorageChange = (changes: { [key: string]: chrome.storage.StorageChange }) => {
+      if (changes.ajaxDataList?.newValue) {
+        setAjaxDataList(changes.ajaxDataList.newValue as AjaxGroup[]);
+      }
+    };
+
+    chrome.storage.onChanged.addListener(handleStorageChange);
+    return () => chrome.storage.onChanged.removeListener(handleStorageChange);
+  }, []);
 
   const persistAjaxDataList = (nextAjaxDataList: AjaxGroup[]) => {
     setAjaxDataList([...nextAjaxDataList]);

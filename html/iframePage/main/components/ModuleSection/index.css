@@ -2,6 +2,7 @@
   display: flex;
   min-width: 0;
   flex-direction: column;
+  gap: 12px;
 }
 
 .module-section__header {
@@ -16,14 +17,14 @@
   display: flex;
   min-width: 0;
   flex-direction: column;
-  gap: 4px;
+  gap: 6px;
 }
 
 .module-section__title-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: 8px;
   min-width: 0;
 }
 
@@ -60,9 +61,9 @@
 
 .module-section__toggle {
   flex: 0 0 auto;
-  width: 28px;
-  min-width: 28px;
-  height: 28px;
+  width: 24px;
+  min-width: 24px;
+  height: 24px;
   padding: 0;
   border-radius: 999px;
 }
@@ -81,14 +82,6 @@
 
 .module-section__body {
   min-height: 0;
-}
-
-.module-section__extra + .module-section__body {
-  margin-top: 14px;
-}
-
-.module-section__header + .module-section__body {
-  margin-top: 14px;
 }
 
 .module-section--collapsed .module-section__body {

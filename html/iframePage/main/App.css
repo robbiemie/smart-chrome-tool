@@ -398,7 +398,7 @@
 }
 
 .group-title-input {
-  margin-top: 16px;
+  margin-top: 12px;
   border-radius: 16px;
   font-size: 26px;
   font-weight: 700;
@@ -416,7 +416,7 @@
   min-height: 0;
   min-width: 0;
   flex-direction: column;
-  gap: 16px;
+  gap: 8px;
   overflow: auto;
   overflow-x: hidden;
 }
@@ -426,8 +426,8 @@
   max-width: 100%;
   min-width: 0;
   border: 1px solid rgb(27 40 34 / 7%);
-  border-radius: 24px;
-  padding: 18px;
+  border-radius: 16px;
+  padding: 14px;
   background: #fbf8f2;
   cursor: pointer;
   transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
@@ -450,7 +450,7 @@
 }
 
 .rule-card--collapsed {
-  padding-bottom: 14px;
+  padding: 8px 12px;
 }
 
 .rule-card--selected {
@@ -491,6 +491,26 @@
   color: #1b2822;
   font-size: 14px;
   line-height: 1.3;
+}
+
+.rule-card--collapsed .rule-card__summary-text strong {
+  font-size: 13px;
+}
+
+/* Collapsed cards hide shortcut/pin hints to keep the row compact. */
+.rule-card--collapsed .rule-card__shortcut-chip,
+.rule-card--collapsed .rule-card__shortcut-hint {
+  display: none;
+}
+
+/* Collapsed toolbar buttons use minimal padding to shrink row height. */
+.rule-card--collapsed .rule-card__toolbar .ant-btn {
+  padding: 0 4px;
+}
+
+/* Collapsed cards hide the secondary URL line to keep one row per rule. */
+.rule-card--collapsed .rule-card__summary-text span {
+  display: none;
 }
 
 .rule-card__shortcut-chip,
@@ -572,7 +592,7 @@
 
 .rule-card__expanded-item {
   min-width: 0;
-  border-radius: 18px;
+  border-radius: 16px;
   padding: 12px 14px;
   background: rgb(255 255 255 / 72%);
 }
@@ -602,6 +622,7 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
+  margin-top: 12px;
 }
 
 .rule-detail-panel {
@@ -611,7 +632,7 @@
   min-width: 0;
   flex: 0 1 360px;
   flex-direction: column;
-  gap: 16px;
+  gap: 12px;
   overflow: hidden;
 }
 
@@ -628,7 +649,7 @@
   align-items: stretch;
   gap: 8px;
   min-width: 0;
-  border-radius: 18px;
+  border-radius: 16px;
   padding: 14px;
   background: #f8f5ee;
 }
@@ -647,6 +668,14 @@
 .rule-detail-panel__actions {
   margin-top: auto;
   flex-wrap: wrap;
+}
+
+/* RuleDetailPanel body uses flex column so detail-sections get consistent
+   vertical rhythm and the actions block can pin to the bottom via auto margin. */
+.rule-detail-panel .module-section__body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
 }
 
 .group-workbench--empty,
@@ -700,7 +729,7 @@
   .group-workbench,
   .rule-detail-panel,
   .workbench-header-shell {
-    border-radius: 24px;
+    border-radius: 16px;
   }
 
   .rule-card__grid {

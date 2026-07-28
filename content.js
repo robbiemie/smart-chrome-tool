@@ -7,6 +7,8 @@ const ajaxToolsRuntimeState = window[AJAX_TOOLS_RUNTIME_STATE_KEY] || (window[AJ
   panelMessageListenerBound: false,
   panelMountObserver: null,
   panelInitBound: false,
+  floatingPanel: null,
+  floatingPanelBound: false,
 });
 
 // 设置iframeVisible默认值，刷新后重置storage
@@ -100,6 +102,95 @@ injectedStyle(`
   }
   .ajax-interceptor-mr-8 {
     margin-right: 8px;
+  }
+  .robbie-ajax-floating-rules {
+    position: fixed !important;
+    right: calc(580px + 24px) !important;
+    bottom: 24px !important;
+    width: 360px !important;
+    max-height: 420px !important;
+    display: none;
+    flex-direction: column;
+    z-index: 2147483646 !important;
+    border-radius: 12px !important;
+    box-shadow: rgba(0, 0, 0, 0.12) 0px 0px 15px 2px !important;
+    background: #fff;
+    overflow: hidden;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-size: 12px;
+    color: #1b2822;
+  }
+  .robbie-ajax-floating-rules__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 14px;
+    border-bottom: 1px solid #f0f0f0;
+    font-weight: 600;
+    font-size: 13px;
+    background: #fafafa;
+    flex-shrink: 0;
+  }
+  .robbie-ajax-floating-rules__count {
+    font-weight: 400;
+    font-size: 11px;
+    color: #999;
+  }
+  .robbie-ajax-floating-rules__list {
+    overflow-y: auto;
+    flex: 1;
+    min-height: 0;
+  }
+  .robbie-ajax-floating-rules__item {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 8px 14px;
+    border-bottom: 1px solid #f5f5f5;
+  }
+  .robbie-ajax-floating-rules__item:last-child {
+    border-bottom: none;
+  }
+  .robbie-ajax-floating-rules__item-toggle {
+    flex-shrink: 0;
+    margin-top: 1px;
+    cursor: pointer;
+  }
+  .robbie-ajax-floating-rules__item-body {
+    flex: 1;
+    min-width: 0;
+  }
+  .robbie-ajax-floating-rules__item-url {
+    font-family: Menlo, Monaco, Consolas, monospace;
+    font-size: 11px;
+    color: #1b2822;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .robbie-ajax-floating-rules__item-method {
+    display: inline-block;
+    margin-right: 4px;
+    padding: 0 4px;
+    border-radius: 3px;
+    background: #e8e8e8;
+    font-size: 10px;
+    font-weight: 600;
+    color: #555;
+  }
+  .robbie-ajax-floating-rules__item-note {
+    color: #999;
+    font-size: 11px;
+    margin-top: 2px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .robbie-ajax-floating-rules__empty {
+    padding: 24px 14px;
+    text-align: center;
+    color: #999;
+    font-size: 12px;
   }
 `);
 injectedCss('icons/iconfont/iconfont.css');
@@ -330,6 +421,132 @@ function actionBar (container) {
   header.appendChild(right);
   return header;
 }
+// Floating rules panel: a compact, fixed-position overlay that lists the
+// current group's rules with toggles. Synchronizes visibility with the main
+// side panel and reads/writes the same chrome.storage data.
+const FLOATING_SELECTED_GROUP_KEY = 'ajaxToolsSelectedGroupIndex';
+
+function renderFloatingRules() {
+  const panel = ajaxToolsRuntimeState.floatingPanel;
+  if (!panel) return;
+
+  chrome.storage.local.get(['ajaxDataList', FLOATING_SELECTED_GROUP_KEY], (result) => {
+    const ajaxDataList = result?.ajaxDataList || [];
+    const groupIndex = typeof result?.[FLOATING_SELECTED_GROUP_KEY] === 'number'
+      ? result[FLOATING_SELECTED_GROUP_KEY]
+      : 0;
+    const group = ajaxDataList[groupIndex] || null;
+    const listEl = panel.querySelector('.robbie-ajax-floating-rules__list');
+    const headerEl = panel.querySelector('.robbie-ajax-floating-rules__title');
+    const countEl = panel.querySelector('.robbie-ajax-floating-rules__count');
+
+    const groupTitle = group?.summaryText || `Group ${groupIndex + 1}`;
+    if (headerEl) headerEl.textContent = groupTitle;
+
+    const interfaceList = group?.interfaceList || [];
+    if (countEl) countEl.textContent = `${interfaceList.length} rules`;
+
+    if (!listEl) return;
+
+    if (interfaceList.length < 1) {
+      listEl.innerHTML = '<div class="robbie-ajax-floating-rules__empty">No rules in this group</div>';
+      return;
+    }
+
+    listEl.innerHTML = '';
+    interfaceList.forEach((ruleItem, ruleIndex) => {
+      const row = document.createElement('div');
+      row.className = 'robbie-ajax-floating-rules__item';
+
+      // Toggle switch — writes back to storage so the React workbench syncs.
+      const toggle = document.createElement('input');
+      toggle.type = 'checkbox';
+      toggle.checked = ruleItem.open !== false;
+      toggle.className = 'robbie-ajax-floating-rules__item-toggle';
+      toggle.addEventListener('change', () => {
+        chrome.storage.local.get(['ajaxDataList'], (storageResult) => {
+          const nextList = storageResult?.ajaxDataList || [];
+          if (!nextList[groupIndex]) return;
+          // Mutate a copy to trigger React + storage change listeners.
+          const nextAjaxDataList = nextList.map((grp, idx) => {
+            if (idx !== groupIndex) return grp;
+            return {
+              ...grp,
+              interfaceList: grp.interfaceList.map((item, i) =>
+                i === ruleIndex ? { ...item, open: toggle.checked } : item
+              ),
+            };
+          });
+          chrome.storage.local.set({ ajaxDataList: nextAjaxDataList });
+        });
+      });
+
+      const body = document.createElement('div');
+      body.className = 'robbie-ajax-floating-rules__item-body';
+
+      const urlLine = document.createElement('div');
+      urlLine.className = 'robbie-ajax-floating-rules__item-url';
+
+      const methodTag = document.createElement('span');
+      methodTag.className = 'robbie-ajax-floating-rules__item-method';
+      methodTag.textContent = ruleItem.matchMethod || 'ANY';
+      urlLine.appendChild(methodTag);
+
+      const urlText = document.createElement('span');
+      urlText.textContent = ruleItem.request || '(empty)';
+      urlLine.appendChild(urlText);
+
+      body.appendChild(urlLine);
+
+      if (ruleItem.requestDes) {
+        const note = document.createElement('div');
+        note.className = 'robbie-ajax-floating-rules__item-note';
+        note.textContent = ruleItem.requestDes;
+        body.appendChild(note);
+      }
+
+      row.appendChild(toggle);
+      row.appendChild(body);
+      listEl.appendChild(row);
+    });
+  });
+}
+
+function createFloatingRulesPanel() {
+  if (ajaxToolsRuntimeState.floatingPanel?.isConnected) {
+    return ajaxToolsRuntimeState.floatingPanel;
+  }
+
+  const existing = document.getElementById('robbie-ajax-floating-rules');
+  if (existing) {
+    ajaxToolsRuntimeState.floatingPanel = existing;
+    return existing;
+  }
+
+  const panel = document.createElement('div');
+  panel.className = 'robbie-ajax-floating-rules';
+  panel.id = 'robbie-ajax-floating-rules';
+
+  const header = document.createElement('div');
+  header.className = 'robbie-ajax-floating-rules__header';
+  const title = document.createElement('span');
+  title.className = 'robbie-ajax-floating-rules__title';
+  title.textContent = 'Rules';
+  const count = document.createElement('span');
+  count.className = 'robbie-ajax-floating-rules__count';
+  count.textContent = '0 rules';
+  header.appendChild(title);
+  header.appendChild(count);
+  panel.appendChild(header);
+
+  const list = document.createElement('div');
+  list.className = 'robbie-ajax-floating-rules__list';
+  panel.appendChild(list);
+
+  ajaxToolsRuntimeState.floatingPanel = panel;
+  return panel;
+}
+
 function createPanelContainer() {
   if (ajaxToolsRuntimeState.panelContainer?.isConnected) {
     return ajaxToolsRuntimeState.panelContainer;
@@ -384,6 +601,11 @@ function bindPanelMessageListener(container) {
     }
     if (type === 'iframeToggle') {
       container.style.setProperty('transform', iframeVisible ? 'translateX(0)' : 'translateX(calc(100% + 20px))', 'important');
+      // Sync the floating rules panel visibility with the main panel.
+      const floatingPanel = ajaxToolsRuntimeState.floatingPanel;
+      if (floatingPanel) {
+        floatingPanel.style.display = iframeVisible ? 'flex' : 'none';
+      }
       sendResponse({nextIframeVisible: !iframeVisible});
     }
     if (type === 'GET_PAGE_RENDER_MODE') {
@@ -428,6 +650,14 @@ function mountPanelContainer() {
   if (!container.isConnected) {
     mountTarget.appendChild(container);
   }
+
+  // Mount the floating rules panel alongside the main panel so they share
+  // the same lifecycle (visibility toggled together via iframeToggle).
+  const floatingPanel = createFloatingRulesPanel();
+  if (!floatingPanel.isConnected) {
+    mountTarget.appendChild(floatingPanel);
+  }
+  renderFloatingRules();
 
   if (ajaxToolsRuntimeState.panelMountObserver) {
     ajaxToolsRuntimeState.panelMountObserver.disconnect();
@@ -482,6 +712,11 @@ chrome.storage.onChanged.addListener(function (changes, namespace) {
         key,
         value: newValue,
       });
+    }
+    // Re-render the floating rules panel when rule data or the selected
+    // group changes so it stays in sync with the React workbench.
+    if (key === 'ajaxDataList' || key === FLOATING_SELECTED_GROUP_KEY) {
+      renderFloatingRules();
     }
   }
 });
