@@ -178,6 +178,17 @@ const GroupWorkbench = ({
             onCollapseChange(groupIndex, nextActiveKeys);
           };
 
+          // When the card is collapsed, clicking the status tag toggles the
+          // rule's open state instead of expanding the card — so users can
+          // flip rules on/off from the collapsed row without expanding it.
+          const handleStatusTagClick = (event: React.MouseEvent<HTMLElement>) => {
+            event.stopPropagation();
+            onSelectRule(interfaceIndex);
+            if (!isRuleExpanded) {
+              onInterfaceListChange(groupIndex, interfaceIndex, 'open', !rule.open);
+            }
+          };
+
           return (
             <article
               key={rule.key}
@@ -191,7 +202,13 @@ const GroupWorkbench = ({
                   role="button"
                   tabIndex={0}
                 >
-                  <Tag color={rule.open ? 'green' : 'default'}>{rule.open ? 'Active' : 'Disabled'}</Tag>
+                  <Tag
+                    color={rule.open ? 'green' : 'default'}
+                    className="rule-card__status-tag"
+                    onClick={handleStatusTagClick}
+                  >
+                    {rule.open ? 'Active' : 'Disabled'}
+                  </Tag>
                   <div className="rule-card__summary-text">
                     <strong>
                       {ruleTitle}

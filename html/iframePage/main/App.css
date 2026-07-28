@@ -560,6 +560,17 @@
   align-items: center;
 }
 
+/* Status tag is clickable when the card is collapsed (toggles open state). */
+.rule-card__status-tag {
+  cursor: pointer;
+  user-select: none;
+}
+
+.rule-card--collapsed .rule-card__status-tag:hover {
+  transform: scale(1.06);
+  transition: transform 0.15s ease;
+}
+
 .rule-card__summary-text {
   display: flex;
   min-width: 0;
