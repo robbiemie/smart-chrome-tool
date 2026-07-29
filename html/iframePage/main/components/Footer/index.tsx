@@ -11,14 +11,18 @@ type UpdateInfo = {
   error?: string;
 } | null;
 
+// Detect whether we're running inside the Chrome extension context. When
+// debugging via `npm start` (localhost), chrome.runtime is absent and the
+// service worker can't be reached — we fall back to a mock so the full UI
+// flow (check → red dot → modal → progress) can be exercised in the browser.
+const isExtensionContext = typeof chrome !== 'undefined' && !!chrome.runtime?.id;
+
 function Footer() {
   const [updateInfo, setUpdateInfo] = useState<UpdateInfo>(null);
   const [checking, setChecking] = useState(false);
 
-  // Hydrate from the cached result the service writer stores, then keep in
-  // sync when the background script writes a fresh check.
   useEffect(() => {
-    if (!chrome.storage?.local) return;
+    if (!isExtensionContext || !chrome.storage?.local) return;
     chrome.storage.local.get(['ajaxToolsUpdateAvailable'], (result) => {
       setUpdateInfo(result?.ajaxToolsUpdateAvailable || null);
     });
@@ -36,28 +40,75 @@ function Footer() {
   const handleCheck = () => {
     if (checking) return;
     setChecking(true);
+    console.log('[MockKit Update] Footer handleCheck — sending CHECK_UPDATE');
+
+    if (!isExtensionContext) {
+      // Dev mode: simulate a successful check that finds a newer version.
+      // The downloadUrl points to a real GitHub release zip so the download
+      // step can also be tested end-to-end.
+      const mockResult: UpdateInfo = {
+        hasUpdate: true,
+        remoteVersion: 'v0.0.22',
+        localVersion: '0.0.1',
+        downloadUrl: 'https://github.com/robbiemie/smart-chrome-tool/releases/download/v0.0.22/smart-chrome-tool-v0.0.22.zip',
+        releaseUrl: 'https://github.com/robbiemie/smart-chrome-tool/releases/tag/v0.0.22',
+      };
+      setTimeout(() => {
+        console.log('[MockKit Update] (dev) CHECK_UPDATE mock response', mockResult);
+        setUpdateInfo(mockResult);
+        setChecking(false);
+      }, 800);
+      return;
+    }
+
     chrome.runtime?.sendMessage({ type: 'CHECK_UPDATE', force: true }, (response) => {
       setChecking(false);
+      console.log('[MockKit Update] CHECK_UPDATE response', response, chrome.runtime.lastError);
       if (chrome.runtime.lastError || !response) return;
-      // The storage listener will update updateInfo; this is a belt-and-suspenders.
       setUpdateInfo(response);
     });
   };
 
   const handleInstall = () => {
-    if (!updateInfo?.downloadUrl) return;
-    window.parent?.postMessage(
-      {
-        type: 'AJAX_TOOLS_APPLY_UPDATE',
-        downloadUrl: updateInfo.downloadUrl,
-        remoteVersion: updateInfo.remoteVersion,
-      },
-      '*'
-    );
+    console.log('[MockKit Update] Footer handleInstall called', { updateInfo, hasDownloadUrl: Boolean(updateInfo?.downloadUrl) });
+    if (!updateInfo?.downloadUrl) {
+      console.warn('[MockKit Update] no downloadUrl, abort');
+      return;
+    }
+
+    if (!isExtensionContext) {
+      // Dev mode (localhost): first-party context, File System Access API
+      // and cross-origin fetch work directly in the iframe. Just post to
+      // App.tsx to open the UpdateModal inline.
+      window.postMessage(
+        {
+          type: 'AJAX_TOOLS_APPLY_UPDATE',
+          downloadUrl: updateInfo.downloadUrl,
+          remoteVersion: updateInfo.remoteVersion,
+        },
+        '*'
+      );
+      console.log('[MockKit Update] (dev) APPLY_UPDATE posted to window');
+      return;
+    }
+
+    // Extension: open a top-level extension tab for the update flow. The
+    // File System Access API (showDirectoryPicker) and cross-origin fetch
+    // to GitHub are both blocked in third-party iframes, so we must run
+    // the download/unzip/write steps in a first-party extension page.
+    const pageUrl = chrome.runtime.getURL('html/iframePage/dist/index.html');
+    const hash = `#update=1&downloadUrl=${encodeURIComponent(updateInfo.downloadUrl)}&remoteVersion=${encodeURIComponent(updateInfo.remoteVersion || '')}`;
+    window.open(`${pageUrl}${hash}`, '_blank');
+    console.log('[MockKit Update] opened update tab', `${pageUrl}${hash}`);
   };
+
+  const currentVersion = isExtensionContext
+    ? chrome.runtime.getManifest()?.version
+    : '0.0.1 (dev)';
 
   return (
     <footer className="ajax-tools-iframe-footer">
+      <span className="ajax-tools-iframe-footer__version">v{currentVersion}</span>
       <a
         className="ajax-tools-iframe-footer__link"
         href="https://github.com/robbiemie/smart-chrome-tool/releases"
@@ -93,6 +144,9 @@ function Footer() {
         >
           {checking ? 'Checking...' : 'Check Update'}
         </button>
+      )}
+      {!isExtensionContext && (
+        <span style={{ fontSize: 10, color: '#999', marginLeft: 4 }}>(dev)</span>
       )}
     </footer>
   );

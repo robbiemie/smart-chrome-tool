@@ -1,5 +1,5 @@
 {
-  "name": "MockKit",
+  "name": "MockKit v0.0.22",
   "version": "0.0.22",
   "description": "Modify the response text of Ajax requests",
   "manifest_version": 3,

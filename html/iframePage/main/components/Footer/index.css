@@ -13,6 +13,13 @@
   backdrop-filter: blur(16px);
 }
 
+.ajax-tools-iframe-footer__version {
+  font-family: Menlo, Monaco, Consolas, monospace;
+  font-size: 11px;
+  color: rgb(27 40 34 / 45%);
+  font-variant-numeric: tabular-nums;
+}
+
 .ajax-tools-iframe-footer__link {
   color: #1a9b7f;
   text-decoration: none;

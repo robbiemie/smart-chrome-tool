@@ -22,6 +22,14 @@ import { useRequestSniffer, CapturedRequest } from './hooks/useRequestSniffer';
 const SELECTED_GROUP_INDEX_STORAGE_KEY = 'ajaxToolsSelectedGroupIndex';
 
 function App() {
+  // When opened as a top-level window via window.open() for the update flow,
+  // the URL hash carries ?update=1&downloadUrl=...&remoteVersion=... This
+  // bypasses the normal workbench UI and renders only the UpdateModal so the
+  // File System Access API (blocked in third-party iframes) can run.
+  const updateModeHash = window.location.hash;
+  const isUpdateMode = updateModeHash.includes('update=1');
+  const updateModeParams = new URLSearchParams(updateModeHash.replace(/^#/, ''));
+
   const modifyDataModalRef = useRef<{ openModal: (props: OpenModalProps) => void } | null>(null);
   const [selectedGroupIndex, setSelectedGroupIndex] = useState(0);
   const [selectedRuleIndexMap, setSelectedRuleIndexMap] = useState<Record<number, number>>({});
@@ -238,6 +246,7 @@ function App() {
     const handleMessage = (event: MessageEvent) => {
       const data = event.data;
       if (!data || data.type !== 'AJAX_TOOLS_APPLY_UPDATE') return;
+      console.log('[MockKit Update] received APPLY_UPDATE', { downloadUrl: data.downloadUrl, remoteVersion: data.remoteVersion, origin: event.origin });
       setUpdateModal({
         open: true,
         downloadUrl: data.downloadUrl || '',
@@ -319,6 +328,28 @@ function App() {
       };
     });
   };
+
+  // ----- Update mode: render only the UpdateModal in a top-level window. -----
+  // The File System Access API (showDirectoryPicker) and cross-origin fetch
+  // to GitHub are both blocked inside the third-party iframe. When the user
+  // clicks Update in the Footer, we open this same HTML page in a new tab
+  // with #update=1&downloadUrl=...&remoteVersion=... so the entire download
+  // / unzip / write flow runs in a first-party extension page.
+  if (isUpdateMode) {
+    const dlUrl = decodeURIComponent(updateModeParams.get('downloadUrl') || '');
+    const rv = decodeURIComponent(updateModeParams.get('remoteVersion') || '');
+    return (
+      <div style={{ padding: 40, background: '#f7f4ec', minHeight: '100vh' }}>
+        <UpdateModal
+          open
+          downloadUrl={dlUrl}
+          remoteVersion={rv}
+          autoStart
+          onClose={() => window.close()}
+        />
+      </div>
+    );
+  }
 
   return (
     <div

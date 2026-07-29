@@ -1,5 +1,5 @@
 import { Modal, Progress, Button, Alert, Steps } from 'antd';
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   downloadWithProgress,
   unzip,
@@ -16,6 +16,9 @@ export interface UpdateModalProps {
   downloadUrl: string;
   remoteVersion: string;
   onClose: () => void;
+  /** When true, automatically starts the install flow on mount. Used by the
+   *  top-level update tab so the user doesn't need to click Install. */
+  autoStart?: boolean;
 }
 
 type Phase =
@@ -60,6 +63,7 @@ export default function UpdateModal({
   downloadUrl,
   remoteVersion,
   onClose,
+  autoStart,
 }: UpdateModalProps) {
   const [phase, setPhase] = useState<Phase>('idle');
   const [progress, setProgress] = useState(0);
@@ -203,6 +207,7 @@ export default function UpdateModal({
   // retry). Steps before `startStep` are assumed to have completed and their
   // artifacts are already in the refs.
   const run = async (startStep = 0) => {
+    console.log('[MockKit Update] run() called', { startStep, downloadUrl, remoteVersion });
     setError('');
     setFailedStepIndex(-1);
     if (startStep === 0) {
@@ -213,17 +218,23 @@ export default function UpdateModal({
     }
 
     for (let i = startStep; i < STEP_RUNNERS.length; i += 1) {
+      console.log('[MockKit Update] running step', i, STEP_LABELS[i].title);
       try {
         const cont = await STEP_RUNNERS[i]();
-        if (cont === false) return; // user cancelled a picker
+        console.log('[MockKit Update] step', i, 'result', cont);
+        if (cont === false) {
+          console.log('[MockKit Update] step cancelled by user');
+          return;
+        }
       } catch (e: any) {
-        // Mark this step as failed so the UI can offer a targeted retry.
+        console.error('[MockKit Update] step', i, 'failed', e);
         setPhase('error');
         setFailedStepIndex(i);
         setError(e?.message || `${STEP_LABELS[i].title} failed.`);
         return;
       }
     }
+    console.log('[MockKit Update] all steps done');
     setPhase('done');
   };
 
@@ -236,6 +247,9 @@ export default function UpdateModal({
     run(failedStepIndex).finally(() => setRetrying(false));
   };
 
+  // Note: we intentionally do NOT auto-start via useEffect. The File System
+  // Access API requires a user gesture, so the user must click Install.
+
   const busy = isBusy(phase) || retrying;
   const showProgress = phase !== 'idle' && phase !== 'error';
   const currentStepIndex = STEP_LABELS.findIndex((s) => s.key === phase);
@@ -244,7 +258,7 @@ export default function UpdateModal({
   return (
     <Modal
       open={open}
-      title={`Update to v${remoteVersion}`}
+      title={`Update to ${remoteVersion}`}
       centered
       width={520}
       footer={[

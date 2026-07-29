@@ -520,23 +520,25 @@ function compareVersions(remote, local) {
 // the update (or its absence) so the UI can show a badge / trigger apply.
 async function fetchLatestRelease() {
   const url = `https://api.github.com/repos/${GITHUB_REPO}/releases/latest`;
+  console.log('[MockKit Update SW] fetchLatestRelease', url);
   const response = await fetch(url, {
     headers: { Accept: 'application/vnd.github+json' },
   });
+  console.log('[MockKit Update SW] GitHub API response', { status: response.status, ok: response.ok });
   if (!response.ok) {
     throw new Error(`GitHub API responded ${response.status}`);
   }
   const data = await response.json();
-  const remoteTag = data.tag_name || ''; // e.g. "v0.0.18"
+  const remoteTag = data.tag_name || '';
   const localVersion = chrome.runtime.getManifest().version;
+  console.log('[MockKit Update SW] versions', { remoteTag, localVersion });
 
-  // Pick the zip asset. Prefer the conventionally-named package; fall back
-  // to the source zip GitHub auto-generates.
   const assets = Array.isArray(data.assets) ? data.assets : [];
   const namedAsset = assets.find((a) => a.name && a.name.startsWith(DOWNLOAD_PREFIX) && a.name.endsWith('.zip'));
   const asset = namedAsset || assets[0];
+  console.log('[MockKit Update SW] asset', { named: !!namedAsset, name: asset?.name, downloadUrl: asset?.browser_download_url, zipballUrl: data.zipball_url });
 
-  return {
+  const result = {
     hasUpdate: compareVersions(remoteTag, localVersion) > 0,
     remoteVersion: remoteTag,
     localVersion,
@@ -545,26 +547,32 @@ async function fetchLatestRelease() {
     releaseNotes: data.body || '',
     publishedAt: data.published_at || '',
   };
+  console.log('[MockKit Update SW] fetchLatestRelease result', result);
+  return result;
 }
 
 // Throttled check used by the background tick and on-demand UI requests.
 // Stores the result so the badge stays accurate without re-hitting the API
 // on every popup open.
 async function checkForUpdate(force = false) {
+  console.log('[MockKit Update SW] checkForUpdate', { force });
   const now = Date.now();
   const stored = await chrome.storage.local.get({ [UPDATE_LAST_CHECK_KEY]: 0, [UPDATE_AVAILABLE_KEY]: null });
   if (!force && stored[UPDATE_LAST_CHECK_KEY] && now - stored[UPDATE_LAST_CHECK_KEY] < UPDATE_CHECK_INTERVAL_MS) {
+    console.log('[MockKit Update SW] using cached result', stored[UPDATE_AVAILABLE_KEY]);
     return stored[UPDATE_AVAILABLE_KEY] || { hasUpdate: false, localVersion: chrome.runtime.getManifest().version };
   }
 
   try {
     const result = await fetchLatestRelease();
+    console.log('[MockKit Update SW] storing result', result);
     await chrome.storage.local.set({
       [UPDATE_LAST_CHECK_KEY]: now,
       [UPDATE_AVAILABLE_KEY]: result,
     });
     return result;
   } catch (error) {
+    console.error('[MockKit Update SW] checkForUpdate failed', error);
     return {
       hasUpdate: false,
       error: error?.message || 'update check failed',

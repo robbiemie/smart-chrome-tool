@@ -108,6 +108,9 @@ const bumpVersion = () => {
 
   // manifest.json is the authoritative version; package.json/lock are mirrors.
   manifestJson.version = nextVersion;
+  // Sync the version into the extension name so it shows up in
+  // chrome://extensions and the toolbar (e.g. "MockKit v0.0.2").
+  manifestJson.name = `MockKit v${nextVersion}`;
   writeJsonFile(manifestJsonPath, manifestJson);
   syncPackageVersionFromManifest(nextVersion);
 
