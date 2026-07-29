@@ -156,6 +156,51 @@ html/iframePage/dist
 
 该目录被 `manifest.json` 声明为 web accessible resource。
 
+## 发布与发版命令
+
+项目根目录的 `build.js` 脚本统一处理构建、版本号 bump、GitHub Release 发布、git 提交推送，一条命令完成。
+
+| 命令 | 说明 |
+| --- | --- |
+| `node build` | 构建 iframe 应用并打包 zip（不改版本号）。 |
+| `node build --bump` | bump patch 版本号 + 构建 + 打包。 |
+| `node build --publish` | bump + 构建 + 打包 + 创建 GitHub Release 并附上 zip。 |
+| `node build --publish --commit` | 同 `--publish`，发版后自动 `git add + commit + push` 版本号和 dist 变更。**一键发版。** |
+| `node build --retry` | 不 bump，重新发布**当前版本**。隐含 `--force`（删除残留 tag/release）+ `--commit`。发布失败后一键重试。 |
+| `node build --publish --force` | 删除已存在的 tag/release 并重新创建。 |
+| `node build --publish --notes "信息"` | 覆盖自动生成的 Release Notes。 |
+
+### 典型流程
+
+**首次发版：**
+
+```bash
+node build --publish --commit
+```
+
+bump 版本 → 构建 → 打包 → 创建 GitHub Release → 提交版本号 + dist → 推送远端。
+
+**发布失败（网络错误、tag 残留等）：**
+
+```bash
+node build --retry
+```
+
+不 bump 版本，重建并重新发布当前版本，强制覆盖残留的 tag/release，然后提交推送。
+
+### 版本号模型
+
+- `manifest.json` 是扩展版本号的唯一来源。
+- `package.json` / `package-lock.json` 的版本号是镜像，每次构建前从 `manifest.json` 同步。
+- `manifest.json` 的 `name` 字段包含版本号（如 `MockKit v0.0.23`），在 `chrome://extensions` 中可直接区分。
+- bump 是显式的（`--bump` / `--publish`），普通构建不会改版本号。
+
+### 发布前提
+
+- 已安装 GitHub CLI（`brew install gh`）并登录（`gh auth login`）。
+- 或设置 `GH_TOKEN` 环境变量（需 repo 权限）。
+- 当前 HEAD 应为要打 tag 的 commit，发布前先提交待定的改动。
+
 ## 在 Chrome 中加载扩展
 
 ### 1. 先构建 iframe 应用

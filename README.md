@@ -168,6 +168,51 @@ html/iframePage/dist
 
 This folder is referenced by `manifest.json` as a web accessible resource.
 
+## Publish & Release Commands
+
+The `build.js` script at the project root handles building, version bumping, GitHub Release publishing, and git commit/push in one shot.
+
+| Command | Description |
+| --- | --- |
+| `node build` | Build the iframe app and zip the runtime (no version change). |
+| `node build --bump` | Bump patch version, build, and zip. |
+| `node build --publish` | Bump + build + zip + create a GitHub Release with the zip attached. |
+| `node build --publish --commit` | Same as `--publish`, then `git add + commit + push` the version bump and rebuilt dist. **One-shot release.** |
+| `node build --retry` | Re-publish the **current** version without bumping. Implies `--force` (deletes stale tag/release) + `--commit`. Use when a previous `--publish` failed midway. |
+| `node build --publish --force` | Delete an existing tag/release and recreate it. |
+| `node build --publish --notes "msg"` | Override auto-generated release notes. |
+
+### Typical workflows
+
+**First-time release:**
+
+```bash
+node build --publish --commit
+```
+
+Bumps version → builds → zips → creates GitHub Release → commits version bump + dist → pushes to origin.
+
+**Release failed (network error, stale tag, etc):**
+
+```bash
+node build --retry
+```
+
+No bump, rebuilds and re-publishes the current version, forces overwrite of any partial tag/release, then commits and pushes.
+
+### Version model
+
+- `manifest.json` is the single source of truth for the extension version.
+- `package.json` / `package-lock.json` versions are mirrors, synced from `manifest.json` before every build.
+- The extension `name` in `manifest.json` includes the version (e.g. `MockKit v0.0.23`) so it shows in `chrome://extensions`.
+- Bumping is explicit (`--bump` / `--publish`); plain builds never mutate the version.
+
+### Publish prerequisites
+
+- GitHub CLI installed (`brew install gh`) and authenticated (`gh auth login`).
+- Or export `GH_TOKEN` with a personal access token (repo scope).
+- Current HEAD should be the commit you want tagged; commit any pending changes before publishing.
+
 ## Load the Extension in Chrome
 
 ### 1. Build the iframe app first
