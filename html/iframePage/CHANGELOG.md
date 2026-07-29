@@ -1,5 +1,22 @@
 # Build Changelog
 
+## v0.0.31
+
+- Built At: 2026-07-29T16:49:55.008Z
+- Previous Version: v0.0.30
+- Git Branch: master
+- Git Commit: 0f8cf0a0
+
+### Changed Files
+- content.js
+- html/iframePage/main/components/WorkbenchHeader/index.tsx
+- html/iframePage/package-lock.json
+- html/iframePage/package.json
+- manifest.json
+- "\344\275\277\347\224\250\350\257\264\346\230\216.md"
+- assets/example4.png
+
+
 ## v0.0.30
 
 - Built At: 2026-07-29T16:43:50.034Z

@@ -19,11 +19,17 @@ const WorkbenchHeader = ({
   onImportClick,
   onPageHeadersOpen,
 }: WorkbenchHeaderProps) => {
+  const version = typeof chrome !== 'undefined' && chrome.runtime?.getManifest
+    ? chrome.runtime.getManifest().version
+    : '';
+
   return (
     <header className="workbench-header">
       <div className="workbench-header__content">
         <div>
-          <div className="workbench-eyebrow">Rewrite Console</div>
+          <div className="workbench-eyebrow">
+            Rewrite Console{version ? ` · v${version}` : ''}
+          </div>
           <h1 className="workbench-title">Keep the current page override rules simple.</h1>
         </div>
         <div className="workbench-status">

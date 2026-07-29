@@ -1355,38 +1355,51 @@ function buildBoxModelDiagram(box, node) {
 
   // Compute the on-page rect for each box model layer so hovering a layer
   // highlights only that layer's actual area on the element.
+  // Uses offsetWidth/offsetHeight (border-box size) for accuracy.
   const getElementRects = () => {
     if (!node || !node.isConnected) return null;
     const cs = window.getComputedStyle(node);
     const num = (k) => parseFloat(cs.getPropertyValue(k)) || 0;
     const rect = node.getBoundingClientRect();
+    // rect.width/height from getBoundingClientRect includes border + padding
+    // but NOT margin — this is the border-box rect.
+    const bw = rect.width;
+    const bh = rect.height;
     const mt = num('margin-top'), mr = num('margin-right'), mb = num('margin-bottom'), ml = num('margin-left');
     const bt = num('border-top-width'), br = num('border-right-width'), bb = num('border-bottom-width'), bl = num('border-left-width');
     const pt = num('padding-top'), pr = num('padding-right'), pb = num('padding-bottom'), pl = num('padding-left');
 
     return {
-      margin: { left: rect.left - ml, top: rect.top - mt, width: rect.width + ml + mr, height: rect.height + mt + mb },
-      border: { left: rect.left, top: rect.top, width: rect.width, height: rect.height },
-      padding: { left: rect.left + bl, top: rect.top + bt, width: rect.width - bl - br, height: rect.height - bt - bb },
-      content: { left: rect.left + bl + pl, top: rect.top + bt + pt, width: rect.width - bl - br - pl - pr, height: rect.height - bt - bb - pt - pb },
+      margin: { left: rect.left - ml, top: rect.top - mt, width: bw + ml + mr, height: bh + mt + mb },
+      border: { left: rect.left, top: rect.top, width: bw, height: bh },
+      padding: { left: rect.left + bl, top: rect.top + bt, width: bw - bl - br, height: bh - bt - bb },
+      content: { left: rect.left + bl + pl, top: rect.top + bt + pt, width: bw - bl - br - pl - pr, height: bh - bt - bb - pt - pb },
     };
   };
 
   // Attach hover highlight to a layer element. Highlights only that layer's
-  // rect on the page (e.g. hovering padding highlights just the padding area).
+  // rect on the page. Uses mouseover/mouseout (not mouseenter/mouseleave)
+  // because the nested box model structure means mouseenter may not fire
+  // reliably when moving between layers.
   const attachHover = (el, layerName, color, borderColor) => {
     let overlay = null;
-    el.addEventListener('mouseenter', () => {
+    el.addEventListener('mouseover', (e) => {
+      e.stopPropagation();
       const rects = getElementRects();
       if (!rects) return;
       const r = rects[layerName];
       if (!r || r.width <= 0 || r.height <= 0) return;
+      // Remove any existing overlay from sibling layers first.
+      if (overlay) { overlay.remove(); overlay = null; }
       overlay = document.createElement('div');
-      overlay.style.cssText = `position:fixed;z-index:2147483645;pointer-events:none;left:${r.left}px;top:${r.top}px;width:${r.width}px;height:${r.height}px;background:${color};border:1px solid ${borderColor};box-shadow:0 0 0 1px rgba(255,255,255,0.5);border-radius:2px;`;
+      overlay.style.cssText = `position:fixed;z-index:2147483645;pointer-events:none;left:${r.left}px;top:${r.top}px;width:${Math.max(r.width,0)}px;height:${Math.max(r.height,0)}px;background:${color};border:1px solid ${borderColor};box-shadow:0 0 0 1px rgba(255,255,255,0.5);border-radius:2px;`;
       document.body.appendChild(overlay);
     });
-    el.addEventListener('mouseleave', () => {
-      if (overlay) { overlay.remove(); overlay = null; }
+    el.addEventListener('mouseout', (e) => {
+      // Only clear if we're truly leaving this layer (not entering a child).
+      if (!el.contains(e.relatedTarget)) {
+        if (overlay) { overlay.remove(); overlay = null; }
+      }
     });
     return el;
   };
