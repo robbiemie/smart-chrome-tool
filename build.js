@@ -55,13 +55,14 @@ const EXCLUDE_PATTERNS = [
 ];
 
 const argv = process.argv.slice(2);
-const shouldPublish = argv.includes('--publish') || argv.includes('--release');
-// Retry: re-publish the current version without bumping. Used when a previous
-// --publish failed (e.g. gh auth glitch, network timeout). Implies --force
-// (deletes the stale tag/release if it partially exists) and --commit.
 const shouldRetry = argv.includes('--retry');
+// Retry: re-publish the current version without bumping. Used when a previous
+// --publish failed (e.g. gh auth glitch, network timeout). Implies --publish
+// behavior (tag + release), --force (delete stale tag/release), and --commit.
+const shouldPublish = shouldRetry || argv.includes('--publish') || argv.includes('--release');
 // Version bumping is explicit: --bump or --publish. Plain builds keep the current version.
-const shouldBump = shouldPublish || argv.includes('--bump');
+// Retry does NOT bump — it reuses the current manifest version.
+const shouldBump = !shouldRetry && shouldPublish;
 const forcePublish = argv.includes('--force') || shouldRetry;
 const shouldCommit = argv.includes('--commit') || shouldRetry;
 const notesIndex = argv.indexOf('--notes');
