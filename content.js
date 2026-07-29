@@ -1051,7 +1051,8 @@ function readCoreStyles(node) {
     height: get('height'),
     color: get('color'),
     backgroundColor: get('background-color'),
-    border: get('border'),
+    borderWidth: get('border-width'),
+    borderColor: get('border-color'),
     borderRadius: get('border-radius'),
   };
 }
@@ -1082,10 +1083,11 @@ function formatColor(value, mode) {
 }
 
 // Map summary labels to the CSS property name on element.style for live editing.
+// Only color properties and Size get editors; Border Width is display-only.
 const SUMMARY_STYLE_MAP = {
   'Color': 'color',
   'Background': 'backgroundColor',
-  'Border': 'border',
+  'Border Color': 'borderColor',
   'Size': '', // handled specially (width × height)
 };
 
@@ -1177,8 +1179,26 @@ function buildSummaryItem(label, value, swatchColor, colorMode, node) {
       hInput.placeholder = 'height';
       hInput.value = node ? (node.style.height || '') : '';
       hInput.style.cssText = 'width:48%;display:inline-block;';
-      wInput.addEventListener('input', () => { if (node) node.style.width = wInput.value; });
-      hInput.addEventListener('input', () => { if (node) node.style.height = hInput.value; });
+      wInput.addEventListener('input', () => {
+        if (!node) return;
+        // Auto-append px when the user types a bare number (e.g. "120" -> "120px").
+        // Values that already contain a unit (%, vh, em, etc.) are passed through as-is.
+        const raw = wInput.value.trim();
+        if (/^\d+(\.\d+)?$/.test(raw)) {
+          node.style.width = `${raw}px`;
+        } else {
+          node.style.width = raw;
+        }
+      });
+      hInput.addEventListener('input', () => {
+        if (!node) return;
+        const raw = hInput.value.trim();
+        if (/^\d+(\.\d+)?$/.test(raw)) {
+          node.style.height = `${raw}px`;
+        } else {
+          node.style.height = raw;
+        }
+      });
       editorRow.appendChild(wInput);
       editorRow.appendChild(hInput);
     } else {
@@ -1334,7 +1354,8 @@ function showDomInspectorPanel(node, hint) {
       summary.appendChild(buildSummaryItem('Size', `${core.width} × ${core.height}`, null, colorMode, node));
       summary.appendChild(buildSummaryItem('Color', core.color, core.color, colorMode, node));
       summary.appendChild(buildSummaryItem('Background', core.backgroundColor, core.backgroundColor, colorMode, node));
-      summary.appendChild(buildSummaryItem('Border', core.border, null, colorMode, node));
+      summary.appendChild(buildSummaryItem('Border Width', core.borderWidth, null, colorMode, null));
+      summary.appendChild(buildSummaryItem('Border Color', core.borderColor, core.borderColor, colorMode, node));
       body.appendChild(summary);
 
       // Toggle re-renders the summary grid with the new color format.
@@ -1345,7 +1366,8 @@ function showDomInspectorPanel(node, hint) {
         summary.appendChild(buildSummaryItem('Size', `${core.width} × ${core.height}`, null, colorMode, node));
         summary.appendChild(buildSummaryItem('Color', core.color, core.color, colorMode, node));
         summary.appendChild(buildSummaryItem('Background', core.backgroundColor, core.backgroundColor, colorMode, node));
-        summary.appendChild(buildSummaryItem('Border', core.border, null, colorMode, node));
+        summary.appendChild(buildSummaryItem('Border Width', core.borderWidth, null, colorMode, null));
+        summary.appendChild(buildSummaryItem('Border Color', core.borderColor, core.borderColor, colorMode, node));
       });
     }
 
