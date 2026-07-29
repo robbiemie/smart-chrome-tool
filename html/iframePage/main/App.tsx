@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Empty } from 'antd';
 import ModifyDataModal, { OpenModalProps } from './components/ModifyDataModal';
 import BatchImportExport from './components/BatchImportExport';
+import UpdateModal from './components/UpdateModal';
 import 'antd/dist/antd.css';
 import './App.css';
 import Footer from './components/Footer';
@@ -26,6 +27,11 @@ function App() {
   const [selectedGroupIndex, setSelectedGroupIndex] = useState(0);
   const [selectedRuleIndexMap, setSelectedRuleIndexMap] = useState<Record<number, number>>({});
   const [importExportVisible, setImportExportVisible] = useState(false);
+  const [updateModal, setUpdateModal] = useState<{
+    open: boolean;
+    downloadUrl: string;
+    remoteVersion: string;
+  }>({ open: false, downloadUrl: '', remoteVersion: '' });
 
   const {
     ajaxToolsSwitchOn,
@@ -225,6 +231,24 @@ function App() {
     return () => window.removeEventListener('message', handleMessage);
   }, [ajaxDataList]);
 
+  // Hot-update flow: the floating panel's Update button posts
+  // AJAX_TOOLS_APPLY_UPDATE here. We surface the UpdateModal so the download
+  // progress, unzip, and file-write steps (which need a secure extension
+  // context for the File System Access API) run inside the iframe.
+  useEffect(() => {
+    const handleMessage = (event: MessageEvent) => {
+      const data = event.data;
+      if (!data || data.type !== 'AJAX_TOOLS_APPLY_UPDATE') return;
+      setUpdateModal({
+        open: true,
+        downloadUrl: data.downloadUrl || '',
+        remoteVersion: data.remoteVersion || '',
+      });
+    };
+    window.addEventListener('message', handleMessage);
+    return () => window.removeEventListener('message', handleMessage);
+  }, []);
+
   const handleGroupAdd = () => {
     onGroupAdd();
     setSelectedGroupIndex(ajaxDataList.length);
@@ -414,6 +438,12 @@ function App() {
         removeHeaderPair={removeHeaderPair}
         updateHeaderPair={updateHeaderPair}
         onSave={savePageHeaders}
+      />
+      <UpdateModal
+        open={updateModal.open}
+        downloadUrl={updateModal.downloadUrl}
+        remoteVersion={updateModal.remoteVersion}
+        onClose={() => setUpdateModal((prev) => ({ ...prev, open: false }))}
       />
     </div>
   );

@@ -211,18 +211,73 @@ injectedStyle(`
     flex-shrink: 0;
   }
   .robbie-ajax-floating-rules__csr-btn {
-    height: 24px;
-    padding: 0 10px;
-    border: 1px solid rgb(27 40 34 / 12%);
-    border-radius: 999px;
-    background: rgb(255 255 255 / 80%);
+    flex-shrink: 0;
+    padding: 3px 8px;
+    border: none;
+    border-radius: 7px;
+    background: transparent;
     cursor: pointer;
-    font-size: 10px;
-    font-weight: 700;
     color: rgb(27 40 34 / 55%);
-    line-height: 22px;
-    letter-spacing: 0.04em;
+    font-size: 11px;
+    font-weight: 600;
+    line-height: 1.4;
     transition: all 0.15s ease;
+  }
+  .robbie-ajax-floating-rules__csr-btn:hover {
+    background: rgb(27 40 34 / 8%);
+    color: #1b2822;
+  }
+  .robbie-ajax-floating-rules__csr-btn--on {
+    background: rgb(26 155 127 / 14%);
+    color: #1a9b7f;
+  }
+  .robbie-ajax-floating-rules__csr-btn--on:hover {
+    background: rgb(26 155 127 / 22%);
+    color: #1a9b7f;
+  }
+  .robbie-ajax-floating-rules__update-btn {
+    position: relative;
+    flex-shrink: 0;
+    padding: 3px 8px;
+    border: none;
+    border-radius: 7px;
+    background: transparent;
+    cursor: pointer;
+    color: rgb(27 40 34 / 55%);
+    font-size: 11px;
+    font-weight: 600;
+    line-height: 1.4;
+    transition: all 0.15s ease;
+  }
+  .robbie-ajax-floating-rules__update-btn:hover {
+    background: rgb(27 40 34 / 8%);
+    color: #1b2822;
+  }
+  .robbie-ajax-floating-rules__update-btn--available {
+    color: #1a9b7f;
+  }
+  .robbie-ajax-floating-rules__update-btn--available:hover {
+    background: rgb(26 155 127 / 14%);
+    color: #1a9b7f;
+  }
+  .robbie-ajax-floating-rules__update-dot {
+    position: absolute;
+    top: 2px;
+    right: 2px;
+    width: 7px;
+    height: 7px;
+    border-radius: 999px;
+    background: #ff4d4f;
+    border: 1.5px solid #fff;
+    box-shadow: 0 0 4px rgb(255 77 79 / 60%);
+    display: none;
+  }
+  .robbie-ajax-floating-rules__update-btn--available .robbie-ajax-floating-rules__update-dot {
+    display: block;
+  }
+  .robbie-ajax-floating-rules__update-btn--checking {
+    color: rgb(27 40 34 / 35%);
+    cursor: wait;
   }
   .robbie-ajax-floating-rules__csr-btn:hover {
     border-color: rgb(27 40 34 / 24%);
@@ -908,6 +963,95 @@ function createFloatingCsrButton() {
     });
   });
   syncFloatingCsrBtnState(btn);
+  return btn;
+}
+
+// Self-update button: shows a red dot when a newer GitHub release is
+// available. Clicking it either applies the update (download zip + open
+// chrome://extensions) or force-rechecks for updates when no dot is shown.
+function createFloatingUpdateButton() {
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'robbie-ajax-floating-rules__update-btn';
+  btn.textContent = 'Update';
+  btn.title = 'Check for a newer version';
+
+  const dot = document.createElement('span');
+  dot.className = 'robbie-ajax-floating-rules__update-dot';
+  btn.appendChild(dot);
+
+  // Reflect the cached update state (if any) immediately on render so the
+  // red dot shows up without waiting for the user to click.
+  chrome.storage.local.get(['ajaxToolsUpdateAvailable'], (result) => {
+    const info = result?.ajaxToolsUpdateAvailable;
+    if (info?.hasUpdate) {
+      btn.classList.add('robbie-ajax-floating-rules__update-btn--available');
+      btn.title = `New version ${info.remoteVersion} available. Click to download & install.`;
+    }
+  });
+  // Keep the dot in sync when the background script writes a fresh result.
+  const onStorageChange = (changes, areaName) => {
+    if (areaName !== 'local') return;
+    if (!changes.ajaxToolsUpdateAvailable) return;
+    const info = changes.ajaxToolsUpdateAvailable.newValue;
+    if (info?.hasUpdate) {
+      btn.classList.add('robbie-ajax-floating-rules__update-btn--available');
+      btn.title = `New version ${info.remoteVersion} available. Click to download & install.`;
+    } else {
+      btn.classList.remove('robbie-ajax-floating-rules__update-btn--available');
+      btn.title = 'Check for a newer version';
+    }
+  };
+  chrome.storage.onChanged.addListener(onStorageChange);
+
+  btn.addEventListener('click', () => {
+    if (btn.classList.contains('robbie-ajax-floating-rules__update-btn--checking')) return;
+
+    // If an update is already known, hand off to the workbench iframe which
+    // runs the download/unzip/write flow with a live progress bar. We reveal
+    // the side panel first so the modal is visible.
+    chrome.storage.local.get(['ajaxToolsUpdateAvailable'], (result) => {
+      const info = result?.ajaxToolsUpdateAvailable;
+      if (info?.hasUpdate && info.downloadUrl) {
+        const mainPanel = ajaxToolsRuntimeState.panelContainer;
+        if (mainPanel) {
+          mainPanel.style.setProperty('transform', 'translateX(0)', 'important');
+          chrome.storage.local.set({ iframeVisible: true });
+        }
+        const iframe = document.querySelector('.robbie-ajax-interceptor-iframe');
+        if (iframe?.contentWindow) {
+          iframe.contentWindow.postMessage(
+            {
+              type: 'AJAX_TOOLS_APPLY_UPDATE',
+              downloadUrl: info.downloadUrl,
+              remoteVersion: info.remoteVersion,
+            },
+            '*'
+          );
+        }
+        return;
+      }
+
+      // Otherwise force a recheck and reflect the result.
+      btn.classList.add('robbie-ajax-floating-rules__update-btn--checking');
+      chrome.runtime.sendMessage({ type: 'CHECK_UPDATE', force: true }, (response) => {
+        btn.classList.remove('robbie-ajax-floating-rules__update-btn--checking');
+        if (chrome.runtime.lastError || !response) {
+          btn.title = 'Update check failed';
+          return;
+        }
+        if (response.hasUpdate) {
+          btn.classList.add('robbie-ajax-floating-rules__update-btn--available');
+          btn.title = `New version ${response.remoteVersion} available. Click to install.`;
+        } else {
+          btn.classList.remove('robbie-ajax-floating-rules__update-btn--available');
+          btn.title = response.error
+            ? `Check failed: ${response.error}`
+            : `You're on the latest version (${response.localVersion})`;
+        }
+      });
+    });
+  });
   return btn;
 }
 

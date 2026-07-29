@@ -454,6 +454,25 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 
+  if (message?.type === 'CHECK_UPDATE') {
+    checkForUpdate(Boolean(message?.force))
+      .then((response) => sendResponse(response))
+      .catch((error) => sendResponse({ ok: false, hasUpdate: false, message: error?.message || 'update check failed' }));
+    return true;
+  }
+
+  if (message?.type === 'RELOAD_EXTENSION') {
+    // The iframe has just written the new files into the extension folder;
+    // reload so the new code takes effect immediately. The iframe (and this
+    // service worker) will be torn down and respawned with the new sources.
+    try {
+      chrome.runtime.reload();
+    } catch (error) {
+      sendResponse({ ok: false, message: error?.message || 'reload failed' });
+    }
+    return true;
+  }
+
   return false;
 });
 
@@ -468,4 +487,111 @@ chrome.runtime.onStartup.addListener(() => {
   syncHeaderRules().catch((error) => {
     console.error('[ajax-tools] sync header rules failed onStartup', error);
   });
+});
+
+// ----- Self-update: check GitHub Releases and guide the user to install. -----
+// MV3 forbids an extension from silently replacing its own files, so the
+// best UX we can offer is: detect a new release → download the zip to the
+// user's Downloads folder → open chrome://extensions so the user can drag
+// the zip in (developer mode) or click "Load unpacked" on the unzipped dir.
+
+const GITHUB_REPO = 'robbiemie/smart-chrome-tool';
+const UPDATE_CHECK_INTERVAL_MS = 1000 * 60 * 60 * 6; // 6h
+const UPDATE_LAST_CHECK_KEY = 'ajaxToolsUpdateLastCheckAt';
+const UPDATE_AVAILABLE_KEY = 'ajaxToolsUpdateAvailable';
+const DOWNLOAD_PREFIX = 'smart-chrome-tool-v';
+
+// Compare two semver-like strings (a.b.c). Returns 1 if remote > local,
+// 0 if equal, -1 if remote < local.
+function compareVersions(remote, local) {
+  const r = String(remote || '').replace(/^v/, '').split('.').map((n) => Number(n) || 0);
+  const l = String(local || '').replace(/^v/, '').split('.').map((n) => Number(n) || 0);
+  for (let i = 0; i < Math.max(r.length, l.length); i += 1) {
+    const rv = r[i] || 0;
+    const lv = l[i] || 0;
+    if (rv > lv) return 1;
+    if (rv < lv) return -1;
+  }
+  return 0;
+}
+
+// Fetch the latest release from GitHub and decide whether it's newer than
+// the currently installed manifest version. Returns a payload describing
+// the update (or its absence) so the UI can show a badge / trigger apply.
+async function fetchLatestRelease() {
+  const url = `https://api.github.com/repos/${GITHUB_REPO}/releases/latest`;
+  const response = await fetch(url, {
+    headers: { Accept: 'application/vnd.github+json' },
+  });
+  if (!response.ok) {
+    throw new Error(`GitHub API responded ${response.status}`);
+  }
+  const data = await response.json();
+  const remoteTag = data.tag_name || ''; // e.g. "v0.0.18"
+  const localVersion = chrome.runtime.getManifest().version;
+
+  // Pick the zip asset. Prefer the conventionally-named package; fall back
+  // to the source zip GitHub auto-generates.
+  const assets = Array.isArray(data.assets) ? data.assets : [];
+  const namedAsset = assets.find((a) => a.name && a.name.startsWith(DOWNLOAD_PREFIX) && a.name.endsWith('.zip'));
+  const asset = namedAsset || assets[0];
+
+  return {
+    hasUpdate: compareVersions(remoteTag, localVersion) > 0,
+    remoteVersion: remoteTag,
+    localVersion,
+    downloadUrl: asset?.browser_download_url || data.zipball_url || '',
+    releaseUrl: data.html_url || '',
+    releaseNotes: data.body || '',
+    publishedAt: data.published_at || '',
+  };
+}
+
+// Throttled check used by the background tick and on-demand UI requests.
+// Stores the result so the badge stays accurate without re-hitting the API
+// on every popup open.
+async function checkForUpdate(force = false) {
+  const now = Date.now();
+  const stored = await chrome.storage.local.get({ [UPDATE_LAST_CHECK_KEY]: 0, [UPDATE_AVAILABLE_KEY]: null });
+  if (!force && stored[UPDATE_LAST_CHECK_KEY] && now - stored[UPDATE_LAST_CHECK_KEY] < UPDATE_CHECK_INTERVAL_MS) {
+    return stored[UPDATE_AVAILABLE_KEY] || { hasUpdate: false, localVersion: chrome.runtime.getManifest().version };
+  }
+
+  try {
+    const result = await fetchLatestRelease();
+    await chrome.storage.local.set({
+      [UPDATE_LAST_CHECK_KEY]: now,
+      [UPDATE_AVAILABLE_KEY]: result,
+    });
+    return result;
+  } catch (error) {
+    return {
+      hasUpdate: false,
+      error: error?.message || 'update check failed',
+      localVersion: chrome.runtime.getManifest().version,
+    };
+  }
+}
+
+// The actual download/unzip/write flow runs in the workbench iframe (it
+// needs the File System Access API, which requires a secure context). The
+// service worker only provides CHECK_UPDATE above and RELOAD_EXTENSION below
+// to apply the freshly written files.
+
+// Background tick: re-check on a fixed cadence so the badge appears without
+// user interaction. chrome.alarms is the MV3-correct timer primitive.
+chrome.alarms?.create?.('ajax-tools-update-check', { periodInMinutes: 60 * 6 });
+chrome.alarms?.onAlarm?.addListener?.((alarm) => {
+  if (alarm?.name === 'ajax-tools-update-check') {
+    checkForUpdate(false).catch(() => {});
+  }
+});
+
+// Run one check shortly after startup/install so the badge reflects the
+// latest state without waiting for the first alarm tick.
+chrome.runtime.onStartup.addListener(() => {
+  setTimeout(() => checkForUpdate(false).catch(() => {}), 5000);
+});
+chrome.runtime.onInstalled.addListener(() => {
+  setTimeout(() => checkForUpdate(false).catch(() => {}), 5000);
 });
