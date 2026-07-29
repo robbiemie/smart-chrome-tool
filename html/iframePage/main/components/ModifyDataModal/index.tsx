@@ -88,13 +88,40 @@ const ModifyDataModal = (
   };
 
   const handleOk = () => {
-    const { editorInstance:headersEditorInstance } = monacoEditorHeadersRef.current;
-    const { editorInstance:requestPayloadEditorInstance } = monacoEditorRequestPayloadRef.current;
-    const { editorInstance:responseEditorInstance } = monacoEditorResponseRef.current;
-    const headersEditorValue = headersEditorInstance?.getValue();
-    const requestPayloadEditorValue = requestPayloadEditorInstance?.getValue();
-    const responseEditorValue = responseEditorInstance?.getValue();
-    const language = responseEditorInstance?.getModel()?.getLanguageId();
+    // Read each Monaco editor's current value defensively. When the tab/window
+    // has been in the background for a while the editor instance can end up in
+    // a half-disposed state where getValue() throws; without this guard the
+    // thrown error is swallowed by antd's Modal onOk path, so onSave never
+    // runs and the modal appears stuck (Save "does nothing"). Returning
+    // undefined here lets onInterfaceListSave skip that field (it guards on
+    // !== undefined) instead of clobbering it, while still allowing the modal
+    // to close and the other fields to persist.
+    const safeGetValue = (refObj: any): string | undefined => {
+      try {
+        const inst = refObj?.editorInstance;
+        if (inst && typeof inst.getValue === 'function') {
+          return inst.getValue();
+        }
+      } catch (e) {
+        console.warn('[ModifyDataModal] editor read failed, skipping field', e);
+      }
+      return undefined;
+    };
+    const safeGetLanguage = (refObj: any): string | undefined => {
+      try {
+        const inst = refObj?.editorInstance;
+        const model = inst?.getModel?.();
+        return model?.getLanguageId();
+      } catch (e) {
+        console.warn('[ModifyDataModal] editor language read failed', e);
+      }
+      return undefined;
+    };
+
+    const headersEditorValue = safeGetValue(monacoEditorHeadersRef.current);
+    const requestPayloadEditorValue = safeGetValue(monacoEditorRequestPayloadRef.current);
+    const responseEditorValue = safeGetValue(monacoEditorResponseRef.current);
+    const language = safeGetLanguage(monacoEditorResponseRef.current);
     onSave({ groupIndex, interfaceIndex, replacementMethod, replacementUrl, replacementStatusCode,
       headersEditorValue, requestPayloadEditorValue, responseEditorValue, language });
     setVisible(false);

@@ -338,6 +338,79 @@ injectedStyle(`
     background: rgb(26 155 127 / 12%);
     color: #1a9b7f;
   }
+  .robbie-ajax-floating-rules__item-fork {
+    flex-shrink: 0;
+    padding: 3px 8px;
+    border: none;
+    border-radius: 7px;
+    background: transparent;
+    cursor: pointer;
+    color: rgb(27 40 34 / 55%);
+    font-size: 11px;
+    font-weight: 600;
+    line-height: 1.4;
+    opacity: 0;
+    transition: all 0.15s ease;
+  }
+  .robbie-ajax-floating-rules__item:hover .robbie-ajax-floating-rules__item-fork {
+    opacity: 1;
+  }
+  .robbie-ajax-floating-rules__item-fork:hover {
+    background: rgb(27 40 34 / 8%);
+    color: #1b2822;
+  }
+  .robbie-ajax-floating-rules__item-inline-edit {
+    flex-shrink: 0;
+    width: 26px;
+    height: 26px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: none;
+    border-radius: 7px;
+    background: transparent;
+    cursor: pointer;
+    color: rgb(27 40 34 / 45%);
+    opacity: 0;
+    transition: all 0.15s ease;
+  }
+  .robbie-ajax-floating-rules__item:hover .robbie-ajax-floating-rules__item-inline-edit {
+    opacity: 1;
+  }
+  .robbie-ajax-floating-rules__item-inline-edit:hover {
+    background: rgb(27 40 34 / 8%);
+    color: #1b2822;
+  }
+  .robbie-ajax-floating-rules__item-inline-edit svg {
+    width: 13px;
+    height: 13px;
+  }
+  .robbie-ajax-floating-rules__item-inline-edit--active {
+    background: rgb(26 155 127 / 14%);
+    color: #1a9b7f;
+    opacity: 1;
+  }
+  .robbie-ajax-floating-rules__item-input {
+    width: 100%;
+    font-family: Menlo, Monaco, Consolas, monospace;
+    font-size: 11px;
+    color: #1b2822;
+    border: 1px solid rgb(26 155 127 / 35%);
+    border-radius: 5px;
+    padding: 2px 6px;
+    background: rgb(255 255 255 / 90%);
+    outline: none;
+    line-height: 1.4;
+  }
+  .robbie-ajax-floating-rules__item-input:focus {
+    border-color: #1a9b7f;
+    box-shadow: 0 0 0 2px rgb(26 155 127 / 15%);
+  }
+  .robbie-ajax-floating-rules__item-input--note {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-size: 10px;
+    margin-top: 4px;
+  }
   /* Hit indicator: green dot that lights up once the rule matches a request. */
   .robbie-ajax-floating-rules__item-hit {
     flex-shrink: 0;
@@ -968,10 +1041,172 @@ function renderFloatingRules() {
         }
       });
 
+      // Inline edit icon: toggles in-place editing of the matched path
+      // (request) and the note (requestDes) without opening the workbench.
+      // Enter or blur commits the change back to storage.
+      const pencilIcon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      pencilIcon.setAttribute('viewBox', '0 0 16 16');
+      pencilIcon.setAttribute('fill', 'none');
+      pencilIcon.innerHTML = '<path d="M11.5 2.5l2 2L5 13H3v-2l8.5-8.5z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/>';
+
+      const inlineEditBtn = document.createElement('button');
+      inlineEditBtn.type = 'button';
+      inlineEditBtn.className = 'robbie-ajax-floating-rules__item-inline-edit';
+      inlineEditBtn.title = 'Edit path and note inline';
+      inlineEditBtn.appendChild(pencilIcon);
+
+      let editing = false;
+      const enterInlineEdit = () => {
+        if (editing) return;
+        editing = true;
+        inlineEditBtn.classList.add('robbie-ajax-floating-rules__item-inline-edit--active');
+        body.innerHTML = '';
+
+        const urlInput = document.createElement('input');
+        urlInput.type = 'text';
+        urlInput.className = 'robbie-ajax-floating-rules__item-input';
+        urlInput.value = ruleItem.request || '';
+        urlInput.placeholder = 'matched url';
+        body.appendChild(urlInput);
+
+        const noteInput = document.createElement('input');
+        noteInput.type = 'text';
+        noteInput.className = 'robbie-ajax-floating-rules__item-input robbie-ajax-floating-rules__item-input--note';
+        noteInput.value = ruleItem.requestDes || '';
+        noteInput.placeholder = 'note';
+        body.appendChild(noteInput);
+
+        urlInput.focus();
+        urlInput.select();
+
+        const commit = () => {
+          if (!editing) return;
+          editing = false;
+          const nextRequest = urlInput.value;
+          const nextNote = noteInput.value;
+          chrome.storage.local.get(['ajaxDataList'], (storageResult) => {
+            const nextList = storageResult?.ajaxDataList || [];
+            if (!nextList[groupIndex]) return;
+            const nextAjaxDataList = nextList.map((grp, idx) => {
+              if (idx !== groupIndex) return grp;
+              return {
+                ...grp,
+                interfaceList: grp.interfaceList.map((item, i) =>
+                  i === ruleIndex
+                    ? { ...item, request: nextRequest, requestDes: nextNote }
+                    : item
+                ),
+              };
+            });
+            chrome.storage.local.set({ ajaxDataList: nextAjaxDataList });
+          });
+          // Optimistically restore the display; the storage listener will
+          // rebuild the list shortly, keeping it in sync.
+          inlineEditBtn.classList.remove('robbie-ajax-floating-rules__item-inline-edit--active');
+          body.innerHTML = '';
+          const restoredUrl = document.createElement('div');
+          restoredUrl.className = 'robbie-ajax-floating-rules__item-url';
+          restoredUrl.textContent = nextRequest || '(empty)';
+          body.appendChild(restoredUrl);
+          if (nextNote) {
+            const restoredNote = document.createElement('div');
+            restoredNote.className = 'robbie-ajax-floating-rules__item-note';
+            restoredNote.textContent = nextNote;
+            body.appendChild(restoredNote);
+          }
+        };
+
+        const onInputKey = (event) => {
+          if (event.key === 'Enter') {
+            event.preventDefault();
+            commit();
+          } else if (event.key === 'Escape') {
+            event.preventDefault();
+            editing = false;
+            inlineEditBtn.classList.remove('robbie-ajax-floating-rules__item-inline-edit--active');
+            body.innerHTML = '';
+            const restoredUrl = document.createElement('div');
+            restoredUrl.className = 'robbie-ajax-floating-rules__item-url';
+            restoredUrl.textContent = ruleItem.request || '(empty)';
+            body.appendChild(restoredUrl);
+            if (ruleItem.requestDes) {
+              const restoredNote = document.createElement('div');
+              restoredNote.className = 'robbie-ajax-floating-rules__item-note';
+              restoredNote.textContent = ruleItem.requestDes;
+              body.appendChild(restoredNote);
+            }
+          }
+        };
+
+        urlInput.addEventListener('keydown', onInputKey);
+        noteInput.addEventListener('keydown', onInputKey);
+        urlInput.addEventListener('blur', () => {
+          // Defer so clicking noteInput isn't treated as a commit trigger.
+          setTimeout(() => {
+            if (editing && document.activeElement !== noteInput) commit();
+          }, 120);
+        });
+        noteInput.addEventListener('blur', () => {
+          setTimeout(() => {
+            if (editing && document.activeElement !== urlInput) commit();
+          }, 120);
+        });
+      };
+
+      inlineEditBtn.addEventListener('click', (event) => {
+        event.stopPropagation();
+        if (editing) {
+          // Clicking the pencil while editing acts as commit.
+          const inputs = body.querySelectorAll('input');
+          if (inputs.length) inputs[inputs.length - 1].blur();
+        } else {
+          enterInlineEdit();
+        }
+      });
+
       row.appendChild(hitDot);
       row.appendChild(toggle);
       row.appendChild(body);
+      row.appendChild(inlineEditBtn);
       row.appendChild(editBtn);
+
+      // Fork entry: deep-copy the current rule into a backup inserted right
+      // after this row. The clone gets a fresh key and is auto-expanded so
+      // the user can immediately tell the copy succeeded.
+      const forkBtn = document.createElement('button');
+      forkBtn.type = 'button';
+      forkBtn.className = 'robbie-ajax-floating-rules__item-fork';
+      forkBtn.textContent = 'Fork';
+      forkBtn.title = 'Duplicate this rule into the next slot';
+      forkBtn.addEventListener('click', (event) => {
+        event.stopPropagation();
+        chrome.storage.local.get(['ajaxDataList'], (storageResult) => {
+          const nextList = storageResult?.ajaxDataList || [];
+          if (!nextList[groupIndex]) return;
+          const targetGroup = nextList[groupIndex];
+          const sourceRule = targetGroup.interfaceList[ruleIndex];
+          if (!sourceRule) return;
+
+          const forkedRule = JSON.parse(JSON.stringify(sourceRule));
+          const newKey = String(Date.now());
+          forkedRule.key = newKey;
+
+          const nextInterfaceList = [...targetGroup.interfaceList];
+          nextInterfaceList.splice(ruleIndex + 1, 0, forkedRule);
+
+          const nextAjaxDataList = nextList.map((grp, idx) => {
+            if (idx !== groupIndex) return grp;
+            return {
+              ...grp,
+              interfaceList: nextInterfaceList,
+              collapseActiveKeys: [...grp.collapseActiveKeys, newKey],
+            };
+          });
+          chrome.storage.local.set({ ajaxDataList: nextAjaxDataList });
+        });
+      });
+      row.appendChild(forkBtn);
+
       listEl.appendChild(row);
     });
   });

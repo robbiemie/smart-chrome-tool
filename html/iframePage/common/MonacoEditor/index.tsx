@@ -143,6 +143,35 @@ const MonacoEditor = (props: MonacoEditorProps, ref: ForwardedRef<{ editorInstan
     };
   }, [editor]);
 
+  // Restore the editor when the tab/window becomes visible again. Chrome
+  // throttles background tabs and freezes the iframe when the window loses
+  // focus for a while, which leaves Monaco's internal textarea overlay and
+  // layout in a half-alive state — afterwards editor.getValue() can throw
+  // and silently break the modal's Save handler. Re-laying out on regain
+  // of visibility/focus brings the editor back to a usable state.
+  useEffect(() => {
+    if (!editor) return;
+    const onRegain = () => {
+      // Defer so the container has settled to its final size after the
+      // tab re-shows / window re-focuses.
+      setTimeout(() => {
+        try {
+          editor.layout();
+        } catch (e) {
+          // Editor may have been torn down concurrently — ignore.
+        }
+      }, 0);
+    };
+    document.addEventListener('visibilitychange', onRegain);
+    window.addEventListener('focus', onRegain);
+    window.addEventListener('pageshow', onRegain);
+    return () => {
+      document.removeEventListener('visibilitychange', onRegain);
+      window.removeEventListener('focus', onRegain);
+      window.removeEventListener('pageshow', onRegain);
+    };
+  }, [editor]);
+
   useEffect(() => {
     if (editor) {
       if (onDidChangeContent) {
