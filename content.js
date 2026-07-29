@@ -879,8 +879,8 @@ injectedStyle(`
   .mockkit-dom-inspector__box-outer {
     position: relative;
     padding: 18px;
-    border: 1px dashed #cdcdcd;
-    background: rgb(243 173 173 / 25%);
+    border: 1px dashed #3b82f6;
+    background: rgb(59 130 246 / 12%);
     text-align: center;
   }
   .mockkit-dom-inspector__box-margin-label {
@@ -888,13 +888,13 @@ injectedStyle(`
     top: 2px;
     left: 4px;
     font-size: 9px;
-    color: #d44;
+    color: #2563eb;
     font-family: Menlo, Monaco, Consolas, monospace;
   }
   .mockkit-dom-inspector__box-margin-val {
     position: absolute;
     font-size: 9px;
-    color: #d44;
+    color: #2563eb;
     font-family: Menlo, Monaco, Consolas, monospace;
   }
   .mockkit-dom-inspector__box-margin-val--top { top: 2px; left: 50%; transform: translateX(-50%); }
@@ -904,8 +904,8 @@ injectedStyle(`
   .mockkit-dom-inspector__box-border {
     position: relative;
     padding: 18px;
-    border: 1px solid #bbb;
-    background: rgb(222 222 222 / 30%);
+    border: 1px solid #10b981;
+    background: rgb(16 185 129 / 12%);
     text-align: center;
   }
   .mockkit-dom-inspector__box-border-label {
@@ -913,13 +913,13 @@ injectedStyle(`
     top: 2px;
     left: 4px;
     font-size: 9px;
-    color: #888;
+    color: #059669;
     font-family: Menlo, Monaco, Consolas, monospace;
   }
   .mockkit-dom-inspector__box-border-val {
     position: absolute;
     font-size: 9px;
-    color: #888;
+    color: #059669;
     font-family: Menlo, Monaco, Consolas, monospace;
   }
   .mockkit-dom-inspector__box-border-val--top { top: 2px; left: 50%; transform: translateX(-50%); }
@@ -929,8 +929,8 @@ injectedStyle(`
   .mockkit-dom-inspector__box-padding {
     position: relative;
     padding: 18px;
-    border: 1px dashed #6e8c6e;
-    background: rgb(126 200 126 / 18%);
+    border: 1px dashed #84cc16;
+    background: rgb(132 204 22 / 12%);
     text-align: center;
   }
   .mockkit-dom-inspector__box-padding-label {
@@ -938,13 +938,13 @@ injectedStyle(`
     top: 2px;
     left: 4px;
     font-size: 9px;
-    color: #4a8a4a;
+    color: #65a30d;
     font-family: Menlo, Monaco, Consolas, monospace;
   }
   .mockkit-dom-inspector__box-padding-val {
     position: absolute;
     font-size: 9px;
-    color: #4a8a4a;
+    color: #65a30d;
     font-family: Menlo, Monaco, Consolas, monospace;
   }
   .mockkit-dom-inspector__box-padding-val--top { top: 2px; left: 50%; transform: translateX(-50%); }
@@ -953,11 +953,11 @@ injectedStyle(`
   .mockkit-dom-inspector__box-padding-val--right { right: 2px; top: 50%; transform: translateY(-50%); }
   .mockkit-dom-inspector__box-content {
     padding: 10px;
-    border: 1px solid #1a9b7f;
-    background: rgb(26 155 127 / 12%);
+    border: 1px solid #eab308;
+    background: rgb(234 179 8 / 14%);
     text-align: center;
     font-size: 10px;
-    color: #1a9b7f;
+    color: #ca8a04;
     font-family: Menlo, Monaco, Consolas, monospace;
     font-weight: 600;
   }
@@ -1344,7 +1344,7 @@ function buildSummaryItem(label, value, swatchColor, colorMode, node) {
 
 // Build a Chrome DevTools-style box model diagram with nested margin /
 // border / padding / content layers and dimension labels.
-function buildBoxModelDiagram(box) {
+function buildBoxModelDiagram(box, node) {
   const wrap = document.createElement('div');
   wrap.className = 'mockkit-dom-inspector__box-model';
 
@@ -1353,33 +1353,48 @@ function buildBoxModelDiagram(box) {
   title.textContent = 'Box Model';
   wrap.appendChild(title);
 
-  // Helper to create a labeled box layer with 4-sided dimension labels.
-  const makeLayer = (className, label, sides, labelClass) => {
-    const el = document.createElement('div');
-    el.className = className;
-    const lbl = document.createElement('span');
-    lbl.className = labelClass;
-    lbl.textContent = label;
-    el.appendChild(lbl);
-    const positions = ['top', 'right', 'bottom', 'left'];
-    positions.forEach((pos) => {
-      const val = document.createElement('span');
-      val.className = `${labelClass}-val ${labelClass}-val--${pos}`;
-      val.textContent = sides[pos];
-      el.appendChild(val);
+  // Compute the on-page rect for each box model layer so hovering a layer
+  // highlights only that layer's actual area on the element.
+  const getElementRects = () => {
+    if (!node || !node.isConnected) return null;
+    const cs = window.getComputedStyle(node);
+    const num = (k) => parseFloat(cs.getPropertyValue(k)) || 0;
+    const rect = node.getBoundingClientRect();
+    const mt = num('margin-top'), mr = num('margin-right'), mb = num('margin-bottom'), ml = num('margin-left');
+    const bt = num('border-top-width'), br = num('border-right-width'), bb = num('border-bottom-width'), bl = num('border-left-width');
+    const pt = num('padding-top'), pr = num('padding-right'), pb = num('padding-bottom'), pl = num('padding-left');
+
+    return {
+      margin: { left: rect.left - ml, top: rect.top - mt, width: rect.width + ml + mr, height: rect.height + mt + mb },
+      border: { left: rect.left, top: rect.top, width: rect.width, height: rect.height },
+      padding: { left: rect.left + bl, top: rect.top + bt, width: rect.width - bl - br, height: rect.height - bt - bb },
+      content: { left: rect.left + bl + pl, top: rect.top + bt + pt, width: rect.width - bl - br - pl - pr, height: rect.height - bt - bb - pt - pb },
+    };
+  };
+
+  // Attach hover highlight to a layer element. Highlights only that layer's
+  // rect on the page (e.g. hovering padding highlights just the padding area).
+  const attachHover = (el, layerName, color, borderColor) => {
+    let overlay = null;
+    el.addEventListener('mouseenter', () => {
+      const rects = getElementRects();
+      if (!rects) return;
+      const r = rects[layerName];
+      if (!r || r.width <= 0 || r.height <= 0) return;
+      overlay = document.createElement('div');
+      overlay.style.cssText = `position:fixed;z-index:2147483645;pointer-events:none;left:${r.left}px;top:${r.top}px;width:${r.width}px;height:${r.height}px;background:${color};border:1px solid ${borderColor};box-shadow:0 0 0 1px rgba(255,255,255,0.5);border-radius:2px;`;
+      document.body.appendChild(overlay);
+    });
+    el.addEventListener('mouseleave', () => {
+      if (overlay) { overlay.remove(); overlay = null; }
     });
     return el;
   };
 
-  const margin = makeLayer(
-    'mockkit-dom-inspector__box-outer',
-    'margin',
-    box.margin,
-    'mockkit-dom-inspector__box-margin-label'
-  );
-  // Fix val class names (makeLayer appends -val to labelClass, but our CSS
-  // uses separate class names). Rebuild with explicit classes.
-  margin.innerHTML = '';
+  // --- Build layers ---
+
+  const margin = document.createElement('div');
+  margin.className = 'mockkit-dom-inspector__box-outer';
   const mLabel = document.createElement('span');
   mLabel.className = 'mockkit-dom-inspector__box-margin-label';
   mLabel.textContent = 'margin';
@@ -1390,6 +1405,7 @@ function buildBoxModelDiagram(box) {
     val.textContent = box.margin[pos];
     margin.appendChild(val);
   });
+  attachHover(margin, 'margin', 'rgba(59, 130, 246, 0.25)', 'rgba(37, 99, 235, 0.85)');
 
   const border = document.createElement('div');
   border.className = 'mockkit-dom-inspector__box-border';
@@ -1403,6 +1419,7 @@ function buildBoxModelDiagram(box) {
     val.textContent = box.border[pos];
     border.appendChild(val);
   });
+  attachHover(border, 'border', 'rgba(16, 185, 129, 0.25)', 'rgba(5, 150, 105, 0.85)');
 
   const padding = document.createElement('div');
   padding.className = 'mockkit-dom-inspector__box-padding';
@@ -1416,10 +1433,12 @@ function buildBoxModelDiagram(box) {
     val.textContent = box.padding[pos];
     padding.appendChild(val);
   });
+  attachHover(padding, 'padding', 'rgba(132, 204, 22, 0.25)', 'rgba(101, 163, 13, 0.85)');
 
   const content = document.createElement('div');
   content.className = 'mockkit-dom-inspector__box-content';
   content.textContent = `${box.width} × ${box.height}`;
+  attachHover(content, 'content', 'rgba(234, 179, 8, 0.25)', 'rgba(202, 138, 4, 0.85)');
 
   padding.appendChild(content);
   border.appendChild(padding);
