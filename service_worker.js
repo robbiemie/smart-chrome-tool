@@ -4,6 +4,9 @@ const MANAGED_RULE_IDS_STORAGE_KEY = 'ajaxToolsManagedHeaderRuleIds';
 const WORKBENCH_TARGET_TAB_ID_STORAGE_KEY = 'ajaxToolsWorkbenchTargetTabId';
 const CONTENT_SCRIPT_BOOTSTRAP_DELAY = 120;
 const RULE_ID_BASE = 930000;
+// Tracks the page tab that last sent CHECK_UPDATE so RELOAD_EXTENSION can
+// refresh only that tab after a self-update.
+let lastWorkbenchTabId = null;
 const RULE_ID_RANGE = 70000;
 const SUPPORTED_RESOURCE_TYPES = ['main_frame', 'sub_frame', 'xmlhttprequest'];
 const FORBIDDEN_REQUEST_HEADERS = new Set([
@@ -455,6 +458,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   if (message?.type === 'CHECK_UPDATE') {
+    // Record which page tab initiated the check so RELOAD_EXTENSION can
+    // refresh only that tab (not the update tab or other tabs).
+    if (sender?.tab?.id) {
+      lastWorkbenchTabId = sender.tab.id;
+    }
     checkForUpdate(Boolean(message?.force))
       .then((response) => sendResponse(response))
       .catch((error) => sendResponse({ ok: false, hasUpdate: false, message: error?.message || 'update check failed' }));
@@ -462,15 +470,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   if (message?.type === 'RELOAD_EXTENSION') {
-    // The iframe has just written the new files into the extension folder.
-    // Only refresh the tab that triggered the update (the one the user was
-    // working on), then reload the extension so the new code takes effect.
+    // Only refresh the original page tab that triggered the update, not all
+    // tabs. lastWorkbenchTabId was recorded when CHECK_UPDATE came in from
+    // the iframe (which runs in the page tab).
     try {
-      const targetTabId = sender?.tab?.id;
-      if (targetTabId) {
-        chrome.tabs.reload(targetTabId, { bypassCache: true }).catch(() => {});
+      if (lastWorkbenchTabId) {
+        chrome.tabs.reload(lastWorkbenchTabId, { bypassCache: true }).catch(() => {});
       }
-      // Small delay so the tab starts reloading before the extension tears down.
       setTimeout(() => chrome.runtime.reload(), 300);
     } catch (error) {
       sendResponse({ ok: false, message: error?.message || 'reload failed' });

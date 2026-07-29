@@ -1,5 +1,24 @@
 # Build Changelog
 
+## v0.0.33
+
+- Built At: 2026-07-29T17:09:48.548Z
+- Previous Version: v0.0.32
+- Git Branch: master
+- Git Commit: db78aed9
+
+### Changed Files
+- content.js
+- html/iframePage/main/App.css
+- html/iframePage/main/components/OperationsRail/index.tsx
+- html/iframePage/main/hooks/useDomainWhitelist.ts
+- html/iframePage/package-lock.json
+- html/iframePage/package.json
+- html/iframePage/stats.html
+- manifest.json
+- service_worker.js
+
+
 ## v0.0.32
 
 - Built At: 2026-07-29T16:58:05.020Z

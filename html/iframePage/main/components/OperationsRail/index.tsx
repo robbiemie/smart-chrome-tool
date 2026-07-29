@@ -153,22 +153,22 @@ const OperationsRail = ({
           <div className="domain-whitelist__header">
             <strong>Domain Whitelist</strong>
             {currentHostname && (
-              <span className={`domain-whitelist__status${currentTabMatched ? ' domain-whitelist__status--on' : ''}`}>
-                {currentTabMatched ? '✓ matched' : '✕ blocked'}: {currentHostname}
-              </span>
+              currentTabMatched ? (
+                <span className="domain-whitelist__status domain-whitelist__status--on">
+                  ✓ matched: {currentHostname}
+                </span>
+              ) : (
+                <span
+                  className="domain-whitelist__status domain-whitelist__status--blocked"
+                  style={{ cursor: 'pointer' }}
+                  onClick={() => onAddDomain(currentHostname)}
+                  title={`Click to add "${currentHostname}" to whitelist`}
+                >
+                  ✕ blocked: {currentHostname} (click to add)
+                </span>
+              )
             )}
           </div>
-          {currentHostname && !currentTabMatched && (
-            <Button
-              size="small"
-              type="primary"
-              ghost
-              className="domain-whitelist__add-current"
-              onClick={() => onAddDomain(currentHostname)}
-            >
-              Add "{currentHostname}"
-            </Button>
-          )}
           <div className="domain-whitelist__tags">
             {domainWhitelist.map((pattern) => (
               <Tag

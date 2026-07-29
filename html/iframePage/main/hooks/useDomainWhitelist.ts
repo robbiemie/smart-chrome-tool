@@ -58,14 +58,24 @@ export const useDomainWhitelist = () => {
 
     chrome.storage.local.get([DOMAIN_WHITELIST_STORAGE_KEY], (result) => {
       const stored = result[DOMAIN_WHITELIST_STORAGE_KEY];
-      setWhitelist(Array.isArray(stored) && stored.length > 0 ? stored : DEFAULT_WHITELIST);
+      let list = Array.isArray(stored) && stored.length > 0 ? stored : DEFAULT_WHITELIST;
+      // If the list has specific domains alongside '*', drop '*' — it's only
+      // a fallback for an otherwise empty list.
+      if (list.includes('*') && list.length > 1) {
+        list = list.filter((item) => item !== '*');
+      }
+      setWhitelist(list);
       setReady(true);
     });
 
     const handler = (changes: { [key: string]: chrome.storage.StorageChange }) => {
       if (changes[DOMAIN_WHITELIST_STORAGE_KEY]) {
-        const next = changes[DOMAIN_WHITELIST_STORAGE_KEY].newValue;
-        setWhitelist(Array.isArray(next) && next.length > 0 ? next : DEFAULT_WHITELIST);
+        let next = changes[DOMAIN_WHITELIST_STORAGE_KEY].newValue;
+        if (!Array.isArray(next) || next.length === 0) next = DEFAULT_WHITELIST;
+        if (next.includes('*') && next.length > 1) {
+          next = next.filter((item) => item !== '*');
+        }
+        setWhitelist(next);
       }
     };
     chrome.storage.onChanged.addListener(handler);
@@ -77,7 +87,13 @@ export const useDomainWhitelist = () => {
     if (!trimmed) return;
     setWhitelist((previous) => {
       if (previous.includes(trimmed)) return previous;
-      const next = [...previous, trimmed];
+      // When adding a specific domain, remove the wildcard '*' so only
+      // explicit domains are matched. The wildcard is only a fallback when
+      // the list is otherwise empty.
+      let next = [...previous, trimmed];
+      if (trimmed !== '*') {
+        next = next.filter((item) => item !== '*');
+      }
       if (chrome.storage?.local) {
         chrome.storage.local.set({ [DOMAIN_WHITELIST_STORAGE_KEY]: next });
       }
@@ -88,8 +104,8 @@ export const useDomainWhitelist = () => {
   const removeDomain = useCallback((domain: string) => {
     setWhitelist((previous) => {
       const next = previous.filter((item) => item !== domain);
-      // Keep at least one entry so the extension never silently blocks
-      // every page — fall back to '*' if the user clears the list.
+      // Fall back to '*' when the list becomes empty so the extension
+      // never silently blocks every page.
       const finalList = next.length > 0 ? next : DEFAULT_WHITELIST;
       if (chrome.storage?.local) {
         chrome.storage.local.set({ [DOMAIN_WHITELIST_STORAGE_KEY]: finalList });

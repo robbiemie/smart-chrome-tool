@@ -290,6 +290,16 @@
   color: #1a9b7f;
 }
 
+.domain-whitelist__status--blocked {
+  color: #ff4d4f;
+  transition: color 0.15s ease;
+}
+
+.domain-whitelist__status--blocked:hover {
+  color: #d4380d;
+  text-decoration: underline;
+}
+
 .domain-whitelist__tags {
   display: flex;
   flex-wrap: wrap;

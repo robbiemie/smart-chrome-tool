@@ -781,11 +781,31 @@ injectedStyle(`
   .mockkit-dom-inspector__prop-val {
     color: #1b2822;
   }
+  .mockkit-dom-inspector__core-panel {
+    border: 1px solid rgb(27 40 34 / 8%);
+    border-radius: 12px;
+    padding: 12px;
+    margin-bottom: 10px;
+    background: rgb(255 255 255 / 50%);
+  }
+  .mockkit-dom-inspector__core-panel-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 8px;
+  }
+  .mockkit-dom-inspector__core-panel-title {
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: rgb(27 40 34 / 45%);
+  }
   .mockkit-dom-inspector__summary {
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 6px;
-    margin-bottom: 10px;
+    margin-bottom: 0;
   }
   .mockkit-dom-inspector__summary-item {
     display: flex;
@@ -967,9 +987,9 @@ injectedStyle(`
     justify-content: center;
     gap: 8px;
     padding: 18px;
-    border: 1px solid #1a9b7f;
+    border: 1px solid rgb(27 40 34 / 12%);
     border-radius: 8px;
-    background: rgb(26 155 127 / 8%);
+    background: rgb(128 128 128 / 12%);
     min-height: 56px;
   }
   .mockkit-dom-inspector__edit-box-input {
@@ -1393,8 +1413,9 @@ function buildEditableBox(node, bgColor) {
   const box = document.createElement('div');
   box.className = 'mockkit-dom-inspector__edit-box';
 
-  // Apply the element's background color so the box visually matches.
-  if (bgColor) {
+  // Apply the element's background color so the box visually matches. Skip
+  // transparent/rgba(0,0,0,0) so the default gray panel shows through.
+  if (bgColor && !/rgba?\(\s*0\s*,\s*0\s*,\s*0\s*,\s*0\s*\)/.test(bgColor) && bgColor !== 'transparent') {
     box.style.background = bgColor;
   }
 
@@ -1668,23 +1689,34 @@ function showDomInspectorPanel(node, hint) {
     // Color items support rgb/hex toggle and click-to-copy.
     const core = readCoreStyles(node);
     if (core) {
-      // Color mode toggle button (RGB / HEX), placed above the summary grid.
-      const colorModeRow = document.createElement('div');
-      colorModeRow.style.cssText = 'display:flex;justify-content:flex-end;margin-bottom:6px;';
+      // Wrap the color toggle + summary grid in a single panel container
+      // so the three items look grouped rather than floating loose.
+      const corePanel = document.createElement('div');
+      corePanel.className = 'mockkit-dom-inspector__core-panel';
+
+      const corePanelHeader = document.createElement('div');
+      corePanelHeader.className = 'mockkit-dom-inspector__core-panel-header';
+
+      const corePanelTitle = document.createElement('span');
+      corePanelTitle.className = 'mockkit-dom-inspector__core-panel-title';
+      corePanelTitle.textContent = 'Core Styles';
+      corePanelHeader.appendChild(corePanelTitle);
+
       const colorToggle = document.createElement('button');
       colorToggle.type = 'button';
       colorToggle.className = 'mockkit-dom-inspector__color-toggle';
-      let colorMode = 'rgb'; // getComputedStyle returns rgb by default
+      let colorMode = 'rgb';
       colorToggle.textContent = `Color: ${colorMode.toUpperCase()} ⇄`;
-      colorModeRow.appendChild(colorToggle);
-      body.appendChild(colorModeRow);
+      corePanelHeader.appendChild(colorToggle);
+      corePanel.appendChild(corePanelHeader);
 
       const summary = document.createElement('div');
       summary.className = 'mockkit-dom-inspector__summary';
       summary.appendChild(buildSummaryItem('Color', core.color, core.color, colorMode, node));
       summary.appendChild(buildSummaryItem('Background', core.backgroundColor, core.backgroundColor, colorMode, node));
       summary.appendChild(buildSummaryItem('Font Weight', core.fontWeight, null, colorMode, node));
-      body.appendChild(summary);
+      corePanel.appendChild(summary);
+      body.appendChild(corePanel);
 
       // Toggle re-renders the summary grid with the new color format.
       colorToggle.addEventListener('click', () => {
