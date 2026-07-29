@@ -1,5 +1,40 @@
 # Build Changelog
 
+## v0.0.35
+
+- Built At: 2026-07-29T17:15:22.168Z
+- Previous Version: v0.0.34
+- Git Branch: master
+- Git Commit: ee194f61
+
+### Changed Files
+- content.js
+- html/iframePage/CHANGELOG.md
+- html/iframePage/main/App.css
+- html/iframePage/main/components/OperationsRail/index.tsx
+- html/iframePage/package-lock.json
+- html/iframePage/package.json
+- html/iframePage/stats.html
+- manifest.json
+
+
+## v0.0.34
+
+- Built At: 2026-07-29T17:13:54.073Z
+- Previous Version: v0.0.33
+- Git Branch: master
+- Git Commit: ee194f61
+
+### Changed Files
+- content.js
+- html/iframePage/main/App.css
+- html/iframePage/main/components/OperationsRail/index.tsx
+- html/iframePage/package-lock.json
+- html/iframePage/package.json
+- html/iframePage/stats.html
+- manifest.json
+
+
 ## v0.0.33
 
 - Built At: 2026-07-29T17:09:48.548Z

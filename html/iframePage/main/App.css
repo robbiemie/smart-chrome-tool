@@ -290,14 +290,20 @@
   color: #1a9b7f;
 }
 
-.domain-whitelist__status--blocked {
-  color: #ff4d4f;
-  transition: color 0.15s ease;
+.domain-whitelist__status-tag {
+  cursor: default;
+  font-size: 11px;
+  font-weight: 600;
 }
 
-.domain-whitelist__status--blocked:hover {
-  color: #d4380d;
-  text-decoration: underline;
+.domain-whitelist__status-tag--clickable {
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.domain-whitelist__status-tag--clickable:hover {
+  opacity: 0.85;
+  transform: scale(1.03);
 }
 
 .domain-whitelist__tags {

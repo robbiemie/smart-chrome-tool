@@ -741,16 +741,6 @@ injectedStyle(`
     margin-bottom: 8px;
     flex-wrap: wrap;
   }
-  .mockkit-dom-inspector__size {
-    flex-shrink: 0;
-    padding: 1px 6px;
-    border-radius: 4px;
-    background: rgb(27 40 34 / 6%);
-    color: rgb(27 40 34 / 65%);
-    font-family: Menlo, Monaco, Consolas, monospace;
-    font-size: 11px;
-    font-variant-numeric: tabular-nums;
-  }
   .mockkit-dom-inspector__section {
     margin-bottom: 10px;
   }
@@ -1646,8 +1636,6 @@ function showDomInspectorPanel(node, hint) {
   } else if (node) {
     const { tag, id, classes } = describeDomNode(node);
     const selector = `${tag}${id ? `#${id}` : ''}${classes.length ? `.${classes.join('.')}` : ''}`;
-    const rect = node.getBoundingClientRect();
-    const sizeText = `${Math.round(rect.width)} × ${Math.round(rect.height)}`;
 
     const tagRow = document.createElement('div');
     tagRow.className = 'mockkit-dom-inspector__tag-row';
@@ -1677,11 +1665,6 @@ function showDomInspectorPanel(node, hint) {
     tagEl.addEventListener('mouseenter', highlightNode);
     tagEl.addEventListener('click', highlightNode);
     tagRow.appendChild(tagEl);
-
-    const sizeEl = document.createElement('span');
-    sizeEl.className = 'mockkit-dom-inspector__size';
-    sizeEl.textContent = sizeText;
-    tagRow.appendChild(sizeEl);
 
     body.appendChild(tagRow);
 
