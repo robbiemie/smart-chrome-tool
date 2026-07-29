@@ -622,6 +622,37 @@ injectedStyle(`
     color: #1b2822;
     overflow: hidden;
   }
+  /* Minimized state: shrink to just the header bar, hide body. */
+  .mockkit-dom-inspector--minimized {
+    width: auto !important;
+    max-height: none !important;
+  }
+  .mockkit-dom-inspector--minimized .mockkit-dom-inspector__body {
+    display: none !important;
+  }
+  .mockkit-dom-inspector--minimized .mockkit-dom-inspector__header {
+    border-bottom: none;
+  }
+  .mockkit-dom-inspector__min-btn {
+    flex-shrink: 0;
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: none;
+    border-radius: 5px;
+    background: transparent;
+    cursor: pointer;
+    color: rgb(27 40 34 / 45%);
+    font-size: 14px;
+    line-height: 1;
+    transition: all 0.15s ease;
+  }
+  .mockkit-dom-inspector__min-btn:hover {
+    background: rgb(27 40 34 / 8%);
+    color: #1b2822;
+  }
   .mockkit-dom-inspector__header {
     display: flex;
     align-items: center;
@@ -664,6 +695,7 @@ injectedStyle(`
     cursor: pointer;
     color: rgb(27 40 34 / 55%);
     transition: all 0.15s ease;
+    margin-left: auto;
   }
   .mockkit-dom-inspector__reinspect:hover {
     background: rgb(27 40 34 / 8%);
@@ -803,6 +835,31 @@ injectedStyle(`
   .mockkit-dom-inspector__color-toggle:hover {
     background: rgb(27 40 34 / 6%);
     color: #1b2822;
+  }
+  .mockkit-dom-inspector__edit-input {
+    width: 100%;
+    font-family: Menlo, Monaco, Consolas, monospace;
+    font-size: 11px;
+    color: #1b2822;
+    border: 1px solid rgb(26 155 127 / 35%);
+    border-radius: 4px;
+    padding: 2px 4px;
+    background: rgb(255 255 255 / 90%);
+    outline: none;
+    line-height: 1.4;
+  }
+  .mockkit-dom-inspector__edit-input:focus {
+    border-color: #1a9b7f;
+    box-shadow: 0 0 0 2px rgb(26 155 127 / 15%);
+  }
+  .mockkit-dom-inspector__color-picker {
+    width: 100%;
+    height: 28px;
+    border: 1px solid rgb(27 40 34 / 12%);
+    border-radius: 5px;
+    cursor: pointer;
+    padding: 2px;
+    background: transparent;
   }
   .mockkit-dom-inspector__summary-swatch {
     display: inline-block;
@@ -1102,8 +1159,24 @@ function showDomInspectorPanel(node, hint) {
     panel.remove();
     domInspectorState.panel = null;
   });
+
+  // Minimize button: collapses the panel to just the header bar, same
+  // interaction pattern as the rules floating panel's collapse button.
+  const minBtn = document.createElement('button');
+  minBtn.type = 'button';
+  minBtn.className = 'mockkit-dom-inspector__min-btn';
+  minBtn.title = 'Minimize';
+  minBtn.textContent = '—';
+  minBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const isMin = panel.classList.toggle('mockkit-dom-inspector--minimized');
+    minBtn.textContent = isMin ? '+' : '—';
+    minBtn.title = isMin ? 'Expand' : 'Minimize';
+  });
+
   header.appendChild(title);
   header.appendChild(reinspectBtn);
+  header.appendChild(minBtn);
   header.appendChild(closeBtn);
   panel.appendChild(header);
 
