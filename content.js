@@ -769,10 +769,13 @@ function bindFloatingPanelDrag(panel) {
     // Clamp to the viewport so the panel cannot be dragged fully off-screen.
     const maxLeft = window.innerWidth - 60;
     const maxTop = window.innerHeight - 60;
-    panel.style.left = `${Math.max(0, Math.min(nextLeft, maxLeft))}px`;
-    panel.style.top = `${Math.max(0, Math.min(nextTop, maxTop))}px`;
-    panel.style.right = 'auto';
-    panel.style.bottom = 'auto';
+    // Use setProperty with !important because the base stylesheet pins
+    // right/bottom with !important — plain inline styles can't override
+    // that, which previously made the panel un-draggable.
+    panel.style.setProperty('left', `${Math.max(0, Math.min(nextLeft, maxLeft))}px`, 'important');
+    panel.style.setProperty('top', `${Math.max(0, Math.min(nextTop, maxTop))}px`, 'important');
+    panel.style.setProperty('right', 'auto', 'important');
+    panel.style.setProperty('bottom', 'auto', 'important');
   };
 
   const onUp = () => {
