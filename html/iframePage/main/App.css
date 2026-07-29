@@ -246,9 +246,10 @@
 }
 
 .rail-switch-list {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
+  display: grid;
+  grid-template-columns: repeat(4, max-content);
+  justify-content: space-between;
+  gap: 8px;
 }
 
 .rail-actions {
@@ -308,15 +309,21 @@
 }
 
 .rail-switch-item {
-  gap: 16px;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  text-align: center;
   border-radius: 16px;
-  padding: 12px 14px;
+  padding: 12px 10px;
   background: #f7f4ec;
 }
 
 .rail-switch-item strong {
   display: block;
-  margin-bottom: 4px;
+  margin-bottom: 0;
+  white-space: nowrap;
+  font-size: 11px;
 }
 
 .rail-switch-item p {

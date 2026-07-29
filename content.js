@@ -235,50 +235,6 @@ injectedStyle(`
     background: rgb(26 155 127 / 22%);
     color: #1a9b7f;
   }
-  .mockkit-floating-rules__update-btn {
-    position: relative;
-    flex-shrink: 0;
-    padding: 3px 8px;
-    border: none;
-    border-radius: 7px;
-    background: transparent;
-    cursor: pointer;
-    color: rgb(27 40 34 / 55%);
-    font-size: 11px;
-    font-weight: 600;
-    line-height: 1.4;
-    transition: all 0.15s ease;
-  }
-  .mockkit-floating-rules__update-btn:hover {
-    background: rgb(27 40 34 / 8%);
-    color: #1b2822;
-  }
-  .mockkit-floating-rules__update-btn--available {
-    color: #1a9b7f;
-  }
-  .mockkit-floating-rules__update-btn--available:hover {
-    background: rgb(26 155 127 / 14%);
-    color: #1a9b7f;
-  }
-  .mockkit-floating-rules__update-dot {
-    position: absolute;
-    top: 2px;
-    right: 2px;
-    width: 7px;
-    height: 7px;
-    border-radius: 999px;
-    background: #ff4d4f;
-    border: 1.5px solid #fff;
-    box-shadow: 0 0 4px rgb(255 77 79 / 60%);
-    display: none;
-  }
-  .mockkit-floating-rules__update-btn--available .mockkit-floating-rules__update-dot {
-    display: block;
-  }
-  .mockkit-floating-rules__update-btn--checking {
-    color: rgb(27 40 34 / 35%);
-    cursor: wait;
-  }
   .mockkit-floating-rules__csr-btn:hover {
     border-color: rgb(27 40 34 / 24%);
     color: rgb(27 40 34 / 75%);
@@ -561,7 +517,358 @@ injectedStyle(`
     font-variant-numeric: tabular-nums;
     letter-spacing: 0.02em;
   }
+
+  /* DOM Inspector overlay: highlight ring shown while picking a node. */
+  .mockkit-dom-inspector-overlay {
+    position: fixed;
+    z-index: 2147483646;
+    pointer-events: none;
+    border: 2px solid #1a9b7f;
+    background: rgb(26 155 127 / 12%);
+    transition: all 0.05s ease;
+    box-shadow: 0 0 0 1px rgb(255 255 255 / 80%), 0 4px 16px rgb(26 155 127 / 30%);
+    border-radius: 3px;
+    display: none;
+  }
+
+  /* DOM Inspector result panel: top-left so it never overlaps the rules
+     floating panel anchored bottom-right. */
+  .mockkit-dom-inspector {
+    position: fixed;
+    z-index: 2147483647;
+    top: 24px;
+    left: 24px;
+    width: 340px;
+    max-width: calc(100vw - 48px);
+    max-height: 60vh;
+    display: flex;
+    flex-direction: column;
+    border-radius: 16px;
+    border: 1px solid rgb(27 40 34 / 8%);
+    background: rgb(255 255 255 / 92%);
+    backdrop-filter: blur(20px);
+    box-shadow: 0 24px 80px rgb(37 54 46 / 14%);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-size: 12px;
+    color: #1b2822;
+    overflow: hidden;
+  }
+  .mockkit-dom-inspector__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 10px 14px;
+    border-bottom: 1px solid rgb(27 40 34 / 6%);
+    cursor: move;
+    user-select: none;
+  }
+  .mockkit-dom-inspector__title {
+    font-size: 12px;
+    font-weight: 600;
+    color: #1b2822;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .mockkit-dom-inspector__close {
+    flex-shrink: 0;
+    padding: 2px 6px;
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    color: rgb(27 40 34 / 45%);
+    font-size: 16px;
+    line-height: 1;
+    border-radius: 4px;
+  }
+  .mockkit-dom-inspector__close:hover {
+    background: rgb(27 40 34 / 8%);
+    color: #1b2822;
+  }
+  .mockkit-dom-inspector__body {
+    flex: 1;
+    overflow: auto;
+    padding: 10px 14px;
+  }
+  .mockkit-dom-inspector__hint {
+    color: rgb(27 40 34 / 45%);
+    font-size: 12px;
+    line-height: 1.7;
+    padding: 8px 0;
+  }
+  .mockkit-dom-inspector__tag {
+    display: inline-block;
+    padding: 1px 6px;
+    border-radius: 4px;
+    background: rgb(26 155 127 / 12%);
+    color: #1a9b7f;
+    font-family: Menlo, Monaco, Consolas, monospace;
+    font-size: 11px;
+    margin-bottom: 8px;
+  }
+  .mockkit-dom-inspector__section {
+    margin-bottom: 10px;
+  }
+  .mockkit-dom-inspector__section-title {
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: rgb(27 40 34 / 45%);
+    margin-bottom: 4px;
+  }
+  .mockkit-dom-inspector__props {
+    font-family: Menlo, Monaco, Consolas, monospace;
+    font-size: 11px;
+    line-height: 1.7;
+    color: #1b2822;
+    background: #f7f4ec;
+    border-radius: 8px;
+    padding: 8px 10px;
+    max-height: 200px;
+    overflow: auto;
+    word-break: break-word;
+    white-space: pre-wrap;
+  }
+  .mockkit-dom-inspector__prop-key {
+    color: rgb(26 155 127 / 85%);
+  }
+  .mockkit-dom-inspector__prop-val {
+    color: #1b2822;
+  }
 `);
+
+let domInspectorState = {
+  active: false,
+  overlay: null,
+  panel: null,
+  lastTarget: null,
+};
+
+function createDomInspectorOverlay() {
+  if (domInspectorState.overlay) return domInspectorState.overlay;
+  const overlay = document.createElement('div');
+  overlay.className = 'mockkit-dom-inspector-overlay';
+  document.body.appendChild(overlay);
+  domInspectorState.overlay = overlay;
+  return overlay;
+}
+
+function destroyDomInspectorOverlay() {
+  if (domInspectorState.overlay) {
+    domInspectorState.overlay.remove();
+    domInspectorState.overlay = null;
+  }
+}
+
+function startDomInspector() {
+  if (domInspectorState.active) return;
+  domInspectorState.active = true;
+  createDomInspectorOverlay();
+
+  const onMove = (event) => {
+    if (!domInspectorState.active) return;
+    // Temporarily hide overlay so elementFromPoint hits the real target.
+    const overlay = domInspectorState.overlay;
+    if (overlay) overlay.style.display = 'none';
+    const target = document.elementFromPoint(event.clientX, event.clientY);
+    if (overlay) overlay.style.display = 'block';
+    if (!target || target === domInspectorState.panel) return;
+
+    domInspectorState.lastTarget = target;
+    const rect = target.getBoundingClientRect();
+    if (overlay) {
+      overlay.style.left = `${rect.left}px`;
+      overlay.style.top = `${rect.top}px`;
+      overlay.style.width = `${rect.width}px`;
+      overlay.style.height = `${rect.height}px`;
+      overlay.style.display = 'block';
+    }
+  };
+
+  const onClick = (event) => {
+    if (!domInspectorState.active) return;
+    if (domInspectorState.panel && domInspectorState.panel.contains(event.target)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const target = domInspectorState.lastTarget || event.target;
+    if (!target || target === domInspectorState.panel) return;
+    pickDomNode(target);
+    stopDomInspector();
+  };
+
+  const onKey = (event) => {
+    if (event.key === 'Escape') {
+      stopDomInspector();
+    }
+  };
+
+  domInspectorState.onMove = onMove;
+  domInspectorState.onClick = onClick;
+  domInspectorState.onKey = onKey;
+
+  document.addEventListener('mousemove', onMove, true);
+  document.addEventListener('click', onClick, true);
+  document.addEventListener('keydown', onKey, true);
+
+  // Show a hint panel while picking.
+  showDomInspectorPanel(null, 'Move your mouse over the page and click a node to inspect. Press Esc to cancel.');
+}
+
+function stopDomInspector() {
+  if (!domInspectorState.active) return;
+  domInspectorState.active = false;
+  if (domInspectorState.onMove) document.removeEventListener('mousemove', domInspectorState.onMove, true);
+  if (domInspectorState.onClick) document.removeEventListener('click', domInspectorState.onClick, true);
+  if (domInspectorState.onKey) document.removeEventListener('keydown', domInspectorState.onKey, true);
+  destroyDomInspectorOverlay();
+}
+
+function describeDomNode(node) {
+  if (!node) return { tag: '', id: '', classes: [] };
+  const tag = node.tagName ? node.tagName.toLowerCase() : '';
+  const id = node.id || '';
+  const classes = node.className && typeof node.className === 'string'
+    ? node.className.split(/\s+/).filter(Boolean)
+    : [];
+  return { tag, id, classes };
+}
+
+function readComputedStyles(node) {
+  if (!node || !window.getComputedStyle) return '';
+  const computed = window.getComputedStyle(node);
+  // Collect the most useful properties for quick debugging.
+  const keys = [
+    'display', 'position', 'top', 'right', 'bottom', 'left', 'z-index',
+    'width', 'height', 'min-width', 'min-height', 'max-width', 'max-height',
+    'margin', 'padding', 'border', 'border-radius', 'box-sizing',
+    'flex', 'flex-direction', 'align-items', 'justify-content', 'gap', 'grid-template-columns',
+    'color', 'background', 'background-color', 'font-size', 'font-weight', 'line-height', 'text-align',
+    'opacity', 'visibility', 'overflow', 'cursor', 'transform', 'transition', 'box-shadow',
+  ];
+  const lines = [];
+  for (const key of keys) {
+    const value = computed.getPropertyValue(key);
+    if (value) {
+      lines.push(`<span class="mockkit-dom-inspector__prop-key">${key}</span>: <span class="mockkit-dom-inspector__prop-val">${value}</span>`);
+    }
+  }
+  return lines.join('\n');
+}
+
+function showDomInspectorPanel(node, hint) {
+  if (domInspectorState.panel) {
+    domInspectorState.panel.remove();
+    domInspectorState.panel = null;
+  }
+
+  const panel = document.createElement('div');
+  panel.className = 'mockkit-dom-inspector';
+
+  // Header (draggable).
+  const header = document.createElement('div');
+  header.className = 'mockkit-dom-inspector__header';
+  const title = document.createElement('span');
+  title.className = 'mockkit-dom-inspector__title';
+  title.textContent = 'DOM Inspector';
+  const closeBtn = document.createElement('button');
+  closeBtn.type = 'button';
+  closeBtn.className = 'mockkit-dom-inspector__close';
+  closeBtn.textContent = '×';
+  closeBtn.addEventListener('click', () => {
+    panel.remove();
+    domInspectorState.panel = null;
+  });
+  header.appendChild(title);
+  header.appendChild(closeBtn);
+  panel.appendChild(header);
+
+  // Body.
+  const body = document.createElement('div');
+  body.className = 'mockkit-dom-inspector__body';
+
+  if (hint) {
+    const hintEl = document.createElement('div');
+    hintEl.className = 'mockkit-dom-inspector__hint';
+    hintEl.textContent = hint;
+    body.appendChild(hintEl);
+  } else if (node) {
+    const { tag, id, classes } = describeDomNode(node);
+    const selector = `${tag}${id ? `#${id}` : ''}${classes.length ? `.${classes.join('.')}` : ''}`;
+    const tagEl = document.createElement('div');
+    tagEl.className = 'mockkit-dom-inspector__tag';
+    tagEl.textContent = selector;
+    body.appendChild(tagEl);
+
+    const section = document.createElement('div');
+    section.className = 'mockkit-dom-inspector__section';
+    const sectionTitle = document.createElement('div');
+    sectionTitle.className = 'mockkit-dom-inspector__section-title';
+    sectionTitle.textContent = 'Computed Styles';
+    const props = document.createElement('div');
+    props.className = 'mockkit-dom-inspector__props';
+    props.innerHTML = readComputedStyles(node);
+    section.appendChild(sectionTitle);
+    section.appendChild(props);
+    body.appendChild(section);
+  }
+
+  panel.appendChild(body);
+  document.body.appendChild(panel);
+  domInspectorState.panel = panel;
+
+  // Enable drag on the header (position kept in memory only).
+  bindDomInspectorDrag(panel, header);
+}
+
+function bindDomInspectorDrag(panel, handle) {
+  let dragging = false;
+  let startX = 0;
+  let startY = 0;
+  let originLeft = 0;
+  let originTop = 0;
+
+  handle.addEventListener('mousedown', (event) => {
+    dragging = true;
+    startX = event.clientX;
+    startY = event.clientY;
+    const rect = panel.getBoundingClientRect();
+    originLeft = rect.left;
+    originTop = rect.top;
+    event.preventDefault();
+  });
+
+  const onMove = (event) => {
+    if (!dragging) return;
+    const nextLeft = originLeft + (event.clientX - startX);
+    const nextTop = originTop + (event.clientY - startY);
+    const maxLeft = window.innerWidth - 60;
+    const maxTop = window.innerHeight - 60;
+    panel.style.setProperty('left', `${Math.max(0, Math.min(nextLeft, maxLeft))}px`, 'important');
+    panel.style.setProperty('top', `${Math.max(0, Math.min(nextTop, maxTop))}px`, 'important');
+    panel.style.setProperty('right', 'auto', 'important');
+    panel.style.setProperty('bottom', 'auto', 'important');
+  };
+
+  const onUp = () => { dragging = false; };
+
+  document.addEventListener('mousemove', onMove);
+  document.addEventListener('mouseup', onUp);
+  // Keep references so we could remove them if needed later.
+  panel._dragHandlers = { onMove, onUp };
+}
+
+function pickDomNode(node) {
+  showDomInspectorPanel(node, null);
+}
+
+// Listen for the DOM Inspect trigger coming from the workbench iframe.
+window.addEventListener('message', (event) => {
+  const data = event.data;
+  if (!data || data.type !== 'MOCKKIT_INSPECT_DOM') return;
+  startDomInspector();
+});
 injectedCss('icons/iconfont/iconfont.css');
 injectedScript('html/iframePage/mock.js');
 const pageScripts = injectedScript('pageScripts/index.js');
@@ -963,95 +1270,6 @@ function createFloatingCsrButton() {
     });
   });
   syncFloatingCsrBtnState(btn);
-  return btn;
-}
-
-// Self-update button: shows a red dot when a newer GitHub release is
-// available. Clicking it either applies the update (download zip + open
-// chrome://extensions) or force-rechecks for updates when no dot is shown.
-function createFloatingUpdateButton() {
-  const btn = document.createElement('button');
-  btn.type = 'button';
-  btn.className = 'mockkit-floating-rules__update-btn';
-  btn.textContent = 'Update';
-  btn.title = 'Check for a newer version';
-
-  const dot = document.createElement('span');
-  dot.className = 'mockkit-floating-rules__update-dot';
-  btn.appendChild(dot);
-
-  // Reflect the cached update state (if any) immediately on render so the
-  // red dot shows up without waiting for the user to click.
-  chrome.storage.local.get(['ajaxToolsUpdateAvailable'], (result) => {
-    const info = result?.ajaxToolsUpdateAvailable;
-    if (info?.hasUpdate) {
-      btn.classList.add('mockkit-floating-rules__update-btn--available');
-      btn.title = `New version ${info.remoteVersion} available. Click to download & install.`;
-    }
-  });
-  // Keep the dot in sync when the background script writes a fresh result.
-  const onStorageChange = (changes, areaName) => {
-    if (areaName !== 'local') return;
-    if (!changes.ajaxToolsUpdateAvailable) return;
-    const info = changes.ajaxToolsUpdateAvailable.newValue;
-    if (info?.hasUpdate) {
-      btn.classList.add('mockkit-floating-rules__update-btn--available');
-      btn.title = `New version ${info.remoteVersion} available. Click to download & install.`;
-    } else {
-      btn.classList.remove('mockkit-floating-rules__update-btn--available');
-      btn.title = 'Check for a newer version';
-    }
-  };
-  chrome.storage.onChanged.addListener(onStorageChange);
-
-  btn.addEventListener('click', () => {
-    if (btn.classList.contains('mockkit-floating-rules__update-btn--checking')) return;
-
-    // If an update is already known, hand off to the workbench iframe which
-    // runs the download/unzip/write flow with a live progress bar. We reveal
-    // the side panel first so the modal is visible.
-    chrome.storage.local.get(['ajaxToolsUpdateAvailable'], (result) => {
-      const info = result?.ajaxToolsUpdateAvailable;
-      if (info?.hasUpdate && info.downloadUrl) {
-        const mainPanel = ajaxToolsRuntimeState.panelContainer;
-        if (mainPanel) {
-          mainPanel.style.setProperty('transform', 'translateX(0)', 'important');
-          chrome.storage.local.set({ iframeVisible: true });
-        }
-        const iframe = document.querySelector('.mockkit-interceptor-iframe');
-        if (iframe?.contentWindow) {
-          iframe.contentWindow.postMessage(
-            {
-              type: 'AJAX_TOOLS_APPLY_UPDATE',
-              downloadUrl: info.downloadUrl,
-              remoteVersion: info.remoteVersion,
-            },
-            '*'
-          );
-        }
-        return;
-      }
-
-      // Otherwise force a recheck and reflect the result.
-      btn.classList.add('mockkit-floating-rules__update-btn--checking');
-      chrome.runtime.sendMessage({ type: 'CHECK_UPDATE', force: true }, (response) => {
-        btn.classList.remove('mockkit-floating-rules__update-btn--checking');
-        if (chrome.runtime.lastError || !response) {
-          btn.title = 'Update check failed';
-          return;
-        }
-        if (response.hasUpdate) {
-          btn.classList.add('mockkit-floating-rules__update-btn--available');
-          btn.title = `New version ${response.remoteVersion} available. Click to install.`;
-        } else {
-          btn.classList.remove('mockkit-floating-rules__update-btn--available');
-          btn.title = response.error
-            ? `Check failed: ${response.error}`
-            : `You're on the latest version (${response.localVersion})`;
-        }
-      });
-    });
-  });
   return btn;
 }
 

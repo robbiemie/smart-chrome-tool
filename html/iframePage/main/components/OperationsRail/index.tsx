@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Button, Empty, Input, Select, Switch, Tag } from 'antd';
-import { PlusOutlined, SwapOutlined, SettingOutlined, CompressOutlined, ExpandOutlined, CloseOutlined, RadarChartOutlined } from '@ant-design/icons';
+import { PlusOutlined, SwapOutlined, SettingOutlined, CompressOutlined, ExpandOutlined, CloseOutlined, RadarChartOutlined, AimOutlined } from '@ant-design/icons';
 import { AjaxGroup } from '../../types/registry';
 import { withErrorBoundary } from '../../common/withErrorBoundary';
 import ModuleSection from '../ModuleSection';
@@ -104,29 +104,35 @@ const OperationsRail = ({
       >
         <div className="rail-switch-list">
           <div className="rail-switch-item">
-            <div>
-              <strong>Interceptor</strong>
-            </div>
             <Switch checked={ajaxToolsSwitchOn} onChange={onToggleAjaxToolsSwitch} />
+            <strong>Interceptor</strong>
           </div>
           <div className="rail-switch-item">
-            <div>
-              <strong>CSR Mode</strong>
-            </div>
             <Switch
               loading={csrModeLoading || csrModeToggling}
               checked={csrModeEnabled}
               onChange={onToggleCsrMode}
             />
+            <strong>CSR Mode</strong>
           </div>
           <div className="rail-switch-item">
-            <div>
-              <strong>Floating Rules</strong>
-            </div>
             <Switch
               checked={floatingRulesEnabled}
               onChange={onToggleFloatingRules}
             />
+            <strong>Floating Rules</strong>
+          </div>
+          <div className="rail-switch-item">
+            <Button
+              type="text"
+              size="small"
+              icon={<AimOutlined />}
+              onClick={() => {
+                window.parent?.postMessage({ type: 'MOCKKIT_INSPECT_DOM' }, '*');
+              }}
+              title="Inspect a DOM node and read its computed styles"
+            />
+            <strong>DOM Inspect</strong>
           </div>
         </div>
 
@@ -152,6 +158,17 @@ const OperationsRail = ({
               </span>
             )}
           </div>
+          {currentHostname && !currentTabMatched && (
+            <Button
+              size="small"
+              type="primary"
+              ghost
+              className="domain-whitelist__add-current"
+              onClick={() => onAddDomain(currentHostname)}
+            >
+              Add "{currentHostname}"
+            </Button>
+          )}
           <div className="domain-whitelist__tags">
             {domainWhitelist.map((pattern) => (
               <Tag
