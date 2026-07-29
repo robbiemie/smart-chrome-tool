@@ -50,7 +50,6 @@
 .workbench-content-grid,
 .rule-card__header,
 .rule-card__footer,
-.rule-detail-panel__actions,
 .workbench-status,
 .detail-section,
 .field-block,
@@ -69,7 +68,6 @@
 .workbench-header__actions,
 .rule-card__header,
 .rule-card__footer,
-.rule-detail-panel__actions,
 .workbench-status,
 .detail-section,
 .rail-switch-item {
@@ -114,8 +112,7 @@
 .workbench-status,
 .workbench-header__actions,
 .rule-card__toolbar,
-.rule-card__footer,
-.rule-detail-panel__actions {
+.rule-card__footer {
   gap: 10px;
 }
 
@@ -234,7 +231,6 @@
 .rail-panel,
 .workbench-main,
 .group-workbench,
-.rule-detail-panel,
 .workbench-header-shell {
   border: 1px solid rgb(27 40 34 / 8%);
   background: rgb(255 255 255 / 76%);
@@ -244,7 +240,6 @@
 
 .rail-panel,
 .group-workbench,
-.rule-detail-panel,
 .workbench-header-shell {
   border-radius: 28px;
   padding: 20px;
@@ -828,25 +823,6 @@
   margin-top: 12px;
 }
 
-.rule-detail-panel {
-  display: flex;
-  width: 360px;
-  max-width: 100%;
-  min-width: 0;
-  flex: 0 1 360px;
-  flex-direction: column;
-  gap: 12px;
-  overflow: hidden;
-}
-
-.rule-detail-panel__tags {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  gap: 8px;
-  min-width: 0;
-}
-
 .detail-section {
   flex-direction: column;
   align-items: stretch;
@@ -868,21 +844,7 @@
   line-height: 1.6;
 }
 
-.rule-detail-panel__actions {
-  margin-top: auto;
-  flex-wrap: wrap;
-}
-
-/* RuleDetailPanel body uses flex column so detail-sections get consistent
-   vertical rhythm and the actions block can pin to the bottom via auto margin. */
-.rule-detail-panel .module-section__body {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
 .group-workbench--empty,
-.rule-detail-panel--empty,
 .empty-workbench {
   display: flex;
   align-items: center;
@@ -898,7 +860,6 @@
 .workbench-header,
 .rail-panel,
 .rule-card__header,
-.rule-detail-panel__actions,
 .workbench-header-shell {
   min-width: 0;
 }
@@ -909,8 +870,7 @@
     flex-direction: column;
   }
 
-  .operations-rail,
-  .rule-detail-panel {
+  .operations-rail {
     width: auto;
     min-width: 0;
     flex-basis: auto;
@@ -930,7 +890,6 @@
   .workbench-main,
   .rail-panel,
   .group-workbench,
-  .rule-detail-panel,
   .workbench-header-shell {
     border-radius: 16px;
   }
@@ -947,8 +906,7 @@
     grid-column: span 1;
   }
 
-  .workbench-header__content,
-  .rule-detail-panel__tags {
+  .workbench-header__content {
     flex-direction: column;
     align-items: flex-start;
   }

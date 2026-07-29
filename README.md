@@ -111,8 +111,6 @@ Important frontend files:
   Top header with status tags, Import JSON, and Page Headers entry points.
 - `html/iframePage/main/components/GroupWorkbench/`
   Active group editor with rule cards, Add Rule, and Remove Group.
-- `html/iframePage/main/components/RuleDetailPanel/`
-  Right detail panel for the focused rule with Edit Response / Edit Request / Edit Payload.
 - `html/iframePage/main/components/ModifyDataModal/`
   Advanced request and response editor modal backed by Monaco Editor.
 
@@ -265,19 +263,6 @@ The middle panel (`GroupWorkbench`) is the active group editor. It allows you to
 - Remove the group via `Remove Group`
 - Edit rule fields inline
 - Open advanced request/response editors from each rule card
-
-### 4. Right detail panel
-
-The right panel (`RuleDetailPanel`) shows the currently focused rule:
-
-- Request matcher
-- Replacement URL
-- Replacement status code
-- Header snapshot
-- Payload script
-- Response definition
-
-It also exposes `Edit Response`, `Edit Request`, and `Edit Payload` shortcuts so you can inspect the active rule without repeatedly opening modal editors.
 
 ## Floating Rules Panel
 

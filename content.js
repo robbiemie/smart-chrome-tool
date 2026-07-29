@@ -1,6 +1,6 @@
 
 const AJAX_TOOLS_RUNTIME_STATE_KEY = '__ajaxToolsRuntimeState__';
-const AJAX_TOOLS_STYLE_ID = 'robbie-ajax-interceptor-runtime-style';
+const AJAX_TOOLS_STYLE_ID = 'mockkit-interceptor-runtime-style';
 
 const ajaxToolsRuntimeState = window[AJAX_TOOLS_RUNTIME_STATE_KEY] || (window[AJAX_TOOLS_RUNTIME_STATE_KEY] = {
   panelContainer: null,
@@ -91,7 +91,7 @@ function injectedStyle(styleContent) {
   }
 }
 injectedStyle(`
-  .robbie-ajax-interceptor-container {
+  .mockkit-interceptor-container {
     display: flex;
     flex-direction: column;
     height: 100% !important;
@@ -116,7 +116,7 @@ injectedStyle(`
     background: linear-gradient(180deg, rgb(248 245 238 / 80%), rgb(255 255 255 / 90%));
     border-bottom: 1px solid rgb(27 40 34 / 5%);
   }
-  .robbie-ajax-interceptor-iframe {
+  .mockkit-interceptor-iframe {
     border: none;
     height: calc(100% - 40px);
     width: 100%;
@@ -139,7 +139,7 @@ injectedStyle(`
   .ajax-interceptor-mr-8 {
     margin-right: 8px;
   }
-  .robbie-ajax-floating-rules {
+  .mockkit-floating-rules {
     position: fixed !important;
     right: 24px !important;
     bottom: 24px !important;
@@ -159,7 +159,7 @@ injectedStyle(`
     color: #1b2822;
     transition: box-shadow 0.2s ease;
   }
-  .robbie-ajax-floating-rules__header {
+  .mockkit-floating-rules__header {
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -173,22 +173,22 @@ injectedStyle(`
     user-select: none;
     letter-spacing: 0.02em;
   }
-  .robbie-ajax-floating-rules__header--dragging {
+  .mockkit-floating-rules__header--dragging {
     cursor: grabbing;
     background: linear-gradient(135deg, rgb(26 155 127 / 6%), rgb(247 244 236 / 70%));
   }
-  .robbie-ajax-floating-rules__header-left {
+  .mockkit-floating-rules__header-left {
     display: flex;
     align-items: baseline;
     gap: 8px;
     min-width: 0;
   }
-  .robbie-ajax-floating-rules__title {
+  .mockkit-floating-rules__title {
     display: flex;
     align-items: center;
     gap: 6px;
   }
-  .robbie-ajax-floating-rules__title::before {
+  .mockkit-floating-rules__title::before {
     content: '';
     width: 6px;
     height: 6px;
@@ -196,7 +196,7 @@ injectedStyle(`
     background: #1a9b7f;
     flex-shrink: 0;
   }
-  .robbie-ajax-floating-rules__count {
+  .mockkit-floating-rules__count {
     font-weight: 500;
     font-size: 11px;
     color: rgb(27 40 34 / 45%);
@@ -204,13 +204,13 @@ injectedStyle(`
     border-radius: 999px;
     background: rgb(27 40 34 / 5%);
   }
-  .robbie-ajax-floating-rules__header-actions {
+  .mockkit-floating-rules__header-actions {
     display: flex;
     align-items: center;
     gap: 6px;
     flex-shrink: 0;
   }
-  .robbie-ajax-floating-rules__csr-btn {
+  .mockkit-floating-rules__csr-btn {
     flex-shrink: 0;
     padding: 3px 8px;
     border: none;
@@ -223,19 +223,19 @@ injectedStyle(`
     line-height: 1.4;
     transition: all 0.15s ease;
   }
-  .robbie-ajax-floating-rules__csr-btn:hover {
+  .mockkit-floating-rules__csr-btn:hover {
     background: rgb(27 40 34 / 8%);
     color: #1b2822;
   }
-  .robbie-ajax-floating-rules__csr-btn--on {
+  .mockkit-floating-rules__csr-btn--on {
     background: rgb(26 155 127 / 14%);
     color: #1a9b7f;
   }
-  .robbie-ajax-floating-rules__csr-btn--on:hover {
+  .mockkit-floating-rules__csr-btn--on:hover {
     background: rgb(26 155 127 / 22%);
     color: #1a9b7f;
   }
-  .robbie-ajax-floating-rules__update-btn {
+  .mockkit-floating-rules__update-btn {
     position: relative;
     flex-shrink: 0;
     padding: 3px 8px;
@@ -249,18 +249,18 @@ injectedStyle(`
     line-height: 1.4;
     transition: all 0.15s ease;
   }
-  .robbie-ajax-floating-rules__update-btn:hover {
+  .mockkit-floating-rules__update-btn:hover {
     background: rgb(27 40 34 / 8%);
     color: #1b2822;
   }
-  .robbie-ajax-floating-rules__update-btn--available {
+  .mockkit-floating-rules__update-btn--available {
     color: #1a9b7f;
   }
-  .robbie-ajax-floating-rules__update-btn--available:hover {
+  .mockkit-floating-rules__update-btn--available:hover {
     background: rgb(26 155 127 / 14%);
     color: #1a9b7f;
   }
-  .robbie-ajax-floating-rules__update-dot {
+  .mockkit-floating-rules__update-dot {
     position: absolute;
     top: 2px;
     right: 2px;
@@ -272,28 +272,28 @@ injectedStyle(`
     box-shadow: 0 0 4px rgb(255 77 79 / 60%);
     display: none;
   }
-  .robbie-ajax-floating-rules__update-btn--available .robbie-ajax-floating-rules__update-dot {
+  .mockkit-floating-rules__update-btn--available .mockkit-floating-rules__update-dot {
     display: block;
   }
-  .robbie-ajax-floating-rules__update-btn--checking {
+  .mockkit-floating-rules__update-btn--checking {
     color: rgb(27 40 34 / 35%);
     cursor: wait;
   }
-  .robbie-ajax-floating-rules__csr-btn:hover {
+  .mockkit-floating-rules__csr-btn:hover {
     border-color: rgb(27 40 34 / 24%);
     color: rgb(27 40 34 / 75%);
   }
-  .robbie-ajax-floating-rules__csr-btn--on {
+  .mockkit-floating-rules__csr-btn--on {
     background: linear-gradient(135deg, #1a9b7f, rgb(26 155 127 / 85%));
     border-color: #1a9b7f;
     color: #fff;
     box-shadow: 0 2px 8px rgb(26 155 127 / 30%);
   }
-  .robbie-ajax-floating-rules__csr-btn--on:hover {
+  .mockkit-floating-rules__csr-btn--on:hover {
     color: #fff;
     border-color: #1a9b7f;
   }
-  .robbie-ajax-floating-rules__collapse-btn {
+  .mockkit-floating-rules__collapse-btn {
     flex-shrink: 0;
     width: 24px;
     height: 24px;
@@ -309,27 +309,27 @@ injectedStyle(`
     line-height: 1;
     transition: all 0.15s ease;
   }
-  .robbie-ajax-floating-rules__collapse-btn:hover {
+  .mockkit-floating-rules__collapse-btn:hover {
     background: rgb(27 40 34 / 6%);
     color: rgb(27 40 34 / 70%);
   }
-  .robbie-ajax-floating-rules__list {
+  .mockkit-floating-rules__list {
     overflow-y: auto;
     flex: 1;
     min-height: 0;
     padding: 6px;
   }
-  .robbie-ajax-floating-rules__list::-webkit-scrollbar {
+  .mockkit-floating-rules__list::-webkit-scrollbar {
     width: 6px;
   }
-  .robbie-ajax-floating-rules__list::-webkit-scrollbar-thumb {
+  .mockkit-floating-rules__list::-webkit-scrollbar-thumb {
     background: rgb(27 40 34 / 12%);
     border-radius: 999px;
   }
-  .robbie-ajax-floating-rules__list::-webkit-scrollbar-track {
+  .mockkit-floating-rules__list::-webkit-scrollbar-track {
     background: transparent;
   }
-  .robbie-ajax-floating-rules__item {
+  .mockkit-floating-rules__item {
     display: flex;
     align-items: center;
     gap: 10px;
@@ -337,11 +337,11 @@ injectedStyle(`
     border-radius: 10px;
     transition: background 0.15s ease;
   }
-  .robbie-ajax-floating-rules__item:hover {
+  .mockkit-floating-rules__item:hover {
     background: rgb(26 155 127 / 5%);
   }
   /* Custom toggle switch — styled checkbox pill */
-  .robbie-ajax-floating-rules__item-toggle {
+  .mockkit-floating-rules__item-toggle {
     flex-shrink: 0;
     appearance: none;
     -webkit-appearance: none;
@@ -354,7 +354,7 @@ injectedStyle(`
     transition: background 0.2s ease;
     margin: 0;
   }
-  .robbie-ajax-floating-rules__item-toggle::after {
+  .mockkit-floating-rules__item-toggle::after {
     content: '';
     position: absolute;
     top: 2px;
@@ -366,13 +366,13 @@ injectedStyle(`
     box-shadow: 0 1px 3px rgb(0 0 0 / 20%);
     transition: transform 0.2s ease;
   }
-  .robbie-ajax-floating-rules__item-toggle:checked {
+  .mockkit-floating-rules__item-toggle:checked {
     background: #1a9b7f;
   }
-  .robbie-ajax-floating-rules__item-toggle:checked::after {
+  .mockkit-floating-rules__item-toggle:checked::after {
     transform: translateX(13px);
   }
-  .robbie-ajax-floating-rules__item-edit {
+  .mockkit-floating-rules__item-edit {
     flex-shrink: 0;
     padding: 3px 8px;
     border: none;
@@ -386,14 +386,14 @@ injectedStyle(`
     opacity: 0;
     transition: all 0.15s ease;
   }
-  .robbie-ajax-floating-rules__item:hover .robbie-ajax-floating-rules__item-edit {
+  .mockkit-floating-rules__item:hover .mockkit-floating-rules__item-edit {
     opacity: 1;
   }
-  .robbie-ajax-floating-rules__item-edit:hover {
+  .mockkit-floating-rules__item-edit:hover {
     background: rgb(26 155 127 / 12%);
     color: #1a9b7f;
   }
-  .robbie-ajax-floating-rules__item-fork {
+  .mockkit-floating-rules__item-fork {
     flex-shrink: 0;
     padding: 3px 8px;
     border: none;
@@ -407,14 +407,14 @@ injectedStyle(`
     opacity: 0;
     transition: all 0.15s ease;
   }
-  .robbie-ajax-floating-rules__item:hover .robbie-ajax-floating-rules__item-fork {
+  .mockkit-floating-rules__item:hover .mockkit-floating-rules__item-fork {
     opacity: 1;
   }
-  .robbie-ajax-floating-rules__item-fork:hover {
+  .mockkit-floating-rules__item-fork:hover {
     background: rgb(27 40 34 / 8%);
     color: #1b2822;
   }
-  .robbie-ajax-floating-rules__item-inline-edit {
+  .mockkit-floating-rules__item-inline-edit {
     flex-shrink: 0;
     width: 26px;
     height: 26px;
@@ -429,23 +429,23 @@ injectedStyle(`
     opacity: 0;
     transition: all 0.15s ease;
   }
-  .robbie-ajax-floating-rules__item:hover .robbie-ajax-floating-rules__item-inline-edit {
+  .mockkit-floating-rules__item:hover .mockkit-floating-rules__item-inline-edit {
     opacity: 1;
   }
-  .robbie-ajax-floating-rules__item-inline-edit:hover {
+  .mockkit-floating-rules__item-inline-edit:hover {
     background: rgb(27 40 34 / 8%);
     color: #1b2822;
   }
-  .robbie-ajax-floating-rules__item-inline-edit svg {
+  .mockkit-floating-rules__item-inline-edit svg {
     width: 13px;
     height: 13px;
   }
-  .robbie-ajax-floating-rules__item-inline-edit--active {
+  .mockkit-floating-rules__item-inline-edit--active {
     background: rgb(26 155 127 / 14%);
     color: #1a9b7f;
     opacity: 1;
   }
-  .robbie-ajax-floating-rules__item-input {
+  .mockkit-floating-rules__item-input {
     width: 100%;
     font-family: Menlo, Monaco, Consolas, monospace;
     font-size: 11px;
@@ -457,17 +457,17 @@ injectedStyle(`
     outline: none;
     line-height: 1.4;
   }
-  .robbie-ajax-floating-rules__item-input:focus {
+  .mockkit-floating-rules__item-input:focus {
     border-color: #1a9b7f;
     box-shadow: 0 0 0 2px rgb(26 155 127 / 15%);
   }
-  .robbie-ajax-floating-rules__item-input--note {
+  .mockkit-floating-rules__item-input--note {
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
     font-size: 10px;
     margin-top: 4px;
   }
   /* Hit indicator: green dot that lights up once the rule matches a request. */
-  .robbie-ajax-floating-rules__item-hit {
+  .mockkit-floating-rules__item-hit {
     flex-shrink: 0;
     width: 8px;
     height: 8px;
@@ -475,15 +475,15 @@ injectedStyle(`
     background: rgb(27 40 34 / 12%);
     transition: background 0.2s ease, box-shadow 0.2s ease;
   }
-  .robbie-ajax-floating-rules__item-hit--on {
+  .mockkit-floating-rules__item-hit--on {
     background: #1a9b7f;
     box-shadow: 0 0 6px rgb(26 155 127 / 55%);
   }
-  .robbie-ajax-floating-rules__item-body {
+  .mockkit-floating-rules__item-body {
     flex: 1;
     min-width: 0;
   }
-  .robbie-ajax-floating-rules__item-url {
+  .mockkit-floating-rules__item-url {
     font-family: Menlo, Monaco, Consolas, monospace;
     font-size: 11px;
     color: #1b2822;
@@ -492,7 +492,7 @@ injectedStyle(`
     white-space: nowrap;
     line-height: 1.4;
   }
-  .robbie-ajax-floating-rules__item-note {
+  .mockkit-floating-rules__item-note {
     color: rgb(27 40 34 / 45%);
     font-size: 10px;
     margin-top: 2px;
@@ -500,7 +500,7 @@ injectedStyle(`
     text-overflow: ellipsis;
     white-space: nowrap;
   }
-  .robbie-ajax-floating-rules__empty {
+  .mockkit-floating-rules__empty {
     padding: 32px 16px;
     text-align: center;
     color: rgb(27 40 34 / 35%);
@@ -508,17 +508,17 @@ injectedStyle(`
     line-height: 1.6;
   }
   /* Collapsed state: shrink to a compact mock grid widget. */
-  .robbie-ajax-floating-rules--collapsed {
+  .mockkit-floating-rules--collapsed {
     width: auto !important;
     max-height: none !important;
     padding: 10px !important;
     border-radius: 14px !important;
   }
-  .robbie-ajax-floating-rules--collapsed .robbie-ajax-floating-rules__header,
-  .robbie-ajax-floating-rules--collapsed .robbie-ajax-floating-rules__list {
+  .mockkit-floating-rules--collapsed .mockkit-floating-rules__header,
+  .mockkit-floating-rules--collapsed .mockkit-floating-rules__list {
     display: none !important;
   }
-  .robbie-ajax-floating-rules__mock {
+  .mockkit-floating-rules__mock {
     display: none;
     cursor: pointer;
     flex-direction: column;
@@ -527,33 +527,33 @@ injectedStyle(`
     padding: 2px;
     transition: transform 0.15s ease;
   }
-  .robbie-ajax-floating-rules__mock:hover {
+  .mockkit-floating-rules__mock:hover {
     transform: scale(1.05);
   }
-  .robbie-ajax-floating-rules--collapsed .robbie-ajax-floating-rules__mock {
+  .mockkit-floating-rules--collapsed .mockkit-floating-rules__mock {
     display: flex;
   }
-  .robbie-ajax-floating-rules__mock-grid {
+  .mockkit-floating-rules__mock-grid {
     display: grid;
     grid-template-columns: repeat(3, 9px);
     grid-auto-rows: 9px;
     gap: 3px;
   }
-  .robbie-ajax-floating-rules__mock-cell {
+  .mockkit-floating-rules__mock-cell {
     width: 9px;
     height: 9px;
     border-radius: 3px;
     background: rgb(27 40 34 / 8%);
     transition: background 0.2s ease;
   }
-  .robbie-ajax-floating-rules__mock-cell--on {
+  .mockkit-floating-rules__mock-cell--on {
     background: #1a9b7f;
     box-shadow: 0 0 4px rgb(26 155 127 / 40%);
   }
-  .robbie-ajax-floating-rules__mock-cell--off {
+  .mockkit-floating-rules__mock-cell--off {
     background: rgb(27 40 34 / 20%);
   }
-  .robbie-ajax-floating-rules__mock-count {
+  .mockkit-floating-rules__mock-count {
     font-size: 10px;
     font-weight: 700;
     color: #1b2822;
@@ -665,7 +665,7 @@ function pipButton (container) {
     }
     pipIcon.className = className;
     chrome.storage.local.set({ ajaxToolsPipBtnNewHideFlag: true });
-    const iframe = document.querySelector('.robbie-ajax-interceptor-iframe');
+    const iframe = document.querySelector('.mockkit-interceptor-iframe');
     const pipWindow = await documentPictureInPicture.requestWindow({width: 580, height: 680});
     // css
     const allCSS = [...document.styleSheets]
@@ -817,7 +817,7 @@ window.addEventListener('message', (event) => {
   // Request Sniffer module can list it. The page script runs in the page
   // context and cannot message the iframe directly.
   if (data.type === 'AJAX_TOOLS_REQUEST_CAPTURED' && data.payload) {
-    const iframe = document.querySelector('.robbie-ajax-interceptor-iframe');
+    const iframe = document.querySelector('.mockkit-interceptor-iframe');
     if (iframe && iframe.contentWindow) {
       iframe.contentWindow.postMessage({
         type: 'AJAX_TOOLS_REQUEST_CAPTURED',
@@ -856,7 +856,7 @@ function applyFloatingPanelState() {
 
   panel.style.display = 'flex';
   panel.classList.toggle(
-    'robbie-ajax-floating-rules--collapsed',
+    'mockkit-floating-rules--collapsed',
     ajaxToolsRuntimeState.floatingRulesCollapsed
   );
 }
@@ -880,7 +880,7 @@ function toggleFloatingRulesCollapsed() {
 // Drag the floating panel by its header. Position is kept in memory only —
 // a page refresh resets it to the default bottom-right corner.
 function bindFloatingPanelDrag(panel) {
-  const header = panel.querySelector('.robbie-ajax-floating-rules__header');
+  const header = panel.querySelector('.mockkit-floating-rules__header');
   if (!header || header.dataset.dragBound === '1') return;
   header.dataset.dragBound = '1';
 
@@ -909,7 +909,7 @@ function bindFloatingPanelDrag(panel) {
   const onUp = () => {
     if (!dragging) return;
     dragging = false;
-    header.classList.remove('robbie-ajax-floating-rules__header--dragging');
+    header.classList.remove('mockkit-floating-rules__header--dragging');
     document.removeEventListener('mousemove', onMove);
     document.removeEventListener('mouseup', onUp);
   };
@@ -918,7 +918,7 @@ function bindFloatingPanelDrag(panel) {
     // Ignore drag when clicking on buttons (collapse / csr) inside the header.
     if (event.target.closest('button')) return;
     dragging = true;
-    header.classList.add('robbie-ajax-floating-rules__header--dragging');
+    header.classList.add('mockkit-floating-rules__header--dragging');
     const rect = panel.getBoundingClientRect();
     originLeft = rect.left;
     originTop = rect.top;
@@ -939,14 +939,14 @@ function syncFloatingCsrBtnState(btn) {
     const on = Boolean(response.csrEnabled);
     btn.textContent = on ? 'CSR' : 'SSR';
     btn.title = on ? 'Currently CSR. Click to switch to SSR.' : 'Currently SSR. Click to switch to CSR.';
-    btn.classList.toggle('robbie-ajax-floating-rules__csr-btn--on', on);
+    btn.classList.toggle('mockkit-floating-rules__csr-btn--on', on);
   });
 }
 
 function createFloatingCsrButton() {
   const btn = document.createElement('button');
   btn.type = 'button';
-  btn.className = 'robbie-ajax-floating-rules__csr-btn';
+  btn.className = 'mockkit-floating-rules__csr-btn';
   btn.textContent = 'SSR';
   btn.title = 'Toggle CSR/SSR render mode';
   btn.addEventListener('click', () => {
@@ -958,7 +958,7 @@ function createFloatingCsrButton() {
         if (!setResponse?.ok) return;
         // Optimistic UI update — the page will reload shortly.
         btn.textContent = nextCsr ? 'CSR' : 'SSR';
-        btn.classList.toggle('robbie-ajax-floating-rules__csr-btn--on', nextCsr);
+        btn.classList.toggle('mockkit-floating-rules__csr-btn--on', nextCsr);
       });
     });
   });
@@ -972,12 +972,12 @@ function createFloatingCsrButton() {
 function createFloatingUpdateButton() {
   const btn = document.createElement('button');
   btn.type = 'button';
-  btn.className = 'robbie-ajax-floating-rules__update-btn';
+  btn.className = 'mockkit-floating-rules__update-btn';
   btn.textContent = 'Update';
   btn.title = 'Check for a newer version';
 
   const dot = document.createElement('span');
-  dot.className = 'robbie-ajax-floating-rules__update-dot';
+  dot.className = 'mockkit-floating-rules__update-dot';
   btn.appendChild(dot);
 
   // Reflect the cached update state (if any) immediately on render so the
@@ -985,7 +985,7 @@ function createFloatingUpdateButton() {
   chrome.storage.local.get(['ajaxToolsUpdateAvailable'], (result) => {
     const info = result?.ajaxToolsUpdateAvailable;
     if (info?.hasUpdate) {
-      btn.classList.add('robbie-ajax-floating-rules__update-btn--available');
+      btn.classList.add('mockkit-floating-rules__update-btn--available');
       btn.title = `New version ${info.remoteVersion} available. Click to download & install.`;
     }
   });
@@ -995,17 +995,17 @@ function createFloatingUpdateButton() {
     if (!changes.ajaxToolsUpdateAvailable) return;
     const info = changes.ajaxToolsUpdateAvailable.newValue;
     if (info?.hasUpdate) {
-      btn.classList.add('robbie-ajax-floating-rules__update-btn--available');
+      btn.classList.add('mockkit-floating-rules__update-btn--available');
       btn.title = `New version ${info.remoteVersion} available. Click to download & install.`;
     } else {
-      btn.classList.remove('robbie-ajax-floating-rules__update-btn--available');
+      btn.classList.remove('mockkit-floating-rules__update-btn--available');
       btn.title = 'Check for a newer version';
     }
   };
   chrome.storage.onChanged.addListener(onStorageChange);
 
   btn.addEventListener('click', () => {
-    if (btn.classList.contains('robbie-ajax-floating-rules__update-btn--checking')) return;
+    if (btn.classList.contains('mockkit-floating-rules__update-btn--checking')) return;
 
     // If an update is already known, hand off to the workbench iframe which
     // runs the download/unzip/write flow with a live progress bar. We reveal
@@ -1018,7 +1018,7 @@ function createFloatingUpdateButton() {
           mainPanel.style.setProperty('transform', 'translateX(0)', 'important');
           chrome.storage.local.set({ iframeVisible: true });
         }
-        const iframe = document.querySelector('.robbie-ajax-interceptor-iframe');
+        const iframe = document.querySelector('.mockkit-interceptor-iframe');
         if (iframe?.contentWindow) {
           iframe.contentWindow.postMessage(
             {
@@ -1033,18 +1033,18 @@ function createFloatingUpdateButton() {
       }
 
       // Otherwise force a recheck and reflect the result.
-      btn.classList.add('robbie-ajax-floating-rules__update-btn--checking');
+      btn.classList.add('mockkit-floating-rules__update-btn--checking');
       chrome.runtime.sendMessage({ type: 'CHECK_UPDATE', force: true }, (response) => {
-        btn.classList.remove('robbie-ajax-floating-rules__update-btn--checking');
+        btn.classList.remove('mockkit-floating-rules__update-btn--checking');
         if (chrome.runtime.lastError || !response) {
           btn.title = 'Update check failed';
           return;
         }
         if (response.hasUpdate) {
-          btn.classList.add('robbie-ajax-floating-rules__update-btn--available');
+          btn.classList.add('mockkit-floating-rules__update-btn--available');
           btn.title = `New version ${response.remoteVersion} available. Click to install.`;
         } else {
-          btn.classList.remove('robbie-ajax-floating-rules__update-btn--available');
+          btn.classList.remove('mockkit-floating-rules__update-btn--available');
           btn.title = response.error
             ? `Check failed: ${response.error}`
             : `You're on the latest version (${response.localVersion})`;
@@ -1065,9 +1065,9 @@ function renderFloatingRules() {
       ? result[FLOATING_SELECTED_GROUP_KEY]
       : 0;
     const group = ajaxDataList[groupIndex] || null;
-    const listEl = panel.querySelector('.robbie-ajax-floating-rules__list');
-    const headerEl = panel.querySelector('.robbie-ajax-floating-rules__title');
-    const countEl = panel.querySelector('.robbie-ajax-floating-rules__count');
+    const listEl = panel.querySelector('.mockkit-floating-rules__list');
+    const headerEl = panel.querySelector('.mockkit-floating-rules__title');
+    const countEl = panel.querySelector('.mockkit-floating-rules__count');
 
     const groupTitle = group?.summaryText || `Group ${groupIndex + 1}`;
     if (headerEl) headerEl.textContent = groupTitle;
@@ -1078,20 +1078,20 @@ function renderFloatingRules() {
     // Render the collapsed mock grid: a 3x3 cell matrix visualizing rule
     // states (green = enabled, gray = disabled, faint = empty slot) plus an
     // enabled/total counter. Shown only when the panel is collapsed.
-    const mockGridEl = panel.querySelector('.robbie-ajax-floating-rules__mock-grid');
-    const mockCountEl = panel.querySelector('.robbie-ajax-floating-rules__mock-count');
+    const mockGridEl = panel.querySelector('.mockkit-floating-rules__mock-grid');
+    const mockCountEl = panel.querySelector('.mockkit-floating-rules__mock-count');
     if (mockGridEl) {
       mockGridEl.innerHTML = '';
       const enabledCount = interfaceList.filter((r) => r.open !== false).length;
       for (let i = 0; i < 9; i += 1) {
         const cell = document.createElement('span');
-        cell.className = 'robbie-ajax-floating-rules__mock-cell';
+        cell.className = 'mockkit-floating-rules__mock-cell';
         const rule = interfaceList[i];
         if (rule) {
           cell.classList.add(
             rule.open !== false
-              ? 'robbie-ajax-floating-rules__mock-cell--on'
-              : 'robbie-ajax-floating-rules__mock-cell--off'
+              ? 'mockkit-floating-rules__mock-cell--on'
+              : 'mockkit-floating-rules__mock-cell--off'
           );
         }
         mockGridEl.appendChild(cell);
@@ -1105,30 +1105,30 @@ function renderFloatingRules() {
     if (!listEl) return;
 
     if (interfaceList.length < 1) {
-      listEl.innerHTML = '<div class="robbie-ajax-floating-rules__empty">No rules in this group</div>';
+      listEl.innerHTML = '<div class="mockkit-floating-rules__empty">No rules in this group</div>';
       return;
     }
 
     listEl.innerHTML = '';
     interfaceList.forEach((ruleItem, ruleIndex) => {
       const row = document.createElement('div');
-      row.className = 'robbie-ajax-floating-rules__item';
+      row.className = 'mockkit-floating-rules__item';
       row.dataset.ruleKey = ruleItem.key || '';
 
       // Hit indicator: a green dot shown when this rule has matched at
       // least one request during the current page session.
       const hitDot = document.createElement('span');
-      hitDot.className = 'robbie-ajax-floating-rules__item-hit';
+      hitDot.className = 'mockkit-floating-rules__item-hit';
       hitDot.title = 'This rule has matched a request';
       if (ajaxToolsRuntimeState.hitRuleKeys[ruleItem.key]) {
-        hitDot.classList.add('robbie-ajax-floating-rules__item-hit--on');
+        hitDot.classList.add('mockkit-floating-rules__item-hit--on');
       }
 
       // Toggle switch — writes back to storage so the React workbench syncs.
       const toggle = document.createElement('input');
       toggle.type = 'checkbox';
       toggle.checked = ruleItem.open !== false;
-      toggle.className = 'robbie-ajax-floating-rules__item-toggle';
+      toggle.className = 'mockkit-floating-rules__item-toggle';
       toggle.addEventListener('change', () => {
         chrome.storage.local.get(['ajaxDataList'], (storageResult) => {
           const nextList = storageResult?.ajaxDataList || [];
@@ -1148,16 +1148,16 @@ function renderFloatingRules() {
       });
 
       const body = document.createElement('div');
-      body.className = 'robbie-ajax-floating-rules__item-body';
+      body.className = 'mockkit-floating-rules__item-body';
 
       const urlLine = document.createElement('div');
-      urlLine.className = 'robbie-ajax-floating-rules__item-url';
+      urlLine.className = 'mockkit-floating-rules__item-url';
       urlLine.textContent = ruleItem.request || '(empty)';
       body.appendChild(urlLine);
 
       if (ruleItem.requestDes) {
         const note = document.createElement('div');
-        note.className = 'robbie-ajax-floating-rules__item-note';
+        note.className = 'mockkit-floating-rules__item-note';
         note.textContent = ruleItem.requestDes;
         body.appendChild(note);
       }
@@ -1166,7 +1166,7 @@ function renderFloatingRules() {
       // and ask the iframe to open the edit modal for this rule.
       const editBtn = document.createElement('button');
       editBtn.type = 'button';
-      editBtn.className = 'robbie-ajax-floating-rules__item-edit';
+      editBtn.className = 'mockkit-floating-rules__item-edit';
       editBtn.textContent = 'Edit';
       editBtn.title = 'Edit this rule in the workbench';
       editBtn.addEventListener('click', (event) => {
@@ -1176,7 +1176,7 @@ function renderFloatingRules() {
           mainPanel.style.setProperty('transform', 'translateX(0)', 'important');
           chrome.storage.local.set({ iframeVisible: true });
         }
-        const iframe = document.querySelector('.robbie-ajax-interceptor-iframe');
+        const iframe = document.querySelector('.mockkit-interceptor-iframe');
         if (iframe?.contentWindow) {
           iframe.contentWindow.postMessage(
             { type: 'AJAX_TOOLS_OPEN_EDIT', groupIndex, ruleIndex },
@@ -1195,7 +1195,7 @@ function renderFloatingRules() {
 
       const inlineEditBtn = document.createElement('button');
       inlineEditBtn.type = 'button';
-      inlineEditBtn.className = 'robbie-ajax-floating-rules__item-inline-edit';
+      inlineEditBtn.className = 'mockkit-floating-rules__item-inline-edit';
       inlineEditBtn.title = 'Edit path and note inline';
       inlineEditBtn.appendChild(pencilIcon);
 
@@ -1203,19 +1203,19 @@ function renderFloatingRules() {
       const enterInlineEdit = () => {
         if (editing) return;
         editing = true;
-        inlineEditBtn.classList.add('robbie-ajax-floating-rules__item-inline-edit--active');
+        inlineEditBtn.classList.add('mockkit-floating-rules__item-inline-edit--active');
         body.innerHTML = '';
 
         const urlInput = document.createElement('input');
         urlInput.type = 'text';
-        urlInput.className = 'robbie-ajax-floating-rules__item-input';
+        urlInput.className = 'mockkit-floating-rules__item-input';
         urlInput.value = ruleItem.request || '';
         urlInput.placeholder = 'matched url';
         body.appendChild(urlInput);
 
         const noteInput = document.createElement('input');
         noteInput.type = 'text';
-        noteInput.className = 'robbie-ajax-floating-rules__item-input robbie-ajax-floating-rules__item-input--note';
+        noteInput.className = 'mockkit-floating-rules__item-input mockkit-floating-rules__item-input--note';
         noteInput.value = ruleItem.requestDes || '';
         noteInput.placeholder = 'note';
         body.appendChild(noteInput);
@@ -1246,15 +1246,15 @@ function renderFloatingRules() {
           });
           // Optimistically restore the display; the storage listener will
           // rebuild the list shortly, keeping it in sync.
-          inlineEditBtn.classList.remove('robbie-ajax-floating-rules__item-inline-edit--active');
+          inlineEditBtn.classList.remove('mockkit-floating-rules__item-inline-edit--active');
           body.innerHTML = '';
           const restoredUrl = document.createElement('div');
-          restoredUrl.className = 'robbie-ajax-floating-rules__item-url';
+          restoredUrl.className = 'mockkit-floating-rules__item-url';
           restoredUrl.textContent = nextRequest || '(empty)';
           body.appendChild(restoredUrl);
           if (nextNote) {
             const restoredNote = document.createElement('div');
-            restoredNote.className = 'robbie-ajax-floating-rules__item-note';
+            restoredNote.className = 'mockkit-floating-rules__item-note';
             restoredNote.textContent = nextNote;
             body.appendChild(restoredNote);
           }
@@ -1267,15 +1267,15 @@ function renderFloatingRules() {
           } else if (event.key === 'Escape') {
             event.preventDefault();
             editing = false;
-            inlineEditBtn.classList.remove('robbie-ajax-floating-rules__item-inline-edit--active');
+            inlineEditBtn.classList.remove('mockkit-floating-rules__item-inline-edit--active');
             body.innerHTML = '';
             const restoredUrl = document.createElement('div');
-            restoredUrl.className = 'robbie-ajax-floating-rules__item-url';
+            restoredUrl.className = 'mockkit-floating-rules__item-url';
             restoredUrl.textContent = ruleItem.request || '(empty)';
             body.appendChild(restoredUrl);
             if (ruleItem.requestDes) {
               const restoredNote = document.createElement('div');
-              restoredNote.className = 'robbie-ajax-floating-rules__item-note';
+              restoredNote.className = 'mockkit-floating-rules__item-note';
               restoredNote.textContent = ruleItem.requestDes;
               body.appendChild(restoredNote);
             }
@@ -1319,7 +1319,7 @@ function renderFloatingRules() {
       // the user can immediately tell the copy succeeded.
       const forkBtn = document.createElement('button');
       forkBtn.type = 'button';
-      forkBtn.className = 'robbie-ajax-floating-rules__item-fork';
+      forkBtn.className = 'mockkit-floating-rules__item-fork';
       forkBtn.textContent = 'Fork';
       forkBtn.title = 'Duplicate this rule into the next slot';
       forkBtn.addEventListener('click', (event) => {
@@ -1361,12 +1361,12 @@ function renderFloatingRules() {
 function refreshFloatingHitDots() {
   const panel = ajaxToolsRuntimeState.floatingPanel;
   if (!panel) return;
-  const dots = panel.querySelectorAll('.robbie-ajax-floating-rules__item-hit');
+  const dots = panel.querySelectorAll('.mockkit-floating-rules__item-hit');
   dots.forEach((dot) => {
-    const row = dot.closest('.robbie-ajax-floating-rules__item');
+    const row = dot.closest('.mockkit-floating-rules__item');
     const key = row?.dataset?.ruleKey;
     if (key && ajaxToolsRuntimeState.hitRuleKeys[key]) {
-      dot.classList.add('robbie-ajax-floating-rules__item-hit--on');
+      dot.classList.add('mockkit-floating-rules__item-hit--on');
     }
   });
 }
@@ -1376,36 +1376,36 @@ function createFloatingRulesPanel() {
     return ajaxToolsRuntimeState.floatingPanel;
   }
 
-  const existing = document.getElementById('robbie-ajax-floating-rules');
+  const existing = document.getElementById('mockkit-floating-rules');
   if (existing) {
     ajaxToolsRuntimeState.floatingPanel = existing;
     return existing;
   }
 
   const panel = document.createElement('div');
-  panel.className = 'robbie-ajax-floating-rules';
-  panel.id = 'robbie-ajax-floating-rules';
+  panel.className = 'mockkit-floating-rules';
+  panel.id = 'mockkit-floating-rules';
 
   const header = document.createElement('div');
-  header.className = 'robbie-ajax-floating-rules__header';
+  header.className = 'mockkit-floating-rules__header';
   const headerLeft = document.createElement('div');
-  headerLeft.className = 'robbie-ajax-floating-rules__header-left';
+  headerLeft.className = 'mockkit-floating-rules__header-left';
   const title = document.createElement('span');
-  title.className = 'robbie-ajax-floating-rules__title';
+  title.className = 'mockkit-floating-rules__title';
   title.textContent = 'Rules';
   const count = document.createElement('span');
-  count.className = 'robbie-ajax-floating-rules__count';
+  count.className = 'mockkit-floating-rules__count';
   count.textContent = '0 rules';
   headerLeft.appendChild(title);
   headerLeft.appendChild(count);
   header.appendChild(headerLeft);
 
   const headerActions = document.createElement('div');
-  headerActions.className = 'robbie-ajax-floating-rules__header-actions';
+  headerActions.className = 'mockkit-floating-rules__header-actions';
   const csrBtn = createFloatingCsrButton();
   headerActions.appendChild(csrBtn);
   const collapseBtn = document.createElement('button');
-  collapseBtn.className = 'robbie-ajax-floating-rules__collapse-btn';
+  collapseBtn.className = 'mockkit-floating-rules__collapse-btn';
   collapseBtn.type = 'button';
   collapseBtn.title = 'Collapse';
   collapseBtn.textContent = '—';
@@ -1418,18 +1418,18 @@ function createFloatingRulesPanel() {
   bindFloatingPanelDrag(panel);
 
   const list = document.createElement('div');
-  list.className = 'robbie-ajax-floating-rules__list';
+  list.className = 'mockkit-floating-rules__list';
   panel.appendChild(list);
 
   // Mock grid widget — shown only in collapsed state. Clicking it expands
   // the panel back to the full list view.
   const mock = document.createElement('div');
-  mock.className = 'robbie-ajax-floating-rules__mock';
+  mock.className = 'mockkit-floating-rules__mock';
   mock.title = 'Expand rules panel';
   const mockGrid = document.createElement('div');
-  mockGrid.className = 'robbie-ajax-floating-rules__mock-grid';
+  mockGrid.className = 'mockkit-floating-rules__mock-grid';
   const mockCount = document.createElement('span');
-  mockCount.className = 'robbie-ajax-floating-rules__mock-count';
+  mockCount.className = 'mockkit-floating-rules__mock-count';
   mockCount.textContent = '0/0';
   mock.appendChild(mockGrid);
   mock.appendChild(mockCount);
@@ -1445,15 +1445,15 @@ function createPanelContainer() {
     return ajaxToolsRuntimeState.panelContainer;
   }
 
-  const existingContainer = document.getElementById('robbie-ajax-interceptor-container');
+  const existingContainer = document.getElementById('mockkit-interceptor-container');
   if (existingContainer) {
     ajaxToolsRuntimeState.panelContainer = existingContainer;
     return ajaxToolsRuntimeState.panelContainer;
   }
 
   const container = document.createElement('div');
-  container.className = 'robbie-ajax-interceptor-container';
-  container.id = 'robbie-ajax-interceptor-container';
+  container.className = 'mockkit-interceptor-container';
+  container.id = 'mockkit-interceptor-container';
   container.style.setProperty('transform', 'translateX(calc(100% + 20px))', 'important');
 
   const header = actionBar(container);
@@ -1461,7 +1461,7 @@ function createPanelContainer() {
 
   const iframe = document.createElement('iframe');
   iframe.src = chrome.runtime.getURL(`html/iframePage/dist/index.html?pageOrigin=${encodeURIComponent(window.location.origin)}`);
-  iframe.className = 'robbie-ajax-interceptor-iframe';
+  iframe.className = 'mockkit-interceptor-iframe';
   container.appendChild(iframe);
 
   ajaxToolsRuntimeState.panelContainer = container;
@@ -1486,7 +1486,7 @@ function bindPanelMessageListener(container) {
   };
 
   chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-    console.log('【content】【robbie-ajax-tools-iframe-show】receive message', request);
+    console.log('【content】【mockkit-tools-iframe-show】receive message', request);
     const {type, iframeVisible, csrEnabled} = request;
     if (type === 'PING_AJAX_TOOLS_PANEL') {
       sendResponse({ ok: true });

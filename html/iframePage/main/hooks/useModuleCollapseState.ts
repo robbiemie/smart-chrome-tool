@@ -4,7 +4,6 @@ type ModuleCollapseKey =
   | 'globalControls'
   | 'groupNavigator'
   | 'groupWorkbench'
-  | 'ruleDetailPanel'
   | 'requestSniffer';
 
 type ModuleCollapseState = Record<ModuleCollapseKey, boolean>;
@@ -15,13 +14,12 @@ const defaultModuleCollapseState: ModuleCollapseState = {
   globalControls: false,
   groupNavigator: false,
   groupWorkbench: false,
-  ruleDetailPanel: false,
   requestSniffer: false,
 };
 
 // Keys toggled by the "collapse all" shortcut. globalControls is excluded so
 // the rail with the shortcut button itself stays usable.
-const COLLAPSE_ALL_KEYS: ModuleCollapseKey[] = ['groupWorkbench', 'ruleDetailPanel'];
+const COLLAPSE_ALL_KEYS: ModuleCollapseKey[] = ['groupWorkbench'];
 
 export const useModuleCollapseState = () => {
   const [moduleCollapseState, setModuleCollapseState] = useState<ModuleCollapseState>(defaultModuleCollapseState);

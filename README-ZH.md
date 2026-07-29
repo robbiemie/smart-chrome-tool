@@ -237,7 +237,7 @@ UI 重构后，主界面分为以下几个区域：
 - 全局拦截器启用/停用开关
 - `CSR Mode` 开关 —— 切换当前标签页的渲染模式
 - `Floating Rules` 开关 —— [悬浮规则面板](#悬浮规则面板)的总开关
-- `Collapse All` / `Expand All` —— 一键折叠/展开分组工作区与规则详情面板
+- `Collapse All` / `Expand All` —— 一键折叠/展开分组工作区
 - `Import` —— 导入 JSON 规则
 - `Headers` —— 打开当前页请求头编辑器
 - `Domain Whitelist` —— 编辑[域名白名单](#域名白名单)，并实时显示当前标签页是否命中

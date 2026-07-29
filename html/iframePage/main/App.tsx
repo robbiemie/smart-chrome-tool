@@ -12,7 +12,6 @@ import { usePageHeaders } from './hooks/usePageHeaders';
 import PageHeadersModal from './components/PageHeadersModal';
 import OperationsRail from './components/OperationsRail';
 import GroupWorkbench from './components/GroupWorkbench';
-import RuleDetailPanel from './components/RuleDetailPanel';
 import { AjaxGroup, ModifyDataModalOpenProps } from './types/registry';
 import { useModuleCollapseState } from './hooks/useModuleCollapseState';
 import { usePageRenderMode } from './hooks/usePageRenderMode';
@@ -399,16 +398,6 @@ function App() {
                   onOpenModifyModal={handleOpenModifyModal}
                   onToggleCollapse={() => {
                     updateModuleCollapseState('groupWorkbench', !moduleCollapseState.groupWorkbench);
-                  }}
-                />
-                <RuleDetailPanel
-                  group={selectedGroup}
-                  groupIndex={selectedGroupIndex}
-                  selectedRuleIndex={selectedRuleIndex}
-                  collapsed={moduleCollapseState.ruleDetailPanel}
-                  onOpenModifyModal={handleOpenModifyModal}
-                  onToggleCollapse={() => {
-                    updateModuleCollapseState('ruleDetailPanel', !moduleCollapseState.ruleDetailPanel);
                   }}
                 />
               </div>
