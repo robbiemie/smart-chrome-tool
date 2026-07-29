@@ -1,5 +1,20 @@
 # Build Changelog
 
+## v0.0.32
+
+- Built At: 2026-07-29T16:58:05.020Z
+- Previous Version: v0.0.31
+- Git Branch: master
+- Git Commit: 4f62c0cd
+
+### Changed Files
+- content.js
+- html/iframePage/package-lock.json
+- html/iframePage/package.json
+- manifest.json
+- service_worker.js
+
+
 ## v0.0.31
 
 - Built At: 2026-07-29T16:49:55.008Z

@@ -961,6 +961,40 @@ injectedStyle(`
     font-family: Menlo, Monaco, Consolas, monospace;
     font-weight: 600;
   }
+  .mockkit-dom-inspector__edit-box {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 18px;
+    border: 1px solid #1a9b7f;
+    border-radius: 8px;
+    background: rgb(26 155 127 / 8%);
+    min-height: 56px;
+  }
+  .mockkit-dom-inspector__edit-box-input {
+    width: 60px;
+    text-align: center;
+    font-family: Menlo, Monaco, Consolas, monospace;
+    font-size: 13px;
+    font-weight: 600;
+    color: #1b2822;
+    border: 1px solid rgb(26 155 127 / 35%);
+    border-radius: 5px;
+    padding: 4px 6px;
+    background: rgb(255 255 255 / 95%);
+    outline: none;
+  }
+  .mockkit-dom-inspector__edit-box-input:focus {
+    border-color: #1a9b7f;
+    box-shadow: 0 0 0 2px rgb(26 155 127 / 15%);
+  }
+  .mockkit-dom-inspector__edit-box-x {
+    font-family: Menlo, Monaco, Consolas, monospace;
+    font-size: 13px;
+    font-weight: 600;
+    color: rgb(27 40 34 / 45%);
+  }
   .mockkit-dom-inspector__summary-swatch {
     display: inline-block;
     width: 12px;
@@ -1344,6 +1378,64 @@ function buildSummaryItem(label, value, swatchColor, colorMode, node) {
 
 // Build a Chrome DevTools-style box model diagram with nested margin /
 // border / padding / content layers and dimension labels.
+// Build a single editable element box showing width × height with the
+// element's background color applied. Width and height are editable inputs
+// that apply live to the node's inline style.
+function buildEditableBox(node, bgColor) {
+  const wrap = document.createElement('div');
+  wrap.className = 'mockkit-dom-inspector__box-model';
+
+  const title = document.createElement('div');
+  title.className = 'mockkit-dom-inspector__box-model-title';
+  title.textContent = 'Element Box';
+  wrap.appendChild(title);
+
+  const box = document.createElement('div');
+  box.className = 'mockkit-dom-inspector__edit-box';
+
+  // Apply the element's background color so the box visually matches.
+  if (bgColor) {
+    box.style.background = bgColor;
+  }
+
+  const rect = node.getBoundingClientRect();
+  const wInput = document.createElement('input');
+  wInput.type = 'text';
+  wInput.className = 'mockkit-dom-inspector__edit-box-input';
+  wInput.value = node ? (node.style.width || `${Math.round(rect.width)}px`) : '';
+  wInput.placeholder = 'width';
+  wInput.title = 'Edit width (pure numbers auto-append px)';
+
+  const xLabel = document.createElement('span');
+  xLabel.className = 'mockkit-dom-inspector__edit-box-x';
+  xLabel.textContent = '×';
+
+  const hInput = document.createElement('input');
+  hInput.type = 'text';
+  hInput.className = 'mockkit-dom-inspector__edit-box-input';
+  hInput.value = node ? (node.style.height || `${Math.round(rect.height)}px`) : '';
+  hInput.placeholder = 'height';
+  hInput.title = 'Edit height (pure numbers auto-append px)';
+
+  const applySize = (input, prop) => {
+    if (!node) return;
+    const raw = input.value.trim();
+    if (/^\d+(\.\d+)?$/.test(raw)) {
+      node.style[prop] = `${raw}px`;
+    } else {
+      node.style[prop] = raw;
+    }
+  };
+  wInput.addEventListener('input', () => applySize(wInput, 'width'));
+  hInput.addEventListener('input', () => applySize(hInput, 'height'));
+
+  box.appendChild(wInput);
+  box.appendChild(xLabel);
+  box.appendChild(hInput);
+  wrap.appendChild(box);
+  return wrap;
+}
+
 function buildBoxModelDiagram(box, node) {
   const wrap = document.createElement('div');
   wrap.className = 'mockkit-dom-inspector__box-model';
@@ -1589,7 +1681,6 @@ function showDomInspectorPanel(node, hint) {
 
       const summary = document.createElement('div');
       summary.className = 'mockkit-dom-inspector__summary';
-      summary.appendChild(buildSummaryItem('Size', `${core.width} × ${core.height}`, null, colorMode, node));
       summary.appendChild(buildSummaryItem('Color', core.color, core.color, colorMode, node));
       summary.appendChild(buildSummaryItem('Background', core.backgroundColor, core.backgroundColor, colorMode, node));
       summary.appendChild(buildSummaryItem('Font Weight', core.fontWeight, null, colorMode, node));
@@ -1600,18 +1691,14 @@ function showDomInspectorPanel(node, hint) {
         colorMode = colorMode === 'rgb' ? 'hex' : 'rgb';
         colorToggle.textContent = `Color: ${colorMode.toUpperCase()} ⇄`;
         summary.innerHTML = '';
-        summary.appendChild(buildSummaryItem('Size', `${core.width} × ${core.height}`, null, colorMode, node));
         summary.appendChild(buildSummaryItem('Color', core.color, core.color, colorMode, node));
         summary.appendChild(buildSummaryItem('Background', core.backgroundColor, core.backgroundColor, colorMode, node));
         summary.appendChild(buildSummaryItem('Font Weight', core.fontWeight, null, colorMode, node));
       });
 
-      // Box model diagram: Chrome DevTools-style nested boxes showing
-      // margin / border / padding / content dimensions.
-      const boxModel = readBoxModel(node);
-      if (boxModel) {
-        body.appendChild(buildBoxModelDiagram(boxModel));
-      }
+      // Box: single editable element box showing width × height with the
+      // element's actual background color applied.
+      body.appendChild(buildEditableBox(node, core.backgroundColor));
     }
 
     // Full computed styles: collapsed by default, expand on click.
