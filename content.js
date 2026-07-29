@@ -552,6 +552,24 @@ injectedStyle(`
     border-radius: 3px;
     display: none;
   }
+  /* Info label pinned to the top-right of the highlight overlay, showing the
+     element's selector and size while hovering — same UX as Chrome DevTools. */
+  .mockkit-dom-inspector-overlay__label {
+    position: fixed;
+    z-index: 2147483646;
+    pointer-events: none;
+    padding: 2px 8px;
+    border-radius: 4px;
+    background: #1a9b7f;
+    color: #fff;
+    font-family: Menlo, Monaco, Consolas, monospace;
+    font-size: 11px;
+    font-weight: 600;
+    line-height: 1.5;
+    white-space: nowrap;
+    display: none;
+    box-shadow: 0 2px 8px rgb(26 155 127 / 40%);
+  }
 
   /* DOM Inspector result panel: top-left so it never overlaps the rules
      floating panel anchored bottom-right. */
@@ -680,11 +698,74 @@ injectedStyle(`
   .mockkit-dom-inspector__prop-val {
     color: #1b2822;
   }
+  .mockkit-dom-inspector__summary {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+    margin-bottom: 10px;
+  }
+  .mockkit-dom-inspector__summary-item {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 6px 8px;
+    border-radius: 8px;
+    background: #f7f4ec;
+  }
+  .mockkit-dom-inspector__summary-label {
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: rgb(27 40 34 / 45%);
+  }
+  .mockkit-dom-inspector__summary-value {
+    font-family: Menlo, Monaco, Consolas, monospace;
+    font-size: 11px;
+    color: #1b2822;
+    word-break: break-word;
+  }
+  .mockkit-dom-inspector__summary-swatch {
+    display: inline-block;
+    width: 12px;
+    height: 12px;
+    border-radius: 3px;
+    border: 1px solid rgb(27 40 34 / 15%);
+    vertical-align: middle;
+    margin-right: 4px;
+  }
+  .mockkit-dom-inspector__collapse {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    cursor: pointer;
+    user-select: none;
+    padding: 6px 0;
+    color: rgb(27 40 34 / 55%);
+    font-size: 11px;
+    font-weight: 600;
+  }
+  .mockkit-dom-inspector__collapse:hover {
+    color: #1a9b7f;
+  }
+  .mockkit-dom-inspector__collapse-arrow {
+    transition: transform 0.2s ease;
+  }
+  .mockkit-dom-inspector__collapse-arrow--open {
+    transform: rotate(90deg);
+  }
+  .mockkit-dom-inspector__full-details {
+    display: none;
+  }
+  .mockkit-dom-inspector__full-details--open {
+    display: block;
+  }
 `);
 
 let domInspectorState = {
   active: false,
   overlay: null,
+  overlayLabel: null,
   panel: null,
   lastTarget: null,
 };
@@ -695,6 +776,14 @@ function createDomInspectorOverlay() {
   overlay.className = 'mockkit-dom-inspector-overlay';
   document.body.appendChild(overlay);
   domInspectorState.overlay = overlay;
+
+  // Info label that floats next to the highlight box, showing the element's
+  // selector + size — mirrors the Chrome DevTools inspect behavior.
+  const label = document.createElement('div');
+  label.className = 'mockkit-dom-inspector-overlay__label';
+  document.body.appendChild(label);
+  domInspectorState.overlayLabel = label;
+
   return overlay;
 }
 
@@ -702,6 +791,10 @@ function destroyDomInspectorOverlay() {
   if (domInspectorState.overlay) {
     domInspectorState.overlay.remove();
     domInspectorState.overlay = null;
+  }
+  if (domInspectorState.overlayLabel) {
+    domInspectorState.overlayLabel.remove();
+    domInspectorState.overlayLabel = null;
   }
 }
 
@@ -727,6 +820,18 @@ function startDomInspector() {
       overlay.style.width = `${rect.width}px`;
       overlay.style.height = `${rect.height}px`;
       overlay.style.display = 'block';
+    }
+    // Position the info label at the top-right corner of the highlight box.
+    const label = domInspectorState.overlayLabel;
+    if (label) {
+      const { tag, id, classes } = describeDomNode(target);
+      const shortSelector = `${tag}${id ? `#${id}` : ''}${classes.length ? `.${classes[0]}` : ''}`;
+      label.textContent = `${shortSelector}  ${Math.round(rect.width)}×${Math.round(rect.height)}`;
+      // Place above the box if there's room; otherwise below it.
+      const labelTop = rect.top > 20 ? rect.top - 20 : rect.bottom + 4;
+      label.style.left = `${rect.left}px`;
+      label.style.top = `${labelTop}px`;
+      label.style.display = 'block';
     }
   };
 
@@ -798,6 +903,42 @@ function readComputedStyles(node) {
     }
   }
   return lines.join('\n');
+}
+
+// Read only the core properties for the always-visible summary grid.
+function readCoreStyles(node) {
+  if (!node || !window.getComputedStyle) return null;
+  const cs = window.getComputedStyle(node);
+  const get = (k) => cs.getPropertyValue(k) || '';
+  return {
+    width: get('width'),
+    height: get('height'),
+    color: get('color'),
+    backgroundColor: get('background-color'),
+    border: get('border'),
+    borderRadius: get('border-radius'),
+  };
+}
+
+// Build a single summary card with label + value, optionally a color swatch.
+function buildSummaryItem(label, value, swatchColor) {
+  const item = document.createElement('div');
+  item.className = 'mockkit-dom-inspector__summary-item';
+  const labelEl = document.createElement('span');
+  labelEl.className = 'mockkit-dom-inspector__summary-label';
+  labelEl.textContent = label;
+  item.appendChild(labelEl);
+  const valueEl = document.createElement('span');
+  valueEl.className = 'mockkit-dom-inspector__summary-value';
+  if (swatchColor) {
+    const swatch = document.createElement('span');
+    swatch.className = 'mockkit-dom-inspector__summary-swatch';
+    swatch.style.background = swatchColor;
+    valueEl.appendChild(swatch);
+  }
+  valueEl.appendChild(document.createTextNode(value));
+  item.appendChild(valueEl);
+  return item;
 }
 
 function showDomInspectorPanel(node, hint) {
@@ -878,17 +1019,43 @@ function showDomInspectorPanel(node, hint) {
 
     body.appendChild(tagRow);
 
-    const section = document.createElement('div');
-    section.className = 'mockkit-dom-inspector__section';
-    const sectionTitle = document.createElement('div');
-    sectionTitle.className = 'mockkit-dom-inspector__section-title';
-    sectionTitle.textContent = 'Computed Styles';
+    // Summary: always-visible grid of the most-used properties.
+    const core = readCoreStyles(node);
+    if (core) {
+      const summary = document.createElement('div');
+      summary.className = 'mockkit-dom-inspector__summary';
+      summary.appendChild(buildSummaryItem('Size', `${core.width} × ${core.height}`));
+      summary.appendChild(buildSummaryItem('Color', core.color, core.color));
+      summary.appendChild(buildSummaryItem('Background', core.backgroundColor, core.backgroundColor));
+      summary.appendChild(buildSummaryItem('Border', core.border));
+      body.appendChild(summary);
+    }
+
+    // Full computed styles: collapsed by default, expand on click.
+    const collapseHeader = document.createElement('div');
+    collapseHeader.className = 'mockkit-dom-inspector__collapse';
+    const arrow = document.createElement('span');
+    arrow.className = 'mockkit-dom-inspector__collapse-arrow';
+    arrow.textContent = '▶';
+    const collapseLabel = document.createElement('span');
+    collapseLabel.textContent = 'Computed Styles';
+    collapseHeader.appendChild(arrow);
+    collapseHeader.appendChild(collapseLabel);
+
+    const fullDetails = document.createElement('div');
+    fullDetails.className = 'mockkit-dom-inspector__full-details';
     const props = document.createElement('div');
     props.className = 'mockkit-dom-inspector__props';
     props.innerHTML = readComputedStyles(node);
-    section.appendChild(sectionTitle);
-    section.appendChild(props);
-    body.appendChild(section);
+    fullDetails.appendChild(props);
+
+    collapseHeader.addEventListener('click', () => {
+      const isOpen = fullDetails.classList.toggle('mockkit-dom-inspector__full-details--open');
+      arrow.classList.toggle('mockkit-dom-inspector__collapse-arrow--open', isOpen);
+    });
+
+    body.appendChild(collapseHeader);
+    body.appendChild(fullDetails);
   }
 
   panel.appendChild(body);
@@ -1362,7 +1529,7 @@ function createFloatingInspectButton() {
   const icon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
   icon.setAttribute('viewBox', '0 0 16 16');
   icon.setAttribute('fill', 'none');
-  icon.innerHTML = '<circle cx="8" cy="8" r="5.5" stroke="currentColor" stroke-width="1.4"/><circle cx="8" cy="8" r="1.5" fill="currentColor"/><path d="M8 1v2M8 13v2M1 8h2M13 8h2" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>';
+  icon.innerHTML = '<path d="M3 2l4.5 11 1.8-4.2L13.5 7 3 2z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" fill="none"/>';
   btn.appendChild(icon);
 
   btn.addEventListener('click', (event) => {
