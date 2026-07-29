@@ -202,13 +202,18 @@ export const useRegistry = () => {
       // Not JSON — keep the raw text as-is.
     }
 
+    // Strip the query string so the rule matches the endpoint regardless of
+    // whatever query params the live request carried. Only the path (and
+    // origin) is kept as the match target.
+    const urlWithoutQuery = (capture.url || '').split('?')[0];
+
     const interfaceItem = {
       ...defaultInterface,
       key,
       open: true,
       matchType: 'normal',
       matchMethod: capture.method || '',
-      request: capture.url,
+      request: urlWithoutQuery,
       requestDes: 'Mocked from Request Sniffer',
       replacementStatusCode: String(capture.status || 200),
       responseText: prettyResponse,
