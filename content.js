@@ -183,6 +183,35 @@ injectedStyle(`
     gap: 8px;
     min-width: 0;
   }
+  .mockkit-floating-rules__group-switch {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+  }
+  .mockkit-floating-rules__group-btn {
+    flex-shrink: 0;
+    width: 20px;
+    height: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: none;
+    border-radius: 5px;
+    background: transparent;
+    cursor: pointer;
+    color: rgb(27 40 34 / 45%);
+    font-size: 12px;
+    line-height: 1;
+    transition: all 0.15s ease;
+  }
+  .mockkit-floating-rules__group-btn:hover {
+    background: rgb(27 40 34 / 8%);
+    color: #1b2822;
+  }
+  .mockkit-floating-rules__group-btn:disabled {
+    opacity: 0.3;
+    cursor: default;
+  }
   .mockkit-floating-rules__title {
     display: flex;
     align-items: center;
@@ -622,6 +651,28 @@ injectedStyle(`
     line-height: 1;
     border-radius: 4px;
   }
+  .mockkit-dom-inspector__reinspect {
+    flex-shrink: 0;
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: none;
+    border-radius: 5px;
+    background: transparent;
+    cursor: pointer;
+    color: rgb(27 40 34 / 55%);
+    transition: all 0.15s ease;
+  }
+  .mockkit-dom-inspector__reinspect:hover {
+    background: rgb(27 40 34 / 8%);
+    color: #1b2822;
+  }
+  .mockkit-dom-inspector__reinspect svg {
+    width: 13px;
+    height: 13px;
+  }
   .mockkit-dom-inspector__close:hover {
     background: rgb(27 40 34 / 8%);
     color: #1b2822;
@@ -724,6 +775,34 @@ injectedStyle(`
     font-size: 11px;
     color: #1b2822;
     word-break: break-word;
+  }
+  .mockkit-dom-inspector__summary-value--copyable {
+    cursor: pointer;
+    transition: color 0.15s ease;
+  }
+  .mockkit-dom-inspector__summary-value--copyable:hover {
+    color: #1a9b7f;
+  }
+  .mockkit-dom-inspector__summary-value--copied {
+    color: #1a9b7f;
+  }
+  .mockkit-dom-inspector__color-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    padding: 1px 6px;
+    border: 1px solid rgb(27 40 34 / 12%);
+    border-radius: 5px;
+    background: transparent;
+    cursor: pointer;
+    font-size: 10px;
+    font-weight: 600;
+    color: rgb(27 40 34 / 55%);
+    transition: all 0.15s ease;
+  }
+  .mockkit-dom-inspector__color-toggle:hover {
+    background: rgb(27 40 34 / 6%);
+    color: #1b2822;
   }
   .mockkit-dom-inspector__summary-swatch {
     display: inline-block;
@@ -920,8 +999,34 @@ function readCoreStyles(node) {
   };
 }
 
-// Build a single summary card with label + value, optionally a color swatch.
-function buildSummaryItem(label, value, swatchColor) {
+// Convert rgb(r, g, b) / rgba(r, g, b, a) to #rrggbb.
+function rgbToHex(rgb) {
+  const m = rgb.match(/rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/i);
+  if (!m) return rgb;
+  const hex = (n) => Number(n).toString(16).padStart(2, '0');
+  return `#${hex(m[1])}${hex(m[2])}${hex(m[3])}`;
+}
+
+// Convert #rrggbb to rgb(r, g, b).
+function hexToRgb(hex) {
+  const m = hex.match(/^#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i);
+  if (!m) return hex;
+  return `rgb(${parseInt(m[1], 16)}, ${parseInt(m[2], 16)}, ${parseInt(m[3], 16)})`;
+}
+
+// Format a color value: if it looks like rgb/rgba, convert to hex (or vice
+// versa). Non-color values are returned as-is.
+function formatColor(value, mode) {
+  if (!value) return value;
+  if (mode === 'hex') {
+    return rgbToHex(value);
+  }
+  return value; // rgb mode — return as-is (getComputedStyle already returns rgb)
+}
+
+// Build a single summary card. Color items get a swatch, a format toggle,
+// and click-to-copy. Non-color items are click-to-copy too.
+function buildSummaryItem(label, value, swatchColor, colorMode, onCopy) {
   const item = document.createElement('div');
   item.className = 'mockkit-dom-inspector__summary-item';
   const labelEl = document.createElement('span');
@@ -929,15 +1034,31 @@ function buildSummaryItem(label, value, swatchColor) {
   labelEl.textContent = label;
   item.appendChild(labelEl);
   const valueEl = document.createElement('span');
-  valueEl.className = 'mockkit-dom-inspector__summary-value';
+  valueEl.className = 'mockkit-dom-inspector__summary-value mockkit-dom-inspector__summary-value--copyable';
+
+  const isColor = Boolean(swatchColor);
+  const displayValue = isColor ? formatColor(value, colorMode) : value;
+
   if (swatchColor) {
     const swatch = document.createElement('span');
     swatch.className = 'mockkit-dom-inspector__summary-swatch';
     swatch.style.background = swatchColor;
     valueEl.appendChild(swatch);
   }
-  valueEl.appendChild(document.createTextNode(value));
+  const textNode = document.createTextNode(displayValue);
+  valueEl.appendChild(textNode);
   item.appendChild(valueEl);
+
+  // Click to copy the full value.
+  valueEl.addEventListener('click', () => {
+    const copyText = isColor ? formatColor(value, colorMode) : value;
+    navigator.clipboard?.writeText(copyText).then(() => {
+      valueEl.classList.add('mockkit-dom-inspector__summary-value--copied');
+      setTimeout(() => valueEl.classList.remove('mockkit-dom-inspector__summary-value--copied'), 1000);
+      if (onCopy) onCopy(label, copyText);
+    }).catch(() => {});
+  });
+
   return item;
 }
 
@@ -956,6 +1077,23 @@ function showDomInspectorPanel(node, hint) {
   const title = document.createElement('span');
   title.className = 'mockkit-dom-inspector__title';
   title.textContent = 'DOM Inspector';
+
+  // Re-inspect button: same arrow icon as the floating panel, lets the user
+  // pick a different element without closing and reopening the panel.
+  const reinspectBtn = document.createElement('button');
+  reinspectBtn.type = 'button';
+  reinspectBtn.className = 'mockkit-dom-inspector__reinspect';
+  reinspectBtn.title = 'Inspect another element';
+  const reIcon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  reIcon.setAttribute('viewBox', '0 0 16 16');
+  reIcon.setAttribute('fill', 'none');
+  reIcon.innerHTML = '<path d="M3 2l4.5 11 1.8-4.2L13.5 7 3 2z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" fill="none"/>';
+  reinspectBtn.appendChild(reIcon);
+  reinspectBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    startDomInspector();
+  });
+
   const closeBtn = document.createElement('button');
   closeBtn.type = 'button';
   closeBtn.className = 'mockkit-dom-inspector__close';
@@ -965,6 +1103,7 @@ function showDomInspectorPanel(node, hint) {
     domInspectorState.panel = null;
   });
   header.appendChild(title);
+  header.appendChild(reinspectBtn);
   header.appendChild(closeBtn);
   panel.appendChild(header);
 
@@ -1020,15 +1159,38 @@ function showDomInspectorPanel(node, hint) {
     body.appendChild(tagRow);
 
     // Summary: always-visible grid of the most-used properties.
+    // Color items support rgb/hex toggle and click-to-copy.
     const core = readCoreStyles(node);
     if (core) {
+      // Color mode toggle button (RGB / HEX), placed above the summary grid.
+      const colorModeRow = document.createElement('div');
+      colorModeRow.style.cssText = 'display:flex;justify-content:flex-end;margin-bottom:6px;';
+      const colorToggle = document.createElement('button');
+      colorToggle.type = 'button';
+      colorToggle.className = 'mockkit-dom-inspector__color-toggle';
+      let colorMode = 'rgb'; // getComputedStyle returns rgb by default
+      colorToggle.textContent = `Color: ${colorMode.toUpperCase()} ⇄`;
+      colorModeRow.appendChild(colorToggle);
+      body.appendChild(colorModeRow);
+
       const summary = document.createElement('div');
       summary.className = 'mockkit-dom-inspector__summary';
-      summary.appendChild(buildSummaryItem('Size', `${core.width} × ${core.height}`));
-      summary.appendChild(buildSummaryItem('Color', core.color, core.color));
-      summary.appendChild(buildSummaryItem('Background', core.backgroundColor, core.backgroundColor));
-      summary.appendChild(buildSummaryItem('Border', core.border));
+      summary.appendChild(buildSummaryItem('Size', `${core.width} × ${core.height}`, null, colorMode));
+      summary.appendChild(buildSummaryItem('Color', core.color, core.color, colorMode));
+      summary.appendChild(buildSummaryItem('Background', core.backgroundColor, core.backgroundColor, colorMode));
+      summary.appendChild(buildSummaryItem('Border', core.border, null, colorMode));
       body.appendChild(summary);
+
+      // Toggle re-renders the summary grid with the new color format.
+      colorToggle.addEventListener('click', () => {
+        colorMode = colorMode === 'rgb' ? 'hex' : 'rgb';
+        colorToggle.textContent = `Color: ${colorMode.toUpperCase()} ⇄`;
+        summary.innerHTML = '';
+        summary.appendChild(buildSummaryItem('Size', `${core.width} × ${core.height}`, null, colorMode));
+        summary.appendChild(buildSummaryItem('Color', core.color, core.color, colorMode));
+        summary.appendChild(buildSummaryItem('Background', core.backgroundColor, core.backgroundColor, colorMode));
+        summary.appendChild(buildSummaryItem('Border', core.border, null, colorMode));
+      });
     }
 
     // Full computed styles: collapsed by default, expand on click.
@@ -1559,6 +1721,13 @@ function renderFloatingRules() {
     const interfaceList = group?.interfaceList || [];
     if (countEl) countEl.textContent = `${interfaceList.length} rules`;
 
+    // Enable/disable the group switcher arrows based on group count.
+    const prevBtn = panel.querySelector('.mockkit-floating-rules__group-btn:first-child');
+    const nextBtn = panel.querySelector('.mockkit-floating-rules__group-btn:last-child');
+    const hasMultipleGroups = ajaxDataList.length > 1;
+    if (prevBtn) prevBtn.disabled = !hasMultipleGroups;
+    if (nextBtn) nextBtn.disabled = !hasMultipleGroups;
+
     // Render the collapsed mock grid: a 3x3 cell matrix visualizing rule
     // states (green = enabled, gray = disabled, faint = empty slot) plus an
     // enabled/total counter. Shown only when the panel is collapsed.
@@ -1877,10 +2046,50 @@ function createFloatingRulesPanel() {
   const title = document.createElement('span');
   title.className = 'mockkit-floating-rules__title';
   title.textContent = 'Rules';
+
+  // Group switcher: prev/next arrows to cycle through groups without
+  // opening the workbench. Reads/writes the same storage key the workbench
+  // uses, so the selection stays in sync everywhere.
+  const groupSwitch = document.createElement('div');
+  groupSwitch.className = 'mockkit-floating-rules__group-switch';
+  const groupPrevBtn = document.createElement('button');
+  groupPrevBtn.type = 'button';
+  groupPrevBtn.className = 'mockkit-floating-rules__group-btn';
+  groupPrevBtn.textContent = '‹';
+  groupPrevBtn.title = 'Previous group';
+  groupPrevBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    chrome.storage.local.get(['ajaxDataList', FLOATING_SELECTED_GROUP_KEY], (res) => {
+      const total = (res?.ajaxDataList || []).length;
+      if (total < 2) return;
+      const cur = typeof res?.[FLOATING_SELECTED_GROUP_KEY] === 'number' ? res[FLOATING_SELECTED_GROUP_KEY] : 0;
+      const next = (cur - 1 + total) % total;
+      chrome.storage.local.set({ [FLOATING_SELECTED_GROUP_KEY]: next });
+    });
+  });
+  const groupNextBtn = document.createElement('button');
+  groupNextBtn.type = 'button';
+  groupNextBtn.className = 'mockkit-floating-rules__group-btn';
+  groupNextBtn.textContent = '›';
+  groupNextBtn.title = 'Next group';
+  groupNextBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    chrome.storage.local.get(['ajaxDataList', FLOATING_SELECTED_GROUP_KEY], (res) => {
+      const total = (res?.ajaxDataList || []).length;
+      if (total < 2) return;
+      const cur = typeof res?.[FLOATING_SELECTED_GROUP_KEY] === 'number' ? res[FLOATING_SELECTED_GROUP_KEY] : 0;
+      const next = (cur + 1) % total;
+      chrome.storage.local.set({ [FLOATING_SELECTED_GROUP_KEY]: next });
+    });
+  });
+  groupSwitch.appendChild(groupPrevBtn);
+  groupSwitch.appendChild(groupNextBtn);
+
   const count = document.createElement('span');
   count.className = 'mockkit-floating-rules__count';
   count.textContent = '0 rules';
   headerLeft.appendChild(title);
+  headerLeft.appendChild(groupSwitch);
   headerLeft.appendChild(count);
   header.appendChild(headerLeft);
 
