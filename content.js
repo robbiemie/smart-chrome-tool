@@ -861,6 +861,106 @@ injectedStyle(`
     padding: 2px;
     background: transparent;
   }
+  /* Box model diagram: Chrome DevTools-style nested boxes. */
+  .mockkit-dom-inspector__box-model {
+    margin-top: 10px;
+    padding: 8px;
+    border-radius: 8px;
+    background: #f7f4ec;
+  }
+  .mockkit-dom-inspector__box-model-title {
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: rgb(27 40 34 / 45%);
+    margin-bottom: 6px;
+  }
+  .mockkit-dom-inspector__box-outer {
+    position: relative;
+    padding: 18px;
+    border: 1px dashed #cdcdcd;
+    background: rgb(243 173 173 / 25%);
+    text-align: center;
+  }
+  .mockkit-dom-inspector__box-margin-label {
+    position: absolute;
+    top: 2px;
+    left: 4px;
+    font-size: 9px;
+    color: #d44;
+    font-family: Menlo, Monaco, Consolas, monospace;
+  }
+  .mockkit-dom-inspector__box-margin-val {
+    position: absolute;
+    font-size: 9px;
+    color: #d44;
+    font-family: Menlo, Monaco, Consolas, monospace;
+  }
+  .mockkit-dom-inspector__box-margin-val--top { top: 2px; left: 50%; transform: translateX(-50%); }
+  .mockkit-dom-inspector__box-margin-val--bottom { bottom: 2px; left: 50%; transform: translateX(-50%); }
+  .mockkit-dom-inspector__box-margin-val--left { left: 2px; top: 50%; transform: translateY(-50%); }
+  .mockkit-dom-inspector__box-margin-val--right { right: 2px; top: 50%; transform: translateY(-50%); }
+  .mockkit-dom-inspector__box-border {
+    position: relative;
+    padding: 18px;
+    border: 1px solid #bbb;
+    background: rgb(222 222 222 / 30%);
+    text-align: center;
+  }
+  .mockkit-dom-inspector__box-border-label {
+    position: absolute;
+    top: 2px;
+    left: 4px;
+    font-size: 9px;
+    color: #888;
+    font-family: Menlo, Monaco, Consolas, monospace;
+  }
+  .mockkit-dom-inspector__box-border-val {
+    position: absolute;
+    font-size: 9px;
+    color: #888;
+    font-family: Menlo, Monaco, Consolas, monospace;
+  }
+  .mockkit-dom-inspector__box-border-val--top { top: 2px; left: 50%; transform: translateX(-50%); }
+  .mockkit-dom-inspector__box-border-val--bottom { bottom: 2px; left: 50%; transform: translateX(-50%); }
+  .mockkit-dom-inspector__box-border-val--left { left: 2px; top: 50%; transform: translateY(-50%); }
+  .mockkit-dom-inspector__box-border-val--right { right: 2px; top: 50%; transform: translateY(-50%); }
+  .mockkit-dom-inspector__box-padding {
+    position: relative;
+    padding: 18px;
+    border: 1px dashed #6e8c6e;
+    background: rgb(126 200 126 / 18%);
+    text-align: center;
+  }
+  .mockkit-dom-inspector__box-padding-label {
+    position: absolute;
+    top: 2px;
+    left: 4px;
+    font-size: 9px;
+    color: #4a8a4a;
+    font-family: Menlo, Monaco, Consolas, monospace;
+  }
+  .mockkit-dom-inspector__box-padding-val {
+    position: absolute;
+    font-size: 9px;
+    color: #4a8a4a;
+    font-family: Menlo, Monaco, Consolas, monospace;
+  }
+  .mockkit-dom-inspector__box-padding-val--top { top: 2px; left: 50%; transform: translateX(-50%); }
+  .mockkit-dom-inspector__box-padding-val--bottom { bottom: 2px; left: 50%; transform: translateX(-50%); }
+  .mockkit-dom-inspector__box-padding-val--left { left: 2px; top: 50%; transform: translateY(-50%); }
+  .mockkit-dom-inspector__box-padding-val--right { right: 2px; top: 50%; transform: translateY(-50%); }
+  .mockkit-dom-inspector__box-content {
+    padding: 10px;
+    border: 1px solid #1a9b7f;
+    background: rgb(26 155 127 / 12%);
+    text-align: center;
+    font-size: 10px;
+    color: #1a9b7f;
+    font-family: Menlo, Monaco, Consolas, monospace;
+    font-weight: 600;
+  }
   .mockkit-dom-inspector__summary-swatch {
     display: inline-block;
     width: 12px;
@@ -1054,6 +1154,26 @@ function readCoreStyles(node) {
     borderWidth: get('border-width'),
     borderColor: get('border-color'),
     borderRadius: get('border-radius'),
+    fontWeight: get('font-weight'),
+  };
+}
+
+// Read margin/padding/border for the box model diagram (Chrome DevTools style).
+function readBoxModel(node) {
+  if (!node || !window.getComputedStyle) return null;
+  const cs = window.getComputedStyle(node);
+  const num = (k) => {
+    const v = cs.getPropertyValue(k);
+    const m = v.match(/([\d.]+)/);
+    return m ? Math.round(parseFloat(m[1])) : 0;
+  };
+  const rect = node.getBoundingClientRect();
+  return {
+    width: Math.round(rect.width),
+    height: Math.round(rect.height),
+    margin: { top: num('margin-top'), right: num('margin-right'), bottom: num('margin-bottom'), left: num('margin-left') },
+    border: { top: num('border-top-width'), right: num('border-right-width'), bottom: num('border-bottom-width'), left: num('border-left-width') },
+    padding: { top: num('padding-top'), right: num('padding-right'), bottom: num('padding-bottom'), left: num('padding-left') },
   };
 }
 
@@ -1083,11 +1203,11 @@ function formatColor(value, mode) {
 }
 
 // Map summary labels to the CSS property name on element.style for live editing.
-// Only color properties and Size get editors; Border Width is display-only.
+// Only color properties and Size get editors; Border Width / Radius / Weight are display-only.
 const SUMMARY_STYLE_MAP = {
   'Color': 'color',
   'Background': 'backgroundColor',
-  'Border Color': 'borderColor',
+  'Font Weight': 'fontWeight',
   'Size': '', // handled specially (width × height)
 };
 
@@ -1222,6 +1342,92 @@ function buildSummaryItem(label, value, swatchColor, colorMode, node) {
   return item;
 }
 
+// Build a Chrome DevTools-style box model diagram with nested margin /
+// border / padding / content layers and dimension labels.
+function buildBoxModelDiagram(box) {
+  const wrap = document.createElement('div');
+  wrap.className = 'mockkit-dom-inspector__box-model';
+
+  const title = document.createElement('div');
+  title.className = 'mockkit-dom-inspector__box-model-title';
+  title.textContent = 'Box Model';
+  wrap.appendChild(title);
+
+  // Helper to create a labeled box layer with 4-sided dimension labels.
+  const makeLayer = (className, label, sides, labelClass) => {
+    const el = document.createElement('div');
+    el.className = className;
+    const lbl = document.createElement('span');
+    lbl.className = labelClass;
+    lbl.textContent = label;
+    el.appendChild(lbl);
+    const positions = ['top', 'right', 'bottom', 'left'];
+    positions.forEach((pos) => {
+      const val = document.createElement('span');
+      val.className = `${labelClass}-val ${labelClass}-val--${pos}`;
+      val.textContent = sides[pos];
+      el.appendChild(val);
+    });
+    return el;
+  };
+
+  const margin = makeLayer(
+    'mockkit-dom-inspector__box-outer',
+    'margin',
+    box.margin,
+    'mockkit-dom-inspector__box-margin-label'
+  );
+  // Fix val class names (makeLayer appends -val to labelClass, but our CSS
+  // uses separate class names). Rebuild with explicit classes.
+  margin.innerHTML = '';
+  const mLabel = document.createElement('span');
+  mLabel.className = 'mockkit-dom-inspector__box-margin-label';
+  mLabel.textContent = 'margin';
+  margin.appendChild(mLabel);
+  ['top', 'right', 'bottom', 'left'].forEach((pos) => {
+    const val = document.createElement('span');
+    val.className = `mockkit-dom-inspector__box-margin-val mockkit-dom-inspector__box-margin-val--${pos}`;
+    val.textContent = box.margin[pos];
+    margin.appendChild(val);
+  });
+
+  const border = document.createElement('div');
+  border.className = 'mockkit-dom-inspector__box-border';
+  const bLabel = document.createElement('span');
+  bLabel.className = 'mockkit-dom-inspector__box-border-label';
+  bLabel.textContent = 'border';
+  border.appendChild(bLabel);
+  ['top', 'right', 'bottom', 'left'].forEach((pos) => {
+    const val = document.createElement('span');
+    val.className = `mockkit-dom-inspector__box-border-val mockkit-dom-inspector__box-border-val--${pos}`;
+    val.textContent = box.border[pos];
+    border.appendChild(val);
+  });
+
+  const padding = document.createElement('div');
+  padding.className = 'mockkit-dom-inspector__box-padding';
+  const pLabel = document.createElement('span');
+  pLabel.className = 'mockkit-dom-inspector__box-padding-label';
+  pLabel.textContent = 'padding';
+  padding.appendChild(pLabel);
+  ['top', 'right', 'bottom', 'left'].forEach((pos) => {
+    const val = document.createElement('span');
+    val.className = `mockkit-dom-inspector__box-padding-val mockkit-dom-inspector__box-padding-val--${pos}`;
+    val.textContent = box.padding[pos];
+    padding.appendChild(val);
+  });
+
+  const content = document.createElement('div');
+  content.className = 'mockkit-dom-inspector__box-content';
+  content.textContent = `${box.width} × ${box.height}`;
+
+  padding.appendChild(content);
+  border.appendChild(padding);
+  margin.appendChild(border);
+  wrap.appendChild(margin);
+  return wrap;
+}
+
 function showDomInspectorPanel(node, hint) {
   if (domInspectorState.panel) {
     domInspectorState.panel.remove();
@@ -1354,8 +1560,7 @@ function showDomInspectorPanel(node, hint) {
       summary.appendChild(buildSummaryItem('Size', `${core.width} × ${core.height}`, null, colorMode, node));
       summary.appendChild(buildSummaryItem('Color', core.color, core.color, colorMode, node));
       summary.appendChild(buildSummaryItem('Background', core.backgroundColor, core.backgroundColor, colorMode, node));
-      summary.appendChild(buildSummaryItem('Border Width', core.borderWidth, null, colorMode, null));
-      summary.appendChild(buildSummaryItem('Border Color', core.borderColor, core.borderColor, colorMode, node));
+      summary.appendChild(buildSummaryItem('Font Weight', core.fontWeight, null, colorMode, node));
       body.appendChild(summary);
 
       // Toggle re-renders the summary grid with the new color format.
@@ -1366,9 +1571,15 @@ function showDomInspectorPanel(node, hint) {
         summary.appendChild(buildSummaryItem('Size', `${core.width} × ${core.height}`, null, colorMode, node));
         summary.appendChild(buildSummaryItem('Color', core.color, core.color, colorMode, node));
         summary.appendChild(buildSummaryItem('Background', core.backgroundColor, core.backgroundColor, colorMode, node));
-        summary.appendChild(buildSummaryItem('Border Width', core.borderWidth, null, colorMode, null));
-        summary.appendChild(buildSummaryItem('Border Color', core.borderColor, core.borderColor, colorMode, node));
+        summary.appendChild(buildSummaryItem('Font Weight', core.fontWeight, null, colorMode, node));
       });
+
+      // Box model diagram: Chrome DevTools-style nested boxes showing
+      // margin / border / padding / content dimensions.
+      const boxModel = readBoxModel(node);
+      if (boxModel) {
+        body.appendChild(buildBoxModelDiagram(boxModel));
+      }
     }
 
     // Full computed styles: collapsed by default, expand on click.

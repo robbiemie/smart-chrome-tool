@@ -462,11 +462,19 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   if (message?.type === 'RELOAD_EXTENSION') {
-    // The iframe has just written the new files into the extension folder;
-    // reload so the new code takes effect immediately. The iframe (and this
-    // service worker) will be torn down and respawned with the new sources.
+    // The iframe has just written the new files into the extension folder.
+    // Before reloading the extension (which tears down all content scripts),
+    // refresh every tab so the new content script reinjects cleanly after
+    // the extension comes back up.
     try {
-      chrome.runtime.reload();
+      chrome.tabs.query({}, (tabs) => {
+        const refreshable = tabs.filter((t) => t.url && !t.url.startsWith('chrome://') && !t.url.startsWith('chrome-extension://'));
+        refreshable.forEach((tab) => {
+          chrome.tabs.reload(tab.id, { bypassCache: true }).catch(() => {});
+        });
+        // Small delay so tabs start reloading before the extension tears down.
+        setTimeout(() => chrome.runtime.reload(), 300);
+      });
     } catch (error) {
       sendResponse({ ok: false, message: error?.message || 'reload failed' });
     }
