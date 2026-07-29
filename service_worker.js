@@ -473,6 +473,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 
+  if (message?.type === 'SET_GITHUB_TOKEN') {
+    chrome.storage.local.set({ ajaxToolsGithubToken: message?.token || '' }, () => {
+      sendResponse({ ok: true });
+    });
+    return true;
+  }
+
   return false;
 });
 
@@ -521,10 +528,31 @@ function compareVersions(remote, local) {
 async function fetchLatestRelease() {
   const url = `https://api.github.com/repos/${GITHUB_REPO}/releases/latest`;
   console.log('[MockKit Update SW] fetchLatestRelease', url);
-  const response = await fetch(url, {
-    headers: { Accept: 'application/vnd.github+json' },
-  });
-  console.log('[MockKit Update SW] GitHub API response', { status: response.status, ok: response.ok });
+
+  // Default: anonymous request (60/h rate limit). On 403 (rate limited), fall
+  // back to an authenticated request using the stored GitHub token (5000/h)
+  // so heavy testing never blocks normal users.
+  const parseRelease = async (headers) => {
+    const response = await fetch(url, { headers });
+    console.log('[MockKit Update SW] GitHub API response', { status: response.status, ok: response.ok, authenticated: !!headers.Authorization });
+    return response;
+  };
+
+  let response = await parseRelease({ Accept: 'application/vnd.github+json' });
+
+  // Rate-limited anonymous request — retry with token if available.
+  if (response.status === 403) {
+    console.log('[MockKit Update SW] anonymous 403, trying with token');
+    const stored = await chrome.storage.local.get(['ajaxToolsGithubToken']);
+    const token = stored?.ajaxToolsGithubToken || '';
+    if (token) {
+      response = await parseRelease({
+        Accept: 'application/vnd.github+json',
+        Authorization: `Bearer ${token}`,
+      });
+    }
+  }
+
   if (!response.ok) {
     throw new Error(`GitHub API responded ${response.status}`);
   }
