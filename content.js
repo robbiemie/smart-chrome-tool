@@ -249,6 +249,28 @@ injectedStyle(`
     color: #fff;
     border-color: #1a9b7f;
   }
+  .mockkit-floating-rules__inspect-btn {
+    flex-shrink: 0;
+    width: 26px;
+    height: 26px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: none;
+    border-radius: 7px;
+    background: transparent;
+    cursor: pointer;
+    color: rgb(27 40 34 / 55%);
+    transition: all 0.15s ease;
+  }
+  .mockkit-floating-rules__inspect-btn:hover {
+    background: rgb(27 40 34 / 8%);
+    color: #1b2822;
+  }
+  .mockkit-floating-rules__inspect-btn svg {
+    width: 13px;
+    height: 13px;
+  }
   .mockkit-floating-rules__collapse-btn {
     flex-shrink: 0;
     width: 24px;
@@ -605,7 +627,28 @@ injectedStyle(`
     color: #1a9b7f;
     font-family: Menlo, Monaco, Consolas, monospace;
     font-size: 11px;
+    cursor: pointer;
+    transition: background 0.15s ease;
+  }
+  .mockkit-dom-inspector__tag:hover {
+    background: rgb(26 155 127 / 22%);
+  }
+  .mockkit-dom-inspector__tag-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
     margin-bottom: 8px;
+    flex-wrap: wrap;
+  }
+  .mockkit-dom-inspector__size {
+    flex-shrink: 0;
+    padding: 1px 6px;
+    border-radius: 4px;
+    background: rgb(27 40 34 / 6%);
+    color: rgb(27 40 34 / 65%);
+    font-family: Menlo, Monaco, Consolas, monospace;
+    font-size: 11px;
+    font-variant-numeric: tabular-nums;
   }
   .mockkit-dom-inspector__section {
     margin-bottom: 10px;
@@ -796,10 +839,44 @@ function showDomInspectorPanel(node, hint) {
   } else if (node) {
     const { tag, id, classes } = describeDomNode(node);
     const selector = `${tag}${id ? `#${id}` : ''}${classes.length ? `.${classes.join('.')}` : ''}`;
+    const rect = node.getBoundingClientRect();
+    const sizeText = `${Math.round(rect.width)} × ${Math.round(rect.height)}`;
+
+    const tagRow = document.createElement('div');
+    tagRow.className = 'mockkit-dom-inspector__tag-row';
+
     const tagEl = document.createElement('div');
     tagEl.className = 'mockkit-dom-inspector__tag';
     tagEl.textContent = selector;
-    body.appendChild(tagEl);
+    tagEl.title = 'Click to highlight the element on the page';
+    // Hovering or clicking the selector re-highlights the inspected node so
+    // the user can locate it without re-picking.
+    const highlightNode = () => {
+      if (!node || !node.isConnected) return;
+      const prevOutline = node.style.outline;
+      const prevOutlineOffset = node.style.outlineOffset;
+      node.style.outline = '2px solid #ff4d4f';
+      node.style.outlineOffset = '2px';
+      node.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      const restore = () => {
+        node.style.outline = prevOutline;
+        node.style.outlineOffset = prevOutlineOffset;
+        node.removeEventListener('mouseleave', restore);
+      };
+      node.addEventListener('mouseleave', restore);
+      // Auto-clear after a short timeout in case the mouse never leaves.
+      setTimeout(restore, 2000);
+    };
+    tagEl.addEventListener('mouseenter', highlightNode);
+    tagEl.addEventListener('click', highlightNode);
+    tagRow.appendChild(tagEl);
+
+    const sizeEl = document.createElement('span');
+    sizeEl.className = 'mockkit-dom-inspector__size';
+    sizeEl.textContent = sizeText;
+    tagRow.appendChild(sizeEl);
+
+    body.appendChild(tagRow);
 
     const section = document.createElement('div');
     section.className = 'mockkit-dom-inspector__section';
@@ -1273,6 +1350,28 @@ function createFloatingCsrButton() {
   return btn;
 }
 
+// DOM Inspect entry: a small aim/arrow icon that triggers the same inspector
+// flow as the workbench's DOM Inspect button. Lets users pick a node without
+// opening the side panel.
+function createFloatingInspectButton() {
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'mockkit-floating-rules__inspect-btn';
+  btn.title = 'Inspect a DOM node';
+
+  const icon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  icon.setAttribute('viewBox', '0 0 16 16');
+  icon.setAttribute('fill', 'none');
+  icon.innerHTML = '<circle cx="8" cy="8" r="5.5" stroke="currentColor" stroke-width="1.4"/><circle cx="8" cy="8" r="1.5" fill="currentColor"/><path d="M8 1v2M8 13v2M1 8h2M13 8h2" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>';
+  btn.appendChild(icon);
+
+  btn.addEventListener('click', (event) => {
+    event.stopPropagation();
+    startDomInspector();
+  });
+  return btn;
+}
+
 function renderFloatingRules() {
   const panel = ajaxToolsRuntimeState.floatingPanel;
   if (!panel) return;
@@ -1622,6 +1721,8 @@ function createFloatingRulesPanel() {
   headerActions.className = 'mockkit-floating-rules__header-actions';
   const csrBtn = createFloatingCsrButton();
   headerActions.appendChild(csrBtn);
+  const inspectBtn = createFloatingInspectButton();
+  headerActions.appendChild(inspectBtn);
   const collapseBtn = document.createElement('button');
   collapseBtn.className = 'mockkit-floating-rules__collapse-btn';
   collapseBtn.type = 'button';
