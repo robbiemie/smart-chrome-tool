@@ -8,6 +8,10 @@
  * Publish:  node build.js --publish  -> bump + build + zip + create a GitHub Release with the zip attached
  *   --force                          -> with --publish, delete an existing tag/release and recreate
  *   --notes "<text>"                 -> override auto-generated release notes
+ *   --commit                         -> after publishing, git add + commit the version bump & dist, then push to origin
+ *           Combined: node build.js --publish --commit  -> bump, build, zip, release, commit, push (one-shot)
+ * Retry:    node build.js --retry    -> re-publish the CURRENT version (no bump). Implies --force + --commit.
+ *                                      Use when a previous --publish failed midway (stale tag, network error, etc).
  *
  * Version model:
  *   - manifest.json is the single source of truth for the extension version.
@@ -52,9 +56,14 @@ const EXCLUDE_PATTERNS = [
 
 const argv = process.argv.slice(2);
 const shouldPublish = argv.includes('--publish') || argv.includes('--release');
+// Retry: re-publish the current version without bumping. Used when a previous
+// --publish failed (e.g. gh auth glitch, network timeout). Implies --force
+// (deletes the stale tag/release if it partially exists) and --commit.
+const shouldRetry = argv.includes('--retry');
 // Version bumping is explicit: --bump or --publish. Plain builds keep the current version.
 const shouldBump = shouldPublish || argv.includes('--bump');
-const forcePublish = argv.includes('--force');
+const forcePublish = argv.includes('--force') || shouldRetry;
+const shouldCommit = argv.includes('--commit') || shouldRetry;
 const notesIndex = argv.indexOf('--notes');
 const customNotes = notesIndex !== -1 ? argv[notesIndex + 1] : null;
 
@@ -126,10 +135,11 @@ const bumpVersion = () => {
 };
 
 const runBuild = () => {
-  // Resolve the version BEFORE spawning `npm run build`. Bumping here (rather
-  // than in npm's prebuild hook) guarantees npm's lifecycle banners and the
-  // final zip name reference the same version in a single build run.
-  if (shouldBump) {
+  // Retry mode: don't bump, just rebuild + re-publish the current version.
+  if (shouldRetry) {
+    console.log('\n--- Retry mode: re-publishing current version ---');
+    syncPackageVersionFromManifest(readJsonFile(manifestJsonPath).version);
+  } else if (shouldBump) {
     bumpVersion();
   } else {
     syncPackageVersionFromManifest(readJsonFile(manifestJsonPath).version);
@@ -153,6 +163,9 @@ const runBuild = () => {
       const zipName = packageExtension();
       if (shouldPublish) {
         publishToGitHub(zipName);
+      }
+      if (shouldCommit) {
+        commitAndPush();
       }
     } catch (error) {
       console.error('\nPost-build step failed.');
@@ -361,6 +374,37 @@ const publishToGitHub = (zipName) => {
 
   console.log(`\nRelease ${tag} published.`);
   console.log(`  https://github.com/robbiemie/smart-chrome-tool/releases/tag/${tag}`);
+};
+
+// After publishing, commit the version bump + rebuilt dist and push to origin
+// so the remote master branch matches the released tag.
+const commitAndPush = () => {
+  console.log('\n--- Committing version bump & dist, then pushing ---');
+  const version = readManifestVersion();
+
+  // Stage all changes (version bump in manifest/package, rebuilt dist, etc).
+  // The zip file is gitignored so it won't be included.
+  runGit(['add', '-A'], { stdio: 'inherit' });
+
+  // Check if there's anything staged to commit.
+  const diffResult = runGit(['diff', '--cached', '--quiet']);
+  if (diffResult.status === 0) {
+    console.log('Nothing to commit — working tree clean.');
+    return;
+  }
+
+  const commitMsg = `chore: v${version}`;
+  const commitResult = runGit(['commit', '-m', commitMsg], { stdio: 'inherit' });
+  if (commitResult.status !== 0) {
+    throw new Error('git commit failed.');
+  }
+
+  const pushResult = runGit(['push', 'origin', 'HEAD'], { stdio: 'inherit' });
+  if (pushResult.status !== 0) {
+    throw new Error('git push failed.');
+  }
+
+  console.log(`\nCommitted and pushed: ${commitMsg}`);
 };
 
 runBuild();
