@@ -1,6 +1,6 @@
 {
   "name": "MockKit",
-  "version": "0.0.19",
+  "version": "0.0.20",
   "description": "Modify the response text of Ajax requests",
   "manifest_version": 3,
   "declarative_net_request": {
