@@ -1,5 +1,22 @@
 # Build Changelog
 
+## v0.0.27
+
+- Built At: 2026-07-29T16:20:46.563Z
+- Previous Version: v0.0.26
+- Git Branch: master
+- Git Commit: 833499cf
+
+### Changed Files
+- content.js
+- html/iframePage/main/components/UpdateModal/index.tsx
+- html/iframePage/package-lock.json
+- html/iframePage/package.json
+- html/iframePage/stats.html
+- manifest.json
+- service_worker.js
+
+
 ## v0.0.26
 
 - Built At: 2026-07-29T16:14:14.557Z

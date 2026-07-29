@@ -1081,20 +1081,31 @@ function formatColor(value, mode) {
   return value; // rgb mode — return as-is (getComputedStyle already returns rgb)
 }
 
-// Build a single summary card. Color items get a swatch, a format toggle,
-// and click-to-copy. Non-color items are click-to-copy too.
-function buildSummaryItem(label, value, swatchColor, colorMode, onCopy) {
+// Map summary labels to the CSS property name on element.style for live editing.
+const SUMMARY_STYLE_MAP = {
+  'Color': 'color',
+  'Background': 'backgroundColor',
+  'Border': 'border',
+  'Size': '', // handled specially (width × height)
+};
+
+// Build a single summary card with click-to-copy AND inline editing.
+// Color items render a native color picker; text items render a text input.
+// Edits apply live to the inspected node's inline style.
+function buildSummaryItem(label, value, swatchColor, colorMode, node) {
   const item = document.createElement('div');
   item.className = 'mockkit-dom-inspector__summary-item';
   const labelEl = document.createElement('span');
   labelEl.className = 'mockkit-dom-inspector__summary-label';
   labelEl.textContent = label;
   item.appendChild(labelEl);
-  const valueEl = document.createElement('span');
-  valueEl.className = 'mockkit-dom-inspector__summary-value mockkit-dom-inspector__summary-value--copyable';
 
   const isColor = Boolean(swatchColor);
   const displayValue = isColor ? formatColor(value, colorMode) : value;
+
+  // --- Value display (click to copy with success icon) ---
+  const valueEl = document.createElement('span');
+  valueEl.className = 'mockkit-dom-inspector__summary-value mockkit-dom-inspector__summary-value--copyable';
 
   if (swatchColor) {
     const swatch = document.createElement('span');
@@ -1104,17 +1115,89 @@ function buildSummaryItem(label, value, swatchColor, colorMode, onCopy) {
   }
   const textNode = document.createTextNode(displayValue);
   valueEl.appendChild(textNode);
-  item.appendChild(valueEl);
 
-  // Click to copy the full value.
+  // Copy icon (shown briefly after successful copy).
+  const copyIcon = document.createElement('span');
+  copyIcon.className = 'mockkit-dom-inspector__copy-icon';
+  copyIcon.textContent = '✓';
+  copyIcon.style.cssText = 'display:none;margin-left:4px;color:#1a9b7f;font-weight:bold;';
+  valueEl.appendChild(copyIcon);
+
+  // Click value to copy.
   valueEl.addEventListener('click', () => {
     const copyText = isColor ? formatColor(value, colorMode) : value;
     navigator.clipboard?.writeText(copyText).then(() => {
+      copyIcon.style.display = 'inline';
       valueEl.classList.add('mockkit-dom-inspector__summary-value--copied');
-      setTimeout(() => valueEl.classList.remove('mockkit-dom-inspector__summary-value--copied'), 1000);
-      if (onCopy) onCopy(label, copyText);
+      setTimeout(() => {
+        copyIcon.style.display = 'none';
+        valueEl.classList.remove('mockkit-dom-inspector__summary-value--copied');
+      }, 1200);
     }).catch(() => {});
   });
+  item.appendChild(valueEl);
+
+  // --- Inline editor (below the value) ---
+  if (node && SUMMARY_STYLE_MAP[label] !== undefined) {
+    const editorRow = document.createElement('div');
+    editorRow.style.cssText = 'margin-top:4px;';
+
+    if (isColor) {
+      // Native color picker for color values.
+      const picker = document.createElement('input');
+      picker.type = 'color';
+      picker.className = 'mockkit-dom-inspector__color-picker';
+      const hexVal = rgbToHex(value);
+      picker.value = hexVal.startsWith('#') ? hexVal : '#000000';
+      picker.addEventListener('input', () => {
+        const styleProp = SUMMARY_STYLE_MAP[label];
+        if (styleProp && node) {
+          node.style[styleProp] = picker.value;
+        }
+        // Update swatch + text live.
+        if (swatchColor) {
+          const sw = valueEl.querySelector('.mockkit-dom-inspector__summary-swatch');
+          if (sw) sw.style.background = picker.value;
+        }
+        textNode.textContent = formatColor(hexToRgb(picker.value), colorMode);
+      });
+      editorRow.appendChild(picker);
+    } else if (label === 'Size') {
+      // Width + Height dual input.
+      const wMatch = String(value).match(/([\d.]+)\s*px/);
+      const wInput = document.createElement('input');
+      wInput.type = 'text';
+      wInput.className = 'mockkit-dom-inspector__edit-input';
+      wInput.placeholder = 'width';
+      wInput.value = node ? (node.style.width || '') : '';
+      wInput.style.cssText = 'width:48%;margin-right:4%;display:inline-block;';
+      const hInput = document.createElement('input');
+      hInput.type = 'text';
+      hInput.className = 'mockkit-dom-inspector__edit-input';
+      hInput.placeholder = 'height';
+      hInput.value = node ? (node.style.height || '') : '';
+      hInput.style.cssText = 'width:48%;display:inline-block;';
+      wInput.addEventListener('input', () => { if (node) node.style.width = wInput.value; });
+      hInput.addEventListener('input', () => { if (node) node.style.height = hInput.value; });
+      editorRow.appendChild(wInput);
+      editorRow.appendChild(hInput);
+    } else {
+      // Generic text input for border, etc.
+      const input = document.createElement('input');
+      input.type = 'text';
+      input.className = 'mockkit-dom-inspector__edit-input';
+      input.value = node ? (node.style[SUMMARY_STYLE_MAP[label]] || '') : '';
+      input.addEventListener('input', () => {
+        const styleProp = SUMMARY_STYLE_MAP[label];
+        if (styleProp && node) {
+          node.style[styleProp] = input.value;
+        }
+      });
+      editorRow.appendChild(input);
+    }
+
+    item.appendChild(editorRow);
+  }
 
   return item;
 }
@@ -1248,10 +1331,10 @@ function showDomInspectorPanel(node, hint) {
 
       const summary = document.createElement('div');
       summary.className = 'mockkit-dom-inspector__summary';
-      summary.appendChild(buildSummaryItem('Size', `${core.width} × ${core.height}`, null, colorMode));
-      summary.appendChild(buildSummaryItem('Color', core.color, core.color, colorMode));
-      summary.appendChild(buildSummaryItem('Background', core.backgroundColor, core.backgroundColor, colorMode));
-      summary.appendChild(buildSummaryItem('Border', core.border, null, colorMode));
+      summary.appendChild(buildSummaryItem('Size', `${core.width} × ${core.height}`, null, colorMode, node));
+      summary.appendChild(buildSummaryItem('Color', core.color, core.color, colorMode, node));
+      summary.appendChild(buildSummaryItem('Background', core.backgroundColor, core.backgroundColor, colorMode, node));
+      summary.appendChild(buildSummaryItem('Border', core.border, null, colorMode, node));
       body.appendChild(summary);
 
       // Toggle re-renders the summary grid with the new color format.
@@ -1259,10 +1342,10 @@ function showDomInspectorPanel(node, hint) {
         colorMode = colorMode === 'rgb' ? 'hex' : 'rgb';
         colorToggle.textContent = `Color: ${colorMode.toUpperCase()} ⇄`;
         summary.innerHTML = '';
-        summary.appendChild(buildSummaryItem('Size', `${core.width} × ${core.height}`, null, colorMode));
-        summary.appendChild(buildSummaryItem('Color', core.color, core.color, colorMode));
-        summary.appendChild(buildSummaryItem('Background', core.backgroundColor, core.backgroundColor, colorMode));
-        summary.appendChild(buildSummaryItem('Border', core.border, null, colorMode));
+        summary.appendChild(buildSummaryItem('Size', `${core.width} × ${core.height}`, null, colorMode, node));
+        summary.appendChild(buildSummaryItem('Color', core.color, core.color, colorMode, node));
+        summary.appendChild(buildSummaryItem('Background', core.backgroundColor, core.backgroundColor, colorMode, node));
+        summary.appendChild(buildSummaryItem('Border', core.border, null, colorMode, node));
       });
     }
 

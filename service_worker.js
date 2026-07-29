@@ -624,10 +624,18 @@ chrome.alarms?.onAlarm?.addListener?.((alarm) => {
 });
 
 // Run one check shortly after startup/install so the badge reflects the
-// latest state without waiting for the first alarm tick.
+// latest state without waiting for the first alarm tick. On install/update
+// we clear the stale cached result first so a just-applied update doesn't
+// keep showing a red dot from the pre-update check.
 chrome.runtime.onStartup.addListener(() => {
   setTimeout(() => checkForUpdate(false).catch(() => {}), 5000);
 });
-chrome.runtime.onInstalled.addListener(() => {
-  setTimeout(() => checkForUpdate(false).catch(() => {}), 5000);
+chrome.runtime.onInstalled.addListener((details) => {
+  if (details?.reason === 'update') {
+    chrome.storage.local.remove([UPDATE_AVAILABLE_KEY, UPDATE_LAST_CHECK_KEY], () => {
+      setTimeout(() => checkForUpdate(true).catch(() => {}), 2000);
+    });
+  } else {
+    setTimeout(() => checkForUpdate(false).catch(() => {}), 5000);
+  }
 });

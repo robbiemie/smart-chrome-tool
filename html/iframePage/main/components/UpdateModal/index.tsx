@@ -260,7 +260,8 @@ export default function UpdateModal({
       open={open}
       title={`Update to ${remoteVersion}`}
       centered
-      width={520}
+      width={560}
+      styles={{ body: { maxHeight: '70vh', overflowY: 'auto' } }}
       footer={[
         <Button key="close" onClick={handleClose} disabled={busy}>
           Close
@@ -309,11 +310,13 @@ export default function UpdateModal({
       {showProgress && (
         <>
           <Steps
-            size="small"
+            direction="vertical"
+            size="default"
             current={currentStepIndex}
             style={{ marginBottom: 16 }}
             items={STEP_LABELS.map((s, i) => ({
               title: s.title,
+              description: `Step ${i + 1} of ${STEP_LABELS.length}`,
               status:
                 phase === 'done' || i < currentStepIndex
                   ? 'finish'
@@ -322,13 +325,13 @@ export default function UpdateModal({
                     : 'wait',
             }))}
           />
-          <div style={{ marginBottom: 8, fontSize: 12, color: '#666' }}>
+          <div style={{ marginBottom: 8, fontSize: 13, color: '#333' }}>
             {currentStepIndex >= 0 && (
               <strong>Step {currentStepIndex + 1}/{STEP_LABELS.length} · {STEP_LABELS[currentStepIndex].title}</strong>
             )}
-            {statusText && <div style={{ marginTop: 4 }}>{statusText}</div>}
+            {statusText && <div style={{ marginTop: 4, fontSize: 12, color: '#666' }}>{statusText}</div>}
           </div>
-          <Progress percent={progress} status={phase === 'error' ? 'exception' : 'active'} size="small" />
+          <Progress percent={progress} status={phase === 'error' ? 'exception' : 'active'} />
         </>
       )}
       {phase === 'idle' && (
