@@ -612,6 +612,40 @@ injectedStyle(`
     box-shadow: 0 2px 8px rgb(26 155 127 / 40%);
   }
 
+  /* Figma-style measurement guides: 1px red lines + pixel labels drawn from
+     the hovered node to its nearest sibling (or viewport) edge on each side.
+     Lives in its own pointer-events:none container so it never blocks clicks. */
+  .mockkit-dom-inspector-measurements {
+    position: fixed;
+    z-index: 2147483645;
+    top: 0;
+    left: 0;
+    width: 0;
+    height: 0;
+    pointer-events: none;
+    display: none;
+  }
+  .mockkit-dom-inspector-measurements__line {
+    position: fixed;
+    z-index: 2147483645;
+    pointer-events: none;
+    background: #ff4d4f;
+  }
+  .mockkit-dom-inspector-measurements__label {
+    position: fixed;
+    z-index: 2147483645;
+    pointer-events: none;
+    padding: 1px 5px;
+    border-radius: 3px;
+    background: #ff4d4f;
+    color: #fff;
+    font-family: Menlo, Monaco, Consolas, monospace;
+    font-size: 10px;
+    font-weight: 600;
+    line-height: 1.4;
+    white-space: nowrap;
+  }
+
   /* DOM Inspector result panel: top-left so it never overlaps the rules
      floating panel anchored bottom-right. */
   .mockkit-dom-inspector {
@@ -1079,9 +1113,17 @@ let domInspectorState = {
   active: false,
   overlay: null,
   overlayLabel: null,
+  measurements: null,
   panel: null,
   lastTarget: null,
+  pendingTarget: null,
+  rafId: null,
 };
+
+// Cap sibling traversal so a pathological page (thousands of siblings) never
+// blocks the hover frame. Beyond this we simply skip measurement for that
+// direction and fall back to the viewport edge.
+const DOM_INSPECTOR_MAX_SIBLINGS = 500;
 
 function createDomInspectorOverlay() {
   if (domInspectorState.overlay) return domInspectorState.overlay;
@@ -1097,6 +1139,13 @@ function createDomInspectorOverlay() {
   document.body.appendChild(label);
   domInspectorState.overlayLabel = label;
 
+  // Figma-style measurement guides container. Children (lines + labels) are
+  // created on demand in drawMeasurements().
+  const measurements = document.createElement('div');
+  measurements.className = 'mockkit-dom-inspector-measurements';
+  document.body.appendChild(measurements);
+  domInspectorState.measurements = measurements;
+
   return overlay;
 }
 
@@ -1109,6 +1158,174 @@ function destroyDomInspectorOverlay() {
     domInspectorState.overlayLabel.remove();
     domInspectorState.overlayLabel = null;
   }
+  if (domInspectorState.measurements) {
+    domInspectorState.measurements.remove();
+    domInspectorState.measurements = null;
+  }
+}
+
+// Compute the nearest edge distance for each of the 4 directions.
+// Strategy: look at the parent's direct children (siblings of target) that
+// visually overlap the target on the perpendicular axis, and pick the closest
+// edge. If no sibling qualifies, fall back to the viewport edge. This is the
+// Figma core subset — siblings are the reference users actually care about.
+function computeMeasurements(target) {
+  if (!target || !target.parentElement) {
+    return null;
+  }
+  const rect = target.getBoundingClientRect();
+  if (rect.width <= 0 || rect.height <= 0) return null;
+
+  const vw = window.innerWidth;
+  const vh = window.innerHeight;
+  const siblings = target.parentElement.children;
+  if (siblings.length > DOM_INSPECTOR_MAX_SIBLINGS) return null;
+
+  // Start from the viewport edge as the fallback for each direction.
+  const result = {
+    top: { distance: Math.round(rect.top), edge: 0 },
+    bottom: { distance: Math.round(vh - rect.bottom), edge: vh },
+    left: { distance: Math.round(rect.left), edge: 0 },
+    right: { distance: Math.round(vw - rect.right), edge: vw },
+  };
+
+  // Horizontal overlap test (shared by top/bottom directions): the sibling's
+  // horizontal span must intersect the target's horizontal span.
+  const hOverlap = (s) => s.right > rect.left && s.left < rect.right;
+  // Vertical overlap test (shared by left/right directions).
+  const vOverlap = (s) => s.bottom > rect.top && s.top < rect.bottom;
+
+  for (let i = 0; i < siblings.length; i += 1) {
+    const sib = siblings[i];
+    if (sib === target) continue;
+    // getBoundingClientRect on every sibling is the only layout read here; we
+    // batch them within a single rAF so the browser only reflows once.
+    const sr = sib.getBoundingClientRect();
+    if (sr.width <= 0 || sr.height <= 0) continue;
+
+    // Above: sibling sits fully above target and overlaps horizontally.
+    if (hOverlap(sr) && sr.bottom <= rect.top) {
+      const dist = Math.round(rect.top - sr.bottom);
+      if (dist < result.top.distance) {
+        result.top = { distance: dist, edge: Math.round(sr.bottom) };
+      }
+    }
+    // Below: sibling sits fully below target and overlaps horizontally.
+    if (hOverlap(sr) && sr.top >= rect.bottom) {
+      const dist = Math.round(sr.top - rect.bottom);
+      if (dist < result.bottom.distance) {
+        result.bottom = { distance: dist, edge: Math.round(sr.top) };
+      }
+    }
+    // Left: sibling sits fully left of target and overlaps vertically.
+    if (vOverlap(sr) && sr.right <= rect.left) {
+      const dist = Math.round(rect.left - sr.right);
+      if (dist < result.left.distance) {
+        result.left = { distance: dist, edge: Math.round(sr.right) };
+      }
+    }
+    // Right: sibling sits fully right of target and overlaps vertically.
+    if (vOverlap(sr) && sr.left >= rect.right) {
+      const dist = Math.round(sr.left - rect.right);
+      if (dist < result.right.distance) {
+        result.right = { distance: dist, edge: Math.round(sr.left) };
+      }
+    }
+  }
+
+  return { rect, result };
+}
+
+// Render the measurement guides for the current pending target. Called once
+// per animation frame; clears the container and redraws only the directions
+// that have a non-zero distance.
+function drawMeasurements(measurements, data) {
+  // Fast path: clear previous guides.
+  measurements.innerHTML = '';
+  if (!data) return;
+
+  const { rect, result } = data;
+  const createLine = (className, style) => {
+    const line = document.createElement('div');
+    line.className = 'mockkit-dom-inspector-measurements__line';
+    Object.assign(line.style, style);
+    return line;
+  };
+  const createLabel = (text, left, top) => {
+    const label = document.createElement('div');
+    label.className = 'mockkit-dom-inspector-measurements__label';
+    label.textContent = text;
+    label.style.left = `${left}px`;
+    label.style.top = `${top}px`;
+    return label;
+  };
+
+  // Vertical guides (top/bottom): 1px-wide line centered on the target's
+  // horizontal center, spanning the gap between target edge and reference edge.
+  const cx = rect.left + rect.width / 2;
+  if (result.top.distance > 0) {
+    const top = result.top.edge;
+    const h = rect.top - top;
+    measurements.appendChild(createLine('top', {
+      left: `${cx}px`,
+      top: `${top}px`,
+      width: '1px',
+      height: `${Math.max(h, 0)}px`,
+    }));
+    measurements.appendChild(createLabel(
+      `${result.top.distance}`,
+      cx + 4,
+      top + h / 2 - 8
+    ));
+  }
+  if (result.bottom.distance > 0) {
+    const top = rect.bottom;
+    const h = result.bottom.edge - top;
+    measurements.appendChild(createLine('bottom', {
+      left: `${cx}px`,
+      top: `${top}px`,
+      width: '1px',
+      height: `${Math.max(h, 0)}px`,
+    }));
+    measurements.appendChild(createLabel(
+      `${result.bottom.distance}`,
+      cx + 4,
+      top + h / 2 - 8
+    ));
+  }
+  // Horizontal guides (left/right): 1px-tall line centered on the target's
+  // vertical center, spanning the gap.
+  const cy = rect.top + rect.height / 2;
+  if (result.left.distance > 0) {
+    const left = result.left.edge;
+    const w = rect.left - left;
+    measurements.appendChild(createLine('left', {
+      left: `${left}px`,
+      top: `${cy}px`,
+      width: `${Math.max(w, 0)}px`,
+      height: '1px',
+    }));
+    measurements.appendChild(createLabel(
+      `${result.left.distance}`,
+      left + w / 2 - 12,
+      cy + 4
+    ));
+  }
+  if (result.right.distance > 0) {
+    const left = rect.right;
+    const w = result.right.edge - left;
+    measurements.appendChild(createLine('right', {
+      left: `${left}px`,
+      top: `${cy}px`,
+      width: `${Math.max(w, 0)}px`,
+      height: '1px',
+    }));
+    measurements.appendChild(createLabel(
+      `${result.right.distance}`,
+      left + w / 2 - 12,
+      cy + 4
+    ));
+  }
 }
 
 function startDomInspector() {
@@ -1116,17 +1333,33 @@ function startDomInspector() {
   domInspectorState.active = true;
   createDomInspectorOverlay();
 
+  // mousemove only stashes the latest target and schedules a single rAF; all
+  // DOM mutation (highlight + label + measurements) happens in renderFrame so
+  // a burst of moves collapses into one layout pass.
   const onMove = (event) => {
     if (!domInspectorState.active) return;
-    // Temporarily hide overlay so elementFromPoint hits the real target.
     const overlay = domInspectorState.overlay;
     if (overlay) overlay.style.display = 'none';
     const target = document.elementFromPoint(event.clientX, event.clientY);
     if (overlay) overlay.style.display = 'block';
     if (!target || target === domInspectorState.panel) return;
 
+    domInspectorState.pendingTarget = target;
+    if (domInspectorState.rafId == null) {
+      domInspectorState.rafId = requestAnimationFrame(renderFrame);
+    }
+  };
+
+  // Single frame renderer: reads pendingTarget, draws highlight/label, then
+  // computes and draws Figma-style measurement guides for that target.
+  const renderFrame = () => {
+    domInspectorState.rafId = null;
+    const target = domInspectorState.pendingTarget;
+    if (!target) return;
     domInspectorState.lastTarget = target;
+
     const rect = target.getBoundingClientRect();
+    const overlay = domInspectorState.overlay;
     if (overlay) {
       overlay.style.left = `${rect.left}px`;
       overlay.style.top = `${rect.top}px`;
@@ -1134,17 +1367,23 @@ function startDomInspector() {
       overlay.style.height = `${rect.height}px`;
       overlay.style.display = 'block';
     }
-    // Position the info label at the top-right corner of the highlight box.
     const label = domInspectorState.overlayLabel;
     if (label) {
       const { tag, id, classes } = describeDomNode(target);
       const shortSelector = `${tag}${id ? `#${id}` : ''}${classes.length ? `.${classes[0]}` : ''}`;
       label.textContent = `${shortSelector}  ${Math.round(rect.width)}×${Math.round(rect.height)}`;
-      // Place above the box if there's room; otherwise below it.
       const labelTop = rect.top > 20 ? rect.top - 20 : rect.bottom + 4;
       label.style.left = `${rect.left}px`;
       label.style.top = `${labelTop}px`;
       label.style.display = 'block';
+    }
+    // Measurement guides: skip rotated elements (their visual rect is not
+    // axis-aligned, so straight guides would be misleading).
+    const measurements = domInspectorState.measurements;
+    if (measurements) {
+      const data = computeMeasurements(target);
+      drawMeasurements(measurements, data);
+      measurements.style.display = 'block';
     }
   };
 
@@ -1180,6 +1419,12 @@ function startDomInspector() {
 function stopDomInspector() {
   if (!domInspectorState.active) return;
   domInspectorState.active = false;
+  // Cancel any pending frame so we never draw after teardown.
+  if (domInspectorState.rafId != null) {
+    cancelAnimationFrame(domInspectorState.rafId);
+    domInspectorState.rafId = null;
+  }
+  domInspectorState.pendingTarget = null;
   if (domInspectorState.onMove) document.removeEventListener('mousemove', domInspectorState.onMove, true);
   if (domInspectorState.onClick) document.removeEventListener('click', domInspectorState.onClick, true);
   if (domInspectorState.onKey) document.removeEventListener('keydown', domInspectorState.onKey, true);

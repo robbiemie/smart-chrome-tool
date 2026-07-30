@@ -124,16 +124,25 @@ shows a draggable panel with selector, Core Styles table (editable colors via
 native picker, live inline-style writes), editable size box, Chrome-style box
 model diagram (margin/border/padding/content, hover-highlight per layer), and a
 collapsible full computed-styles list. Supports hex⇄rgb toggle, click-to-copy,
-re-inspect, minimize, Esc-to-cancel.
+re-inspect, minimize, Esc-to-cancel. **Hover pick mode also draws Figma-style
+red measurement guides** to the nearest sibling (or viewport edge) on each of
+the 4 sides, with pixel labels; rendering is rAF-batched to stay smooth.
 
 **Lives in:** `content.js` (`startDomInspector`/`stopDomInspector`,
 `pickDomNode`, `showDomInspectorPanel`, `buildSummaryItem`, `buildEditableBox`,
 `buildBoxModelDiagram`, `readComputedStyles`/`readCoreStyles`/`readBoxModel`,
-`bindDomInspectorDrag`); state in `domInspectorState`.
+`bindDomInspectorDrag`, `computeMeasurements`, `drawMeasurements`,
+`renderFrame`); state in `domInspectorState`; cap `DOM_INSPECTOR_MAX_SIBLINGS`.
 
 **Trigger:** `MOCKKIT_INSPECT_DOM` message from iframe
 (`components/OperationsRail/index.tsx` DOM Inspect button) → content
 `startDomInspector()`.
+
+**Algorithm:** Sibling + viewport fallback — for each direction, among the
+parent's direct children that overlap the target on the perpendicular axis,
+pick the nearest edge; fall back to the viewport edge when no sibling
+qualifies. Skips rotated elements (visual rect not axis-aligned) and
+oversized sibling sets (> `DOM_INSPECTOR_MAX_SIBLINGS`).
 
 ---
 
