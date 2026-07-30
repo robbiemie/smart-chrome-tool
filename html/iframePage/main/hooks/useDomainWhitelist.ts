@@ -114,15 +114,9 @@ export const useDomainWhitelist = () => {
     });
   }, []);
 
-  const currentTabMatched = useMemo(
-    () => isHostnameWhitelisted(currentHostname, whitelist),
-    [currentHostname, whitelist]
-  );
-
   return {
     domainWhitelist: whitelist,
     currentHostname,
-    currentTabMatched,
     addDomain,
     removeDomain,
   };

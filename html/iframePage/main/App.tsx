@@ -96,7 +96,6 @@ function App() {
   const {
     domainWhitelist,
     currentHostname,
-    currentTabMatched,
     addDomain,
     removeDomain,
   } = useDomainWhitelist();
@@ -372,7 +371,6 @@ function App() {
             onToggleFloatingRules={setFloatingRulesEnabled}
             domainWhitelist={domainWhitelist}
             currentHostname={currentHostname}
-            currentTabMatched={currentTabMatched}
             onAddDomain={addDomain}
             onRemoveDomain={removeDomain}
             allModulesCollapsed={allModulesCollapsed}

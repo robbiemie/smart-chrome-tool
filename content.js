@@ -116,6 +116,18 @@ injectedStyle(`
     background: linear-gradient(180deg, rgb(248 245 238 / 80%), rgb(255 255 255 / 90%));
     border-bottom: 1px solid rgb(27 40 34 / 5%);
   }
+  .ajax-interceptor-action-bar__group {
+    display: flex;
+    align-items: center;
+  }
+  .ajax-interceptor-action-bar__version {
+    font-size: 11px;
+    font-weight: 600;
+    color: rgb(27 40 34 / 45%);
+    letter-spacing: 0.02em;
+    user-select: none;
+    pointer-events: none;
+  }
   .mockkit-interceptor-iframe {
     border: none;
     height: calc(100% - 40px);
@@ -757,7 +769,7 @@ injectedStyle(`
     font-size: 11px;
     line-height: 1.7;
     color: #1b2822;
-    background: #f7f4ec;
+    background: #f5f7f6;
     border-radius: 8px;
     padding: 8px 10px;
     max-height: 200px;
@@ -791,26 +803,47 @@ injectedStyle(`
     letter-spacing: 0.04em;
     color: rgb(27 40 34 / 45%);
   }
-  .mockkit-dom-inspector__summary {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 6px;
+  .mockkit-dom-inspector__core-table {
+    width: 100%;
+    border-collapse: collapse;
     margin-bottom: 0;
+    font-size: 11px;
+    table-layout: fixed;
   }
-  .mockkit-dom-inspector__summary-item {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-    padding: 6px 8px;
-    border-radius: 8px;
-    background: #f7f4ec;
-  }
-  .mockkit-dom-inspector__summary-label {
+  .mockkit-dom-inspector__core-table thead th {
     font-size: 10px;
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.04em;
     color: rgb(27 40 34 / 45%);
+    text-align: left;
+    padding: 4px 8px;
+    border-bottom: 1px solid rgb(27 40 34 / 8%);
+    background: #f5f7f6;
+  }
+  .mockkit-dom-inspector__core-row:nth-child(even) td {
+    background: rgb(27 40 34 / 2%);
+  }
+  .mockkit-dom-inspector__core-cell {
+    padding: 6px 8px;
+    vertical-align: top;
+    border-bottom: 1px solid rgb(27 40 34 / 5%);
+    word-break: break-word;
+  }
+  .mockkit-dom-inspector__core-cell--label {
+    width: 38%;
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: rgb(27 40 34 / 45%);
+  }
+  .mockkit-dom-inspector__core-cell--value {
+    font-family: Menlo, Monaco, Consolas, monospace;
+    color: #1b2822;
+  }
+  .mockkit-dom-inspector__core-editor {
+    margin-top: 4px;
   }
   .mockkit-dom-inspector__summary-value {
     font-family: Menlo, Monaco, Consolas, monospace;
@@ -876,7 +909,7 @@ injectedStyle(`
     margin-top: 10px;
     padding: 8px;
     border-radius: 8px;
-    background: #f7f4ec;
+    background: #f5f7f6;
   }
   .mockkit-dom-inspector__box-model-title {
     font-size: 10px;
@@ -1255,16 +1288,21 @@ const SUMMARY_STYLE_MAP = {
   'Size': '', // handled specially (width × height)
 };
 
-// Build a single summary card with click-to-copy AND inline editing.
-// Color items render a native color picker; text items render a text input.
+// Build a single Core Styles table row: label cell + value cell.
+// The value cell carries the click-to-copy display AND the inline editor
+// (native color picker for colors, text input for other properties).
 // Edits apply live to the inspected node's inline style.
 function buildSummaryItem(label, value, swatchColor, colorMode, node) {
-  const item = document.createElement('div');
-  item.className = 'mockkit-dom-inspector__summary-item';
-  const labelEl = document.createElement('span');
-  labelEl.className = 'mockkit-dom-inspector__summary-label';
-  labelEl.textContent = label;
-  item.appendChild(labelEl);
+  const row = document.createElement('tr');
+  row.className = 'mockkit-dom-inspector__core-row';
+
+  const labelCell = document.createElement('td');
+  labelCell.className = 'mockkit-dom-inspector__core-cell mockkit-dom-inspector__core-cell--label';
+  labelCell.textContent = label;
+  row.appendChild(labelCell);
+
+  const valueCell = document.createElement('td');
+  valueCell.className = 'mockkit-dom-inspector__core-cell mockkit-dom-inspector__core-cell--value';
 
   const isColor = Boolean(swatchColor);
   const displayValue = isColor ? formatColor(value, colorMode) : value;
@@ -1301,12 +1339,12 @@ function buildSummaryItem(label, value, swatchColor, colorMode, node) {
       }, 1200);
     }).catch(() => {});
   });
-  item.appendChild(valueEl);
+  valueCell.appendChild(valueEl);
 
-  // --- Inline editor (below the value) ---
+  // --- Inline editor (below the value, inside the value cell) ---
   if (node && SUMMARY_STYLE_MAP[label] !== undefined) {
     const editorRow = document.createElement('div');
-    editorRow.style.cssText = 'margin-top:4px;';
+    editorRow.className = 'mockkit-dom-inspector__core-editor';
 
     if (isColor) {
       // Native color picker for color values.
@@ -1380,10 +1418,11 @@ function buildSummaryItem(label, value, swatchColor, colorMode, node) {
       editorRow.appendChild(input);
     }
 
-    item.appendChild(editorRow);
+    valueCell.appendChild(editorRow);
   }
 
-  return item;
+  row.appendChild(valueCell);
+  return row;
 }
 
 // Build a Chrome DevTools-style box model diagram with nested margin /
@@ -1672,8 +1711,8 @@ function showDomInspectorPanel(node, hint) {
     // Color items support rgb/hex toggle and click-to-copy.
     const core = readCoreStyles(node);
     if (core) {
-      // Wrap the color toggle + summary grid in a single panel container
-      // so the three items look grouped rather than floating loose.
+      // Wrap the color toggle + Core Styles table in a single panel container
+      // so the items look grouped rather than floating loose.
       const corePanel = document.createElement('div');
       corePanel.className = 'mockkit-dom-inspector__core-panel';
 
@@ -1688,27 +1727,35 @@ function showDomInspectorPanel(node, hint) {
       const colorToggle = document.createElement('button');
       colorToggle.type = 'button';
       colorToggle.className = 'mockkit-dom-inspector__color-toggle';
-      let colorMode = 'rgb';
+      // Default to hex — most designers read colors as #rrggbb.
+      let colorMode = 'hex';
       colorToggle.textContent = `Color: ${colorMode.toUpperCase()} ⇄`;
       corePanelHeader.appendChild(colorToggle);
       corePanel.appendChild(corePanelHeader);
 
-      const summary = document.createElement('div');
-      summary.className = 'mockkit-dom-inspector__summary';
-      summary.appendChild(buildSummaryItem('Color', core.color, core.color, colorMode, node));
-      summary.appendChild(buildSummaryItem('Background', core.backgroundColor, core.backgroundColor, colorMode, node));
-      summary.appendChild(buildSummaryItem('Font Weight', core.fontWeight, null, colorMode, node));
-      corePanel.appendChild(summary);
+      // Core Styles rendered as a Property/Value table for compact scanning.
+      const coreTable = document.createElement('table');
+      coreTable.className = 'mockkit-dom-inspector__core-table';
+      const coreThead = document.createElement('thead');
+      coreThead.innerHTML = '<tr><th>Property</th><th>Value</th></tr>';
+      coreTable.appendChild(coreThead);
+      const coreTbody = document.createElement('tbody');
+      const renderCoreRows = (mode) => {
+        coreTbody.innerHTML = '';
+        coreTbody.appendChild(buildSummaryItem('Color', core.color, core.color, mode, node));
+        coreTbody.appendChild(buildSummaryItem('Background', core.backgroundColor, core.backgroundColor, mode, node));
+        coreTbody.appendChild(buildSummaryItem('Font Weight', core.fontWeight, null, mode, node));
+      };
+      renderCoreRows(colorMode);
+      coreTable.appendChild(coreTbody);
+      corePanel.appendChild(coreTable);
       body.appendChild(corePanel);
 
-      // Toggle re-renders the summary grid with the new color format.
+      // Toggle re-renders the table body with the new color format.
       colorToggle.addEventListener('click', () => {
         colorMode = colorMode === 'rgb' ? 'hex' : 'rgb';
         colorToggle.textContent = `Color: ${colorMode.toUpperCase()} ⇄`;
-        summary.innerHTML = '';
-        summary.appendChild(buildSummaryItem('Color', core.color, core.color, colorMode, node));
-        summary.appendChild(buildSummaryItem('Background', core.backgroundColor, core.backgroundColor, colorMode, node));
-        summary.appendChild(buildSummaryItem('Font Weight', core.fontWeight, null, colorMode, node));
+        renderCoreRows(colorMode);
       });
 
       // Box: single editable element box showing width × height with the
@@ -2013,13 +2060,27 @@ function actionBar (container) {
   header.className = 'ajax-interceptor-action-bar';
   // left: close + fullscreen
   const left = document.createElement('div');
+  left.className = 'ajax-interceptor-action-bar__group';
   const closeBtn = closeButton(container);
   left.appendChild(closeBtn);
   const fullscreenBtn = fullscreenButton(container);
   left.appendChild(fullscreenBtn);
   header.appendChild(left);
+  // center: version badge (read from the extension manifest so it stays in
+  // sync with manifest.json without manual updates).
+  const center = document.createElement('div');
+  center.className = 'ajax-interceptor-action-bar__version';
+  let manifestVersion = '';
+  try {
+    manifestVersion = (chrome.runtime && chrome.runtime.getManifest && chrome.runtime.getManifest().version) || '';
+  } catch (e) {
+    manifestVersion = '';
+  }
+  center.textContent = manifestVersion ? `v${manifestVersion}` : '';
+  header.appendChild(center);
   // right: theme mode
   const right = document.createElement('div');
+  right.className = 'ajax-interceptor-action-bar__group';
   const themeModeBtn = themeModeButton(container);
   right.appendChild(themeModeBtn);
   header.appendChild(right);

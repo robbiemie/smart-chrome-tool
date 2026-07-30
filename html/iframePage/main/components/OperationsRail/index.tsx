@@ -19,7 +19,6 @@ interface OperationsRailProps {
   onToggleFloatingRules: (value: boolean) => void;
   domainWhitelist: string[];
   currentHostname: string;
-  currentTabMatched: boolean;
   onAddDomain: (domain: string) => void;
   onRemoveDomain: (domain: string) => void;
   allModulesCollapsed: boolean;
@@ -52,7 +51,6 @@ const OperationsRail = ({
   onToggleFloatingRules,
   domainWhitelist,
   currentHostname,
-  currentTabMatched,
   onAddDomain,
   onRemoveDomain,
   allModulesCollapsed,
@@ -72,6 +70,12 @@ const OperationsRail = ({
   hasSelectedGroup,
 }: OperationsRailProps) => {
   const [domainInput, setDomainInput] = useState('');
+
+  // The add-affordance is gated by EXPLICIT membership rather than pattern
+  // match: a wildcard '*' matches every host, but the user still wants to pin
+  // the current host as an explicit entry. Show the green check only when the
+  // host is literally in the list; otherwise offer a one-click add.
+  const currentHostAdded = Boolean(currentHostname) && domainWhitelist.includes(currentHostname);
 
   const handleAddDomain = () => {
     const trimmed = domainInput.trim();
@@ -153,7 +157,7 @@ const OperationsRail = ({
           <div className="domain-whitelist__header">
             <strong>Domain Whitelist</strong>
             {currentHostname && (
-              currentTabMatched ? (
+              currentHostAdded ? (
                 <Tag color="green" className="domain-whitelist__status-tag">
                   ✓ {currentHostname}
                 </Tag>
