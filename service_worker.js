@@ -536,15 +536,22 @@ function compareVersions(remote, local) {
 // Fetch the latest release from GitHub and decide whether it's newer than
 // the currently installed manifest version. Returns a payload describing
 // the update (or its absence) so the UI can show a badge / trigger apply.
+//
+// Strategy: try the REST API first (rich metadata). On any failure
+// (403 rate limit, 5xx, network error) fall back to scraping the public
+// releases HTML page — that page is NOT rate-limited and 302-redirects to
+// /releases/tag/<tag>, so we can recover the tag from the redirect URL and
+// the zip asset link from the page HTML. The HTML path yields less metadata
+// (no release notes / publish time) but keeps update detection working when
+// the API is unavailable — which is the common case behind shared IPs.
 async function fetchLatestRelease() {
-  const url = `https://api.github.com/repos/${GITHUB_REPO}/releases/latest`;
-  console.log('[MockKit Update SW] fetchLatestRelease', url);
+  const apiUrl = `https://api.github.com/repos/${GITHUB_REPO}/releases/latest`;
+  console.log('[MockKit Update SW] fetchLatestRelease', apiUrl);
 
-  // Default: anonymous request (60/h rate limit). On 403 (rate limited), fall
-  // back to an authenticated request using the stored GitHub token (5000/h)
-  // so heavy testing never blocks normal users.
+  const localVersion = chrome.runtime.getManifest().version;
+
   const parseRelease = async (headers) => {
-    const response = await fetch(url, { headers });
+    const response = await fetch(apiUrl, { headers });
     console.log('[MockKit Update SW] GitHub API response', { status: response.status, ok: response.ok, authenticated: !!headers.Authorization });
     return response;
   };
@@ -564,29 +571,97 @@ async function fetchLatestRelease() {
     }
   }
 
-  if (!response.ok) {
-    throw new Error(`GitHub API responded ${response.status}`);
+  // API succeeded — parse the rich JSON payload.
+  if (response.ok) {
+    const data = await response.json();
+    const remoteTag = data.tag_name || '';
+    console.log('[MockKit Update SW] versions', { remoteTag, localVersion });
+
+    const assets = Array.isArray(data.assets) ? data.assets : [];
+    const namedAsset = assets.find((a) => a.name && a.name.startsWith(DOWNLOAD_PREFIX) && a.name.endsWith('.zip'));
+    const asset = namedAsset || assets[0];
+    console.log('[MockKit Update SW] asset', { named: !!namedAsset, name: asset?.name, downloadUrl: asset?.browser_download_url, zipballUrl: data.zipball_url });
+
+    const result = {
+      hasUpdate: compareVersions(remoteTag, localVersion) > 0,
+      remoteVersion: remoteTag,
+      localVersion,
+      downloadUrl: asset?.browser_download_url || data.zipball_url || '',
+      releaseUrl: data.html_url || '',
+      releaseNotes: data.body || '',
+      publishedAt: data.published_at || '',
+      source: 'api',
+    };
+    console.log('[MockKit Update SW] fetchLatestRelease result', result);
+    return result;
   }
-  const data = await response.json();
-  const remoteTag = data.tag_name || '';
-  const localVersion = chrome.runtime.getManifest().version;
-  console.log('[MockKit Update SW] versions', { remoteTag, localVersion });
 
-  const assets = Array.isArray(data.assets) ? data.assets : [];
-  const namedAsset = assets.find((a) => a.name && a.name.startsWith(DOWNLOAD_PREFIX) && a.name.endsWith('.zip'));
-  const asset = namedAsset || assets[0];
-  console.log('[MockKit Update SW] asset', { named: !!namedAsset, name: asset?.name, downloadUrl: asset?.browser_download_url, zipballUrl: data.zipball_url });
+  // API failed (rate limit / 5xx / network) — fall back to the releases
+  // HTML page. github.com/.../releases/latest is an ordinary web page with
+  // no per-IP rate limit, and it 302-redirects to /releases/tag/<tag>.
+  console.log('[MockKit Update SW] API unavailable (' + response.status + '), falling back to HTML scrape');
+  return fetchLatestReleaseViaHtml(localVersion);
+}
 
+// HTML fallback: fetch the public releases/latest page, recover the tag from
+// the final (redirected) URL, and extract the zip asset link from the HTML.
+// Best-effort — if parsing fails we surface a clear error so the UI can show
+// "no update" rather than a misleading "rate limited" message.
+async function fetchLatestReleaseViaHtml(localVersion) {
+  const pageUrl = `https://github.com/${GITHUB_REPO}/releases/latest`;
+  console.log('[MockKit Update SW] HTML fallback', pageUrl);
+
+  // redirect: 'follow' (default) — response.url holds the final /tag/<tag> URL.
+  let htmlResponse;
+  try {
+    htmlResponse = await fetch(pageUrl, {
+      headers: { Accept: 'text/html,application/xhtml+xml' },
+      redirect: 'follow',
+    });
+  } catch (networkErr) {
+    console.error('[MockKit Update SW] HTML fallback network error', networkErr);
+    throw new Error('GitHub API and releases page both unavailable (network error)');
+  }
+
+  if (!htmlResponse.ok) {
+    console.error('[MockKit Update SW] HTML fallback failed', { status: htmlResponse.status });
+    throw new Error(`GitHub releases page responded ${htmlResponse.status}`);
+  }
+
+  // Recover the tag from the final URL: .../releases/tag/v0.0.35
+  const finalUrl = htmlResponse.url || '';
+  const tagMatch = finalUrl.match(/\/releases\/tag\/([^/?#]+)/);
+  const remoteTag = tagMatch ? decodeURIComponent(tagMatch[1]) : '';
+  if (!remoteTag) {
+    console.error('[MockKit Update SW] HTML fallback could not parse tag from', finalUrl);
+    throw new Error('Could not determine latest release tag');
+  }
+
+  const html = await htmlResponse.text();
+
+  // Extract the zip asset download link. GitHub renders asset links as
+  // href="/<repo>/releases/download/<tag>/<asset-name>". Match the zip we ship.
+  const assetRegex = new RegExp(
+    `href="(/${GITHUB_REPO.replace(/\//g, '\\/')}/releases/download/${remoteTag.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}/[^"]*\\.zip)"`,
+    'i'
+  );
+  const assetMatch = html.match(assetRegex);
+  const downloadUrl = assetMatch
+    ? `https://github.com${assetMatch[1]}`
+    : `https://github.com/${GITHUB_REPO}/releases/download/${remoteTag}/${DOWNLOAD_PREFIX}${remoteTag.replace(/^v/, '')}.zip`;
+
+  const releaseUrl = `https://github.com/${GITHUB_REPO}/releases/tag/${remoteTag}`;
   const result = {
     hasUpdate: compareVersions(remoteTag, localVersion) > 0,
     remoteVersion: remoteTag,
     localVersion,
-    downloadUrl: asset?.browser_download_url || data.zipball_url || '',
-    releaseUrl: data.html_url || '',
-    releaseNotes: data.body || '',
-    publishedAt: data.published_at || '',
+    downloadUrl,
+    releaseUrl,
+    releaseNotes: '', // HTML scrape does not recover the release body reliably
+    publishedAt: '',
+    source: 'html',
   };
-  console.log('[MockKit Update SW] fetchLatestRelease result', result);
+  console.log('[MockKit Update SW] HTML fallback result', result);
   return result;
 }
 

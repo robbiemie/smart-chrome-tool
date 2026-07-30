@@ -1,5 +1,7 @@
 # smart-chrome-tool
 
+> 📖 非技术人员可参考最简版使用说明：[使用说明.md](./使用说明.md) ｜ 🇬🇧 English: [README.md](./README.md)
+
 `smart-chrome-tool` 是一款 Chrome 浏览器扩展，用于前端调试场景下拦截网络请求、改写响应、调整请求头，以及管理页面级请求头规则。
 
 扩展内置一个基于 React + TypeScript 的 iframe 工作台，支持以下能力：
@@ -13,9 +15,6 @@
 - 通过 `__csr=1` URL 参数切换当前标签页的 CSR（客户端渲染）模式
 - 通过域名白名单控制 Mock 层与悬浮框的生效范围
 - 导入与导出规则配置
-
-> 英文文档请见 [README.md](./README.md)。
-> 非技术人员可参考最简版使用说明：[使用说明.md](./使用说明.md)。
 
 ## 截图
 

@@ -1,5 +1,7 @@
 # smart-chrome-tool
 
+> 📖 Simplified usage guide: [使用说明.md](./使用说明.md) ｜ 🇨🇳 中文文档：[README-ZH.md](./README-ZH.md)
+
 `smart-chrome-tool` is a Chrome extension for intercepting network requests, rewriting responses, adjusting request headers, and managing page-level request header rules during frontend debugging.
 
 The extension ships with a React + TypeScript iframe workbench that allows you to:
@@ -13,9 +15,6 @@ The extension ships with a React + TypeScript iframe workbench that allows you t
 - Toggle CSR (client-side rendering) mode for the active tab via a `__csr=1` URL parameter
 - Gate the mock layer and floating panel with a domain whitelist
 - Import and export rule configurations
-
-> 中文文档请见 [README-ZH.md](./README-ZH.md)。
-> For a simplified quick-start guide (Chinese), see [使用说明.md](./使用说明.md).
 
 ## Screenshots
 
