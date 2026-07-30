@@ -452,6 +452,41 @@
   color: #59616b;
 }
 
+/* Group Studio switcher bar: lives inside the Group Studio module so group
+   selection and rule editing stay in one place. Reuses .group-switcher__select
+   for the dropdown styling but lays out compactly inline. */
+.group-studio__bar {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 14px;
+}
+
+.group-studio__bar .group-switcher__select {
+  flex: 1;
+}
+
+/* Compact the select height inside the studio (the rail used 48px). */
+.group-studio__bar .group-switcher__select .ant-select-selector {
+  height: 40px !important;
+  border-radius: 12px !important;
+}
+
+.group-studio__bar .ant-btn {
+  flex-shrink: 0;
+  height: 40px;
+  border-radius: 12px;
+  padding-inline: 12px;
+  background: rgb(27 40 34 / 4%);
+}
+
+.group-studio__bar-empty {
+  flex: 1;
+  color: rgb(27 40 34 / 40%);
+  font-size: 13px;
+  padding: 0 4px;
+}
+
 .rule-card:hover {
   transform: translateY(-2px);
   box-shadow: 0 14px 30px rgb(37 54 46 / 10%);

@@ -69,12 +69,12 @@ export const useRegistry = () => {
     persistAjaxDataList(newAjaxDataList);
   };
 
-  // Batch import merges multiple parsed rule groups (collected from one or
-  // more JSON files) into the existing workspace. Groups are appended rather
-  // than replacing storage so the user never loses existing rules by accident.
-  const onBatchImport = (groups: AjaxGroup[]) => {
+  // Batch import: when `replace` is true the imported groups fully overwrite
+  // the workspace (used for "import all" flows). Otherwise groups are appended
+  // so single-group imports never clobber existing rules by accident.
+  const onBatchImport = (groups: AjaxGroup[], replace = false) => {
     if (!chrome.storage || !Array.isArray(groups) || groups.length === 0) return;
-    const newAjaxDataList = [...ajaxDataList, ...groups];
+    const newAjaxDataList = replace ? [...groups] : [...ajaxDataList, ...groups];
     persistAjaxDataList(newAjaxDataList);
   };
 

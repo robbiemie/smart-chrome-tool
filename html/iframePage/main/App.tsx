@@ -1,5 +1,4 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Empty } from 'antd';
 import ModifyDataModal, { OpenModalProps } from './components/ModifyDataModal';
 import BatchImportExport from './components/BatchImportExport';
 import UpdateModal from './components/UpdateModal';
@@ -261,13 +260,13 @@ function App() {
     setSelectedGroupIndex(ajaxDataList.length);
   };
 
-  // Append imported groups and jump the selection to the first newly added
-  // group so the user lands on the data they just imported.
-  const handleBatchImport = (groups: AjaxGroup[]) => {
-    const startIndex = ajaxDataList.length;
-    onBatchImport(groups);
+  // Import groups into the workspace. In replace mode the workspace is fully
+  // overwritten, so selection jumps to the first imported group; in append
+  // mode it jumps to the first newly added group.
+  const handleBatchImport = (groups: AjaxGroup[], replace = false) => {
+    onBatchImport(groups, replace);
     if (groups.length > 0) {
-      setSelectedGroupIndex(startIndex);
+      setSelectedGroupIndex(replace ? 0 : ajaxDataList.length);
     }
   };
 
@@ -360,8 +359,6 @@ function App() {
       <div className="workbench-shell">
         <div className="workbench-layout">
           <OperationsRail
-            ajaxDataList={ajaxDataList as AjaxGroup[]}
-            selectedGroupIndex={selectedGroupIndex}
             ajaxToolsSwitchOn={ajaxToolsSwitchOn}
             csrModeEnabled={csrEnabled}
             csrModeLoading={csrModeLoading}
@@ -377,12 +374,10 @@ function App() {
             onToggleCollapseAll={toggleCollapseAll}
             onOpenImportExport={() => setImportExportVisible(true)}
             onPageHeadersOpen={openPageHeadersModal}
-            onSelectGroup={setSelectedGroupIndex}
             onToggleAjaxToolsSwitch={handleToggleAjaxToolsSwitch}
             onToggleCsrMode={(value) => {
               void toggleCsrMode(value);
             }}
-            onGroupAdd={handleGroupAdd}
             onGlobalControlsCollapseToggle={() => {
               updateModuleCollapseState('globalControls', !moduleCollapseState.globalControls);
             }}
@@ -397,40 +392,38 @@ function App() {
           />
 
           <main className="workbench-main" style={{ opacity: ajaxToolsSwitchOn ? 1 : 0.65 }}>
-            {ajaxDataList.length < 1 ? (
-              <section className="empty-workbench">
-                <Empty description="Start by creating a group or importing an existing ruleset." />
-              </section>
-            ) : (
-              <div className="workbench-content-grid">
-                <GroupWorkbench
-                  group={selectedGroup}
-                  groupIndex={selectedGroupIndex}
-                  selectedRuleIndex={selectedRuleIndex}
-                  ajaxToolsExpandAll={ajaxToolsExpandAll}
-                  collapsed={moduleCollapseState.groupWorkbench}
-                  onSelectRule={(ruleIndex) => {
-                    setSelectedRuleIndexMap((previous) => ({
-                      ...previous,
-                      [selectedGroupIndex]: ruleIndex,
-                    }));
-                  }}
-                  onGroupSummaryTextChange={onGroupSummaryTextChange}
-                  onGroupMove={onGroupMove}
-                  onGroupDelete={onGroupDelete}
-                  onGroupOpenChange={handleGroupOpenChange}
-                  onCollapseChange={onCollapseChange}
-                  onInterfaceListAdd={onInterfaceListAdd}
-                  onInterfaceListDelete={handleInterfaceListDelete}
-                  onInterfaceMove={handleInterfaceMove}
-                  onInterfaceListChange={handleInterfaceListChange}
-                  onOpenModifyModal={handleOpenModifyModal}
-                  onToggleCollapse={() => {
-                    updateModuleCollapseState('groupWorkbench', !moduleCollapseState.groupWorkbench);
-                  }}
-                />
-              </div>
-            )}
+            <div className="workbench-content-grid">
+              <GroupWorkbench
+                ajaxDataList={ajaxDataList as AjaxGroup[]}
+                selectedGroupIndex={selectedGroupIndex}
+                group={selectedGroup}
+                groupIndex={selectedGroupIndex}
+                selectedRuleIndex={selectedRuleIndex}
+                ajaxToolsExpandAll={ajaxToolsExpandAll}
+                collapsed={moduleCollapseState.groupWorkbench}
+                onSelectGroup={setSelectedGroupIndex}
+                onGroupAdd={handleGroupAdd}
+                onSelectRule={(ruleIndex) => {
+                  setSelectedRuleIndexMap((previous) => ({
+                    ...previous,
+                    [selectedGroupIndex]: ruleIndex,
+                  }));
+                }}
+                onGroupSummaryTextChange={onGroupSummaryTextChange}
+                onGroupMove={onGroupMove}
+                onGroupDelete={onGroupDelete}
+                onGroupOpenChange={handleGroupOpenChange}
+                onCollapseChange={onCollapseChange}
+                onInterfaceListAdd={onInterfaceListAdd}
+                onInterfaceListDelete={handleInterfaceListDelete}
+                onInterfaceMove={handleInterfaceMove}
+                onInterfaceListChange={handleInterfaceListChange}
+                onOpenModifyModal={handleOpenModifyModal}
+                onToggleCollapse={() => {
+                  updateModuleCollapseState('groupWorkbench', !moduleCollapseState.groupWorkbench);
+                }}
+              />
+            </div>
           </main>
         </div>
 

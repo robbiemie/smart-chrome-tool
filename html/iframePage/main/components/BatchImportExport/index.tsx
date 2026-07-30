@@ -19,7 +19,7 @@ interface BatchImportExportProps {
   onClose: () => void;
   ajaxDataList: AjaxGroup[];
   selectedGroup: AjaxGroup | null;
-  onBatchImport: (groups: AjaxGroup[]) => void;
+  onBatchImport: (groups: AjaxGroup[], replace?: boolean) => void;
 }
 
 interface ParsedImportFile {
@@ -162,15 +162,40 @@ const BatchImportExport = ({
     },
   };
 
-  const handleImport = () => {
-    if (!hasReadyGroups) return;
-    onBatchImport(readyGroups);
+  // Bulk imports (more than one group) fully REPLACE the workspace, while a
+  // single-group import is appended so it never wipes existing rules. The
+  // replace path is gated by a confirmation prompt so the destructive action
+  // is never triggered by accident.
+  const isBulkImport = readyGroupCount > 1;
+  const hasExistingGroups = ajaxDataList.length > 0;
+
+  const commitImport = (replace: boolean) => {
+    onBatchImport(readyGroups, replace);
     notification.success({
       message: 'Import complete',
-      description: `${readyGroupCount} group(s) appended to the workbench.`,
+      description: replace
+        ? `${readyGroupCount} group(s) replaced the workspace.`
+        : `${readyGroupCount} group(s) appended to the workbench.`,
     });
     reset();
     onClose();
+  };
+
+  const handleImport = () => {
+    if (!hasReadyGroups) return;
+    // Only bulk imports that would overwrite existing content need a prompt.
+    if (isBulkImport && hasExistingGroups) {
+      Modal.confirm({
+        title: 'Replace all groups?',
+        content: `This will discard all ${ajaxDataList.length} existing group(s) and load ${readyGroupCount} imported group(s) instead. This cannot be undone.`,
+        okText: 'Replace',
+        okType: 'danger',
+        cancelText: 'Cancel',
+        onOk: () => commitImport(true),
+      });
+      return;
+    }
+    commitImport(isBulkImport);
   };
 
   return (
@@ -219,7 +244,7 @@ const BatchImportExport = ({
           <div className="batch-io__section-head">
             <strong>Import</strong>
             <span className="batch-io__hint">
-              Drop multiple .json files; they will be merged into the workspace.
+              Single-group files are appended. Multiple groups replace the workspace.
             </span>
           </div>
           <Upload.Dragger {...uploadProps} className="batch-io__dragger">
@@ -259,8 +284,12 @@ const BatchImportExport = ({
             <Button onClick={reset} disabled={parsedFiles.length === 0}>
               Clear
             </Button>
-            <Button type="primary" onClick={handleImport} disabled={!hasReadyGroups}>
-              {hasReadyGroups ? `Import ${readyGroupCount} group(s)` : 'Import'}
+            <Button type="primary" onClick={handleImport} disabled={!hasReadyGroups} danger={isBulkImport && hasExistingGroups}>
+              {hasReadyGroups
+                ? isBulkImport && hasExistingGroups
+                  ? `Replace all with ${readyGroupCount} group(s)`
+                  : `Import ${readyGroupCount} group(s)`
+                : 'Import'}
             </Button>
           </div>
         </section>

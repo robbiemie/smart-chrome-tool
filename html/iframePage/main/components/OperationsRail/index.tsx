@@ -1,15 +1,12 @@
 import React, { useState } from 'react';
-import { Button, Empty, Input, Select, Switch, Tag } from 'antd';
+import { Button, Input, Switch, Tag } from 'antd';
 import { PlusOutlined, SwapOutlined, SettingOutlined, CompressOutlined, ExpandOutlined, CloseOutlined, RadarChartOutlined, AimOutlined } from '@ant-design/icons';
-import { AjaxGroup } from '../../types/registry';
 import { withErrorBoundary } from '../../common/withErrorBoundary';
 import ModuleSection from '../ModuleSection';
 import RequestSniffer from '../RequestSniffer';
 import { CapturedRequest } from '../../hooks/useRequestSniffer';
 
 interface OperationsRailProps {
-  ajaxDataList: AjaxGroup[];
-  selectedGroupIndex: number;
   ajaxToolsSwitchOn: boolean;
   csrModeEnabled: boolean;
   csrModeLoading: boolean;
@@ -25,10 +22,8 @@ interface OperationsRailProps {
   onToggleCollapseAll: () => void;
   onOpenImportExport: () => void;
   onPageHeadersOpen: () => void;
-  onSelectGroup: (groupIndex: number) => void;
   onToggleAjaxToolsSwitch: (value: boolean) => void;
   onToggleCsrMode: (value: boolean) => void;
-  onGroupAdd: () => void;
   onGlobalControlsCollapseToggle: () => void;
   // Request Sniffer
   capturedRequests: CapturedRequest[];
@@ -40,8 +35,6 @@ interface OperationsRailProps {
 }
 
 const OperationsRail = ({
-  ajaxDataList,
-  selectedGroupIndex,
   ajaxToolsSwitchOn,
   csrModeEnabled,
   csrModeLoading,
@@ -57,10 +50,8 @@ const OperationsRail = ({
   onToggleCollapseAll,
   onOpenImportExport,
   onPageHeadersOpen,
-  onSelectGroup,
   onToggleAjaxToolsSwitch,
   onToggleCsrMode,
-  onGroupAdd,
   onGlobalControlsCollapseToggle,
   capturedRequests,
   snifferCollapsed,
@@ -196,43 +187,6 @@ const OperationsRail = ({
             onSearch={handleAddDomain}
             enterButton={<PlusOutlined />}
           />
-        </div>
-
-        <div className="group-switcher">
-          <div className="group-switcher__header">
-            <strong>Groups</strong>
-            <Button type="text" size="small" icon={<PlusOutlined />} onClick={onGroupAdd}>
-              Add
-            </Button>
-          </div>
-          {ajaxDataList.length < 1 ? (
-            <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No groups yet" />
-          ) : (
-            <Select
-              value={selectedGroupIndex}
-              className="group-switcher__select"
-              popupClassName="group-switcher__dropdown"
-              onChange={onSelectGroup}
-              options={ajaxDataList.map((group, index) => {
-                const enabledCount = group.interfaceList.filter((item) => item.open).length;
-                const isDisabled = enabledCount === 0;
-                const title = group.summaryText || `Group ${index + 1}`;
-
-                return {
-                  label: (
-                    <div className="group-switcher__option">
-                      <span className={`group-switcher__option-dot ${group.headerClass}`} />
-                      <span className="group-switcher__option-title">{title}</span>
-                      <span className={`group-switcher__option-meta${isDisabled ? ' group-switcher__option-meta--disabled' : ''}`}>
-                        {isDisabled ? 'Disabled' : `${enabledCount} active`}
-                      </span>
-                    </div>
-                  ),
-                  value: index,
-                };
-              })}
-            />
-          )}
         </div>
       </ModuleSection>
 

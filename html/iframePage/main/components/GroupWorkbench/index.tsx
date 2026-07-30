@@ -20,11 +20,15 @@ const HTTP_METHOD_OPTIONS = ['', 'GET', 'POST', 'PUT', 'DELETE', 'HEAD', 'OPTION
 const MATCH_TYPE_OPTIONS = ['regex', 'normal'];
 
 interface GroupWorkbenchProps {
+  ajaxDataList: AjaxGroup[];
+  selectedGroupIndex: number;
   group: AjaxGroup | null;
   groupIndex: number;
   selectedRuleIndex: number;
   ajaxToolsExpandAll: boolean;
   collapsed: boolean;
+  onSelectGroup: (groupIndex: number) => void;
+  onGroupAdd: () => void;
   onSelectRule: (ruleIndex: number) => void;
   onGroupSummaryTextChange: (event: React.ChangeEvent<HTMLInputElement>, groupIndex: number) => void;
   onGroupMove: (groupIndex: number, placement: string) => void;
@@ -45,11 +49,15 @@ interface GroupWorkbenchProps {
 }
 
 const GroupWorkbench = ({
+  ajaxDataList,
+  selectedGroupIndex,
   group,
   groupIndex,
   selectedRuleIndex,
   ajaxToolsExpandAll,
   collapsed,
+  onSelectGroup,
+  onGroupAdd,
   onSelectRule,
   onGroupSummaryTextChange,
   onGroupMove,
@@ -63,14 +71,63 @@ const GroupWorkbench = ({
   onOpenModifyModal,
   onToggleCollapse,
 }: GroupWorkbenchProps) => {
+  const hasGroups = ajaxDataList.length > 0;
+
+  // Group switcher bar: lives inside Group Studio so selecting/adding groups
+  // and editing the selected group happen in one place. Rendered even when no
+  // group exists so the user can create the first one.
+  const groupSwitcherBar = (
+    <div className="group-studio__bar">
+      {hasGroups ? (
+        <Select
+          value={selectedGroupIndex}
+          className="group-switcher__select"
+          popupClassName="group-switcher__dropdown"
+          onChange={onSelectGroup}
+          options={ajaxDataList.map((item, index) => {
+            const enabledCount = item.interfaceList.filter((rule) => rule.open).length;
+            const isDisabled = enabledCount === 0;
+            const title = item.summaryText || `Group ${index + 1}`;
+
+            return {
+              label: (
+                <div className="group-switcher__option">
+                  <span className={`group-switcher__option-dot ${item.headerClass}`} />
+                  <span className="group-switcher__option-title">{title}</span>
+                  <span className={`group-switcher__option-meta${isDisabled ? ' group-switcher__option-meta--disabled' : ''}`}>
+                    {isDisabled ? 'Disabled' : `${enabledCount} active`}
+                  </span>
+                </div>
+              ),
+              value: index,
+            };
+          })}
+        />
+      ) : (
+        <span className="group-studio__bar-empty">No groups yet</span>
+      )}
+      <Button type="text" size="small" icon={<PlusOutlined />} onClick={onGroupAdd} title="Add a new group">
+        Add Group
+      </Button>
+    </div>
+  );
+
   if (!group) {
     return (
-      <section className="group-workbench group-workbench--empty">
+      <ModuleSection
+        title="Group Studio"
+        description="Create a group to start composing rewrite rules."
+        eyebrow="Group Studio"
+        className="group-workbench group-workbench--empty"
+        collapsed={collapsed}
+        onToggleCollapse={onToggleCollapse}
+      >
+        {groupSwitcherBar}
         <Empty
           image={Empty.PRESENTED_IMAGE_SIMPLE}
           description="Create a group to start composing rewrite rules."
         />
-      </section>
+      </ModuleSection>
     );
   }
 
@@ -142,6 +199,7 @@ const GroupWorkbench = ({
       collapsed={collapsed}
       onToggleCollapse={onToggleCollapse}
     >
+      {groupSwitcherBar}
       <Input
         value={group.summaryText}
         className={`group-title-input${isGroupDisabled ? ' group-title-input--disabled' : ''}`}

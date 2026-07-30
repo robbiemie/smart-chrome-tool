@@ -1,5 +1,25 @@
 # Build Changelog
 
+## v0.0.38
+
+- Built At: 2026-07-30T08:20:59.693Z
+- Previous Version: v0.0.37
+- Git Branch: master
+- Git Commit: 88827cc5
+
+### Changed Files
+- html/iframePage/main/App.css
+- html/iframePage/main/App.tsx
+- html/iframePage/main/components/BatchImportExport/index.tsx
+- html/iframePage/main/components/GroupWorkbench/index.tsx
+- html/iframePage/main/components/OperationsRail/index.tsx
+- html/iframePage/main/hooks/useRegistry.ts
+- html/iframePage/package-lock.json
+- html/iframePage/package.json
+- html/iframePage/stats.html
+- manifest.json
+
+
 ## v0.0.37
 
 - Built At: 2026-07-30T03:52:46.755Z
