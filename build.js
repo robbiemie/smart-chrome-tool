@@ -136,6 +136,13 @@ const bumpVersion = () => {
 };
 
 const runBuild = () => {
+  // Local-only builds leave a stale zip from the previous run that is no
+  // longer needed once the workbench is rebuilt. Publishing needs a fresh zip
+  // produced this run, so only sweep leftovers for non-publish flows.
+  if (!shouldPublish) {
+    cleanupStaleZips();
+  }
+
   // Retry mode: don't bump, just rebuild + re-publish the current version.
   if (shouldRetry) {
     console.log('\n--- Retry mode: re-publishing current version ---');
@@ -186,6 +193,30 @@ const readManifestVersion = () => {
   const manifestPath = path.resolve(projectRoot, 'manifest.json');
   const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
   return manifest.version;
+};
+
+// Sweep leftover smart-chrome-tool-v*.zip from the project root so each local
+// build starts clean. Only deletes files matching our own zip naming scheme —
+// other archives are left untouched. Called at the start of non-publish runs.
+const cleanupStaleZips = () => {
+  const entries = fs.readdirSync(projectRoot);
+  const zipPattern = /^smart-chrome-tool-v\d+\.\d+\.\d+\.zip$/;
+  let removed = 0;
+  entries.forEach((entry) => {
+    if (zipPattern.test(entry)) {
+      try {
+        fs.unlinkSync(path.resolve(projectRoot, entry));
+        removed += 1;
+      } catch (error) {
+        // Best-effort: a locked/permission-denied zip should never abort the
+        // build. Log and move on.
+        console.warn(`Could not remove stale zip ${entry}: ${error.message}`);
+      }
+    }
+  });
+  if (removed > 0) {
+    console.log(`Cleaned up ${removed} stale zip package(s) from previous build(s).`);
+  }
 };
 
 const packageExtension = () => {
