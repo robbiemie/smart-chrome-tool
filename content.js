@@ -593,6 +593,19 @@ injectedStyle(`
     border-radius: 3px;
     display: none;
   }
+  /* Anchor overlay: persistent blue highlight marking the locked baseline
+     element A. Visually distinct from the green hover overlay so the user can
+     tell "what I picked as reference" from "what I'm hovering". */
+  .mockkit-dom-inspector-anchor-overlay {
+    position: fixed;
+    z-index: 2147483646;
+    pointer-events: none;
+    border: 2px solid #1677ff;
+    background: rgb(22 119 255 / 10%);
+    box-shadow: 0 0 0 1px rgb(255 255 255 / 80%), 0 4px 16px rgb(22 119 255 / 25%);
+    border-radius: 3px;
+    display: none;
+  }
   /* Info label pinned to the top-right of the highlight overlay, showing the
      element's selector and size while hovering — same UX as Chrome DevTools. */
   .mockkit-dom-inspector-overlay__label {
@@ -630,6 +643,19 @@ injectedStyle(`
     z-index: 2147483645;
     pointer-events: none;
     background: #ff4d4f;
+  }
+  /* Diagonal gap rect: semi-transparent red fill + 1px border marking the
+     blank region enclosed by two non-aligned elements. Replaces the old
+     three-line diagonal rendering for a more intuitive "here is the gap".
+     Sits above the green/blue highlight overlays so the gap region stays
+     visible even when it overlaps an element's highlight border. */
+  .mockkit-dom-inspector-measurements__rect {
+    position: fixed;
+    z-index: 2147483647;
+    pointer-events: none;
+    background: rgb(255 77 79 / 12%);
+    border: 1px solid #ff4d4f;
+    box-sizing: border-box;
   }
   .mockkit-dom-inspector-measurements__label {
     position: fixed;
@@ -750,6 +776,45 @@ injectedStyle(`
   .mockkit-dom-inspector__reinspect svg {
     width: 13px;
     height: 13px;
+  }
+  /* Measure button on the DOM Inspector panel header (NOT the mock floating
+     rules panel). Red ruler icon, distinct from the green reinspect aim icon
+     next to it. Pulses red while measure mode is active so the user knows
+     it's on. */
+  .mockkit-dom-inspector__measure-btn {
+    flex-shrink: 0;
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: none;
+    border-radius: 5px;
+    background: transparent;
+    cursor: pointer;
+    color: rgb(27 40 34 / 55%);
+    transition: all 0.15s ease;
+  }
+  .mockkit-dom-inspector__measure-btn:hover {
+    background: rgb(27 40 34 / 8%);
+    color: #1b2822;
+  }
+  .mockkit-dom-inspector__measure-btn svg {
+    width: 13px;
+    height: 13px;
+  }
+  .mockkit-dom-inspector__measure-btn--on {
+    background: #ff4d4f;
+    color: #fff;
+    animation: mockkit-dom-inspector-measure-pulse 1.6s ease-in-out infinite;
+  }
+  .mockkit-dom-inspector__measure-btn--on:hover {
+    background: #ff4d4f;
+    color: #fff;
+  }
+  @keyframes mockkit-dom-inspector-measure-pulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgb(255 77 79 / 45%); }
+    50% { box-shadow: 0 0 0 5px rgb(255 77 79 / 0%); }
   }
   .mockkit-dom-inspector__close:hover {
     background: rgb(27 40 34 / 8%);
@@ -1111,19 +1176,28 @@ injectedStyle(`
 
 let domInspectorState = {
   active: false,
+  // 'inspect' = pick-then-show-panel (the original flow); 'measure' =
+  // anchor+hover distance measurement (no panel). Decides click behavior.
+  mode: 'inspect',
+  // Reference to the floating measure button so we can sync its active
+  // (pulsing red) state when measure mode starts/stops.
+  measureBtn: null,
   overlay: null,
   overlayLabel: null,
   measurements: null,
+  // Anchor layer: persistent blue highlight for the locked baseline element A.
+  // Stays visible while the user hovers other elements to measure distance.
+  anchorOverlay: null,
+  // The currently anchored baseline element (null until first click).
+  anchor: null,
+  // The locked second element B (null until the second click). After locking,
+  // the user can keep hovering to measure A against new elements.
+  lockedTarget: null,
   panel: null,
   lastTarget: null,
   pendingTarget: null,
   rafId: null,
 };
-
-// Cap sibling traversal so a pathological page (thousands of siblings) never
-// blocks the hover frame. Beyond this we simply skip measurement for that
-// direction and fall back to the viewport edge.
-const DOM_INSPECTOR_MAX_SIBLINGS = 500;
 
 function createDomInspectorOverlay() {
   if (domInspectorState.overlay) return domInspectorState.overlay;
@@ -1146,6 +1220,14 @@ function createDomInspectorOverlay() {
   document.body.appendChild(measurements);
   domInspectorState.measurements = measurements;
 
+  // Anchor highlight layer (blue). Created once, shown/hidden as the anchor
+  // is set/cleared. Separate from the green hover overlay so both can be
+  // visible simultaneously (anchor A + hovered element B).
+  const anchorOverlay = document.createElement('div');
+  anchorOverlay.className = 'mockkit-dom-inspector-anchor-overlay';
+  document.body.appendChild(anchorOverlay);
+  domInspectorState.anchorOverlay = anchorOverlay;
+
   return overlay;
 }
 
@@ -1162,90 +1244,99 @@ function destroyDomInspectorOverlay() {
     domInspectorState.measurements.remove();
     domInspectorState.measurements = null;
   }
+  if (domInspectorState.anchorOverlay) {
+    domInspectorState.anchorOverlay.remove();
+    domInspectorState.anchorOverlay = null;
+  }
 }
 
-// Compute the nearest edge distance for each of the 4 directions.
-// Strategy: look at the parent's direct children (siblings of target) that
-// visually overlap the target on the perpendicular axis, and pick the closest
-// edge. If no sibling qualifies, fall back to the viewport edge. This is the
-// Figma core subset — siblings are the reference users actually care about.
-function computeMeasurements(target) {
-  if (!target || !target.parentElement) {
-    return null;
+// Compute the measurement between the anchored baseline A and the hovered
+// element B. Unlike the old auto-guess algorithm, both endpoints are chosen
+// by the user, so this is pure two-rect geometry — no candidate collection,
+// no pruning, no viewport fallback.
+//
+// Rendering rules (kept simple and predictable):
+//  - If A and B overlap on the horizontal axis, only the vertical gap matters:
+//    draw one vertical line + a single pixel value (the vertical distance).
+//  - If they overlap on the vertical axis, draw one horizontal line + value.
+//  - If they overlap on BOTH axes (one contains the other, or a true overlap),
+//    there is no gap to measure — return null so the caller hides guides.
+//  - If they overlap on NEITHER axis (diagonal), draw a center-to-center
+//    connector line and label both Δx and Δy so the user sees both deltas.
+function computeAnchorMeasurement(anchor, target) {
+  if (!anchor || !target || anchor === target) return null;
+  const a = anchor.getBoundingClientRect();
+  const b = target.getBoundingClientRect();
+  if (a.width <= 0 || a.height <= 0 || b.width <= 0 || b.height <= 0) return null;
+
+  // Horizontal overlap: A and B share some x-range.
+  const hOverlap = b.right > a.left && b.left < a.right;
+  // Vertical overlap: A and B share some y-range.
+  const vOverlap = b.bottom > a.top && b.top < a.bottom;
+
+  // Both axes overlap → no gap to measure (nested or intersecting).
+  if (hOverlap && vOverlap) return null;
+
+  if (hOverlap) {
+    // Only vertical gap. Draw a vertical line at the shared horizontal center.
+    const cx = (Math.max(a.left, b.left) + Math.min(a.right, b.right)) / 2;
+    if (b.bottom <= a.top) {
+      // B is above A.
+      const dist = Math.round(a.top - b.bottom);
+      return { type: 'vertical', x: cx, top: b.bottom, height: a.top - b.bottom, label: `${dist}` };
+    }
+    // B is below A.
+    const dist = Math.round(b.top - a.bottom);
+    return { type: 'vertical', x: cx, top: a.bottom, height: b.top - a.bottom, label: `${dist}` };
   }
-  const rect = target.getBoundingClientRect();
-  if (rect.width <= 0 || rect.height <= 0) return null;
 
-  const vw = window.innerWidth;
-  const vh = window.innerHeight;
-  const siblings = target.parentElement.children;
-  if (siblings.length > DOM_INSPECTOR_MAX_SIBLINGS) return null;
+  if (vOverlap) {
+    // Only horizontal gap. Draw a horizontal line at the shared vertical center.
+    const cy = (Math.max(a.top, b.top) + Math.min(a.bottom, b.bottom)) / 2;
+    if (b.right <= a.left) {
+      // B is left of A.
+      const dist = Math.round(a.left - b.right);
+      return { type: 'horizontal', y: cy, left: b.right, width: a.left - b.right, label: `${dist}` };
+    }
+    // B is right of A.
+    const dist = Math.round(b.left - a.right);
+    return { type: 'horizontal', y: cy, left: a.right, width: b.left - a.right, label: `${dist}` };
+  }
 
-  // Start from the viewport edge as the fallback for each direction.
-  const result = {
-    top: { distance: Math.round(rect.top), edge: 0 },
-    bottom: { distance: Math.round(vh - rect.bottom), edge: vh },
-    left: { distance: Math.round(rect.left), edge: 0 },
-    right: { distance: Math.round(vw - rect.right), edge: vw },
+  // Diagonal: no axis overlap. Represent the empty space between A and B as a
+  // single semi-transparent rect whose width = horizontal gap and height =
+  // vertical gap. This is more intuitive than two separate lines because it
+  // shows the actual blank region the two elements enclose, at a glance.
+  // Label is "h × v" centered inside the rect (mirrors the hover label's
+  // "W×H" convention). We use nearest edges (not centers) so the rect bounds
+  // exactly the gap between the two elements.
+  const hDist = b.left >= a.right ? b.left - a.right : a.left - b.right;
+  const vDist = b.top >= a.bottom ? b.top - a.bottom : a.top - b.bottom;
+  // Rect corners: the nearest vertical edge of each element on x, the nearest
+  // horizontal edge of each on y.
+  const rectLeft = b.left >= a.right ? a.right : b.right;
+  const rectTop = b.top >= a.bottom ? a.bottom : b.bottom;
+  return {
+    type: 'diagonal',
+    rect: {
+      left: rectLeft,
+      top: rectTop,
+      width: hDist,
+      height: vDist,
+    },
+    label: `${Math.round(hDist)} × ${Math.round(vDist)}`,
   };
-
-  // Horizontal overlap test (shared by top/bottom directions): the sibling's
-  // horizontal span must intersect the target's horizontal span.
-  const hOverlap = (s) => s.right > rect.left && s.left < rect.right;
-  // Vertical overlap test (shared by left/right directions).
-  const vOverlap = (s) => s.bottom > rect.top && s.top < rect.bottom;
-
-  for (let i = 0; i < siblings.length; i += 1) {
-    const sib = siblings[i];
-    if (sib === target) continue;
-    // getBoundingClientRect on every sibling is the only layout read here; we
-    // batch them within a single rAF so the browser only reflows once.
-    const sr = sib.getBoundingClientRect();
-    if (sr.width <= 0 || sr.height <= 0) continue;
-
-    // Above: sibling sits fully above target and overlaps horizontally.
-    if (hOverlap(sr) && sr.bottom <= rect.top) {
-      const dist = Math.round(rect.top - sr.bottom);
-      if (dist < result.top.distance) {
-        result.top = { distance: dist, edge: Math.round(sr.bottom) };
-      }
-    }
-    // Below: sibling sits fully below target and overlaps horizontally.
-    if (hOverlap(sr) && sr.top >= rect.bottom) {
-      const dist = Math.round(sr.top - rect.bottom);
-      if (dist < result.bottom.distance) {
-        result.bottom = { distance: dist, edge: Math.round(sr.top) };
-      }
-    }
-    // Left: sibling sits fully left of target and overlaps vertically.
-    if (vOverlap(sr) && sr.right <= rect.left) {
-      const dist = Math.round(rect.left - sr.right);
-      if (dist < result.left.distance) {
-        result.left = { distance: dist, edge: Math.round(sr.right) };
-      }
-    }
-    // Right: sibling sits fully right of target and overlaps vertically.
-    if (vOverlap(sr) && sr.left >= rect.right) {
-      const dist = Math.round(sr.left - rect.right);
-      if (dist < result.right.distance) {
-        result.right = { distance: dist, edge: Math.round(sr.left) };
-      }
-    }
-  }
-
-  return { rect, result };
 }
 
-// Render the measurement guides for the current pending target. Called once
-// per animation frame; clears the container and redraws only the directions
-// that have a non-zero distance.
+// Render the measurement guide between the anchor and the hovered target.
+// Called once per animation frame; clears the container and redraws a single
+// guide (vertical / horizontal / diagonal) based on computeAnchorMeasurement.
 function drawMeasurements(measurements, data) {
   // Fast path: clear previous guides.
   measurements.innerHTML = '';
   if (!data) return;
 
-  const { rect, result } = data;
-  const createLine = (className, style) => {
+  const createLine = (style) => {
     const line = document.createElement('div');
     line.className = 'mockkit-dom-inspector-measurements__line';
     Object.assign(line.style, style);
@@ -1260,78 +1351,92 @@ function drawMeasurements(measurements, data) {
     return label;
   };
 
-  // Vertical guides (top/bottom): 1px-wide line centered on the target's
-  // horizontal center, spanning the gap between target edge and reference edge.
-  const cx = rect.left + rect.width / 2;
-  if (result.top.distance > 0) {
-    const top = result.top.edge;
-    const h = rect.top - top;
-    measurements.appendChild(createLine('top', {
-      left: `${cx}px`,
-      top: `${top}px`,
+  if (data.type === 'vertical') {
+    // 1px-wide vertical line spanning the gap.
+    measurements.appendChild(createLine({
+      left: `${data.x}px`,
+      top: `${data.top}px`,
       width: '1px',
-      height: `${Math.max(h, 0)}px`,
+      height: `${Math.max(data.height, 0)}px`,
     }));
     measurements.appendChild(createLabel(
-      `${result.top.distance}`,
-      cx + 4,
-      top + h / 2 - 8
+      data.label,
+      data.x + 4,
+      data.top + data.height / 2 - 8
     ));
-  }
-  if (result.bottom.distance > 0) {
-    const top = rect.bottom;
-    const h = result.bottom.edge - top;
-    measurements.appendChild(createLine('bottom', {
-      left: `${cx}px`,
-      top: `${top}px`,
-      width: '1px',
-      height: `${Math.max(h, 0)}px`,
-    }));
-    measurements.appendChild(createLabel(
-      `${result.bottom.distance}`,
-      cx + 4,
-      top + h / 2 - 8
-    ));
-  }
-  // Horizontal guides (left/right): 1px-tall line centered on the target's
-  // vertical center, spanning the gap.
-  const cy = rect.top + rect.height / 2;
-  if (result.left.distance > 0) {
-    const left = result.left.edge;
-    const w = rect.left - left;
-    measurements.appendChild(createLine('left', {
-      left: `${left}px`,
-      top: `${cy}px`,
-      width: `${Math.max(w, 0)}px`,
+  } else if (data.type === 'horizontal') {
+    // 1px-tall horizontal line spanning the gap.
+    measurements.appendChild(createLine({
+      left: `${data.left}px`,
+      top: `${data.y}px`,
+      width: `${Math.max(data.width, 0)}px`,
       height: '1px',
     }));
     measurements.appendChild(createLabel(
-      `${result.left.distance}`,
-      left + w / 2 - 12,
-      cy + 4
+      data.label,
+      data.left + data.width / 2 - 12,
+      data.y + 4
     ));
-  }
-  if (result.right.distance > 0) {
-    const left = rect.right;
-    const w = result.right.edge - left;
-    measurements.appendChild(createLine('right', {
-      left: `${left}px`,
-      top: `${cy}px`,
-      width: `${Math.max(w, 0)}px`,
-      height: '1px',
-    }));
+  } else if (data.type === 'diagonal') {
+    // Diagonal case: render the blank region between A and B as a single
+    // semi-transparent rect. Its width = horizontal gap, height = vertical
+    // gap, so the user sees the actual empty space the two elements enclose.
+    const r = data.rect;
+    const rectEl = document.createElement('div');
+    rectEl.className = 'mockkit-dom-inspector-measurements__rect';
+    rectEl.style.left = `${r.left}px`;
+    rectEl.style.top = `${r.top}px`;
+    rectEl.style.width = `${Math.max(r.width, 0)}px`;
+    rectEl.style.height = `${Math.max(r.height, 0)}px`;
+    measurements.appendChild(rectEl);
+    // Center the "h × v" label inside the rect. If the rect is too small to
+    // hold the label, place it just outside the rect's bottom-right corner so
+    // it stays readable.
+    const labelW = data.label.length * 6 + 10;
+    const labelH = 16;
+    const inside = r.width >= labelW && r.height >= labelH;
     measurements.appendChild(createLabel(
-      `${result.right.distance}`,
-      left + w / 2 - 12,
-      cy + 4
+      data.label,
+      inside ? r.left + (r.width - labelW) / 2 : r.left + r.width + 4,
+      inside ? r.top + (r.height - labelH) / 2 : r.top + r.height + 2
     ));
   }
 }
 
-function startDomInspector() {
+function startDomInspector(opts) {
   if (domInspectorState.active) return;
   domInspectorState.active = true;
+  // 'inspect' = pick a node then show the detail panel (original flow);
+  // 'measure' = anchor+hover distance measurement (no panel). The measure
+  // entry button passes { mode: 'measure' }; the inspect button and the
+  // iframe DOM Inspect button use the default 'inspect'.
+  domInspectorState.mode = opts?.mode === 'measure' ? 'measure' : 'inspect';
   createDomInspectorOverlay();
+
+  // Sync the floating measure button's active (pulsing red) state so the
+  // user can tell at a glance whether measure mode is on.
+  if (domInspectorState.measureBtn) {
+    const on = domInspectorState.mode === 'measure';
+    domInspectorState.measureBtn.classList.toggle('mockkit-dom-inspector__measure-btn--on', on);
+    domInspectorState.measureBtn.title = on ? '测距已开启，点击关闭' : 'Measure distance between two elements';
+  }
+
+  // Position the persistent anchor (blue) overlay over the anchored element A.
+  // Called whenever the anchor is set or replaced so the blue box tracks A.
+  const updateAnchorOverlay = () => {
+    const anchorOverlay = domInspectorState.anchorOverlay;
+    const anchor = domInspectorState.anchor;
+    if (!anchorOverlay || !anchor) {
+      if (anchorOverlay) anchorOverlay.style.display = 'none';
+      return;
+    }
+    const r = anchor.getBoundingClientRect();
+    anchorOverlay.style.left = `${r.left}px`;
+    anchorOverlay.style.top = `${r.top}px`;
+    anchorOverlay.style.width = `${r.width}px`;
+    anchorOverlay.style.height = `${r.height}px`;
+    anchorOverlay.style.display = 'block';
+  };
 
   // mousemove only stashes the latest target and schedules a single rAF; all
   // DOM mutation (highlight + label + measurements) happens in renderFrame so
@@ -1350,13 +1455,18 @@ function startDomInspector() {
     }
   };
 
-  // Single frame renderer: reads pendingTarget, draws highlight/label, then
-  // computes and draws Figma-style measurement guides for that target.
+  // Single frame renderer: reads pendingTarget, draws the green hover
+  // highlight + label, keeps the blue anchor overlay in sync, then — when an
+  // anchor is set — computes and draws the measurement guide from the anchor
+  // to the currently hovered element.
   const renderFrame = () => {
     domInspectorState.rafId = null;
     const target = domInspectorState.pendingTarget;
     if (!target) return;
     domInspectorState.lastTarget = target;
+
+    // Keep the anchor overlay tracking A (A may have shifted on scroll/resize).
+    updateAnchorOverlay();
 
     const rect = target.getBoundingClientRect();
     const overlay = domInspectorState.overlay;
@@ -1377,16 +1487,27 @@ function startDomInspector() {
       label.style.top = `${labelTop}px`;
       label.style.display = 'block';
     }
-    // Measurement guides: skip rotated elements (their visual rect is not
-    // axis-aligned, so straight guides would be misleading).
+
+    // Measurement guides only when an anchor is set. Skip the hovered element
+    // itself (no distance to self) and skip rotated elements whose visual
+    // rect is not axis-aligned (straight guides would be misleading).
     const measurements = domInspectorState.measurements;
-    if (measurements) {
-      const data = computeMeasurements(target);
+    const anchor = domInspectorState.anchor;
+    if (measurements && anchor && anchor !== target) {
+      const data = computeAnchorMeasurement(anchor, target);
       drawMeasurements(measurements, data);
       measurements.style.display = 'block';
+    } else if (measurements) {
+      // No anchor yet, or hovering the anchor itself: hide guides.
+      measurements.innerHTML = '';
+      measurements.style.display = 'none';
     }
   };
 
+  // Click behavior depends on the mode:
+  //  - inspect: pick the node, show the detail panel, then exit (one-shot).
+  //  - measure: drive the anchor state machine (first click anchors A,
+  //    second locks B, third replaces A; Esc exits).
   const onClick = (event) => {
     if (!domInspectorState.active) return;
     if (domInspectorState.panel && domInspectorState.panel.contains(event.target)) return;
@@ -1394,8 +1515,44 @@ function startDomInspector() {
     event.stopPropagation();
     const target = domInspectorState.lastTarget || event.target;
     if (!target || target === domInspectorState.panel) return;
-    pickDomNode(target);
-    stopDomInspector();
+
+    // Inspect mode: original pick-and-show-panel flow. One click, then exit.
+    if (domInspectorState.mode !== 'measure') {
+      pickDomNode(target);
+      stopDomInspector();
+      return;
+    }
+
+    // Measure mode: anchor state machine.
+    if (!domInspectorState.anchor) {
+      // First click: anchor the baseline element A.
+      domInspectorState.anchor = target;
+      domInspectorState.lockedTarget = null;
+      updateAnchorOverlay();
+      showDomInspectorPanel(null, '已锚定基准元素（蓝框）。移动鼠标查看距离，点击锁定或换基准。Esc 退出。');
+      return;
+    }
+
+    if (target === domInspectorState.anchor) {
+      // Clicking the anchor again just keeps it; ignore so the user can lock
+      // on A itself without accidentally clearing.
+      return;
+    }
+
+    if (!domInspectorState.lockedTarget) {
+      // Second click: lock B. Measurement to B stays visible until the next
+      // hover moves away. Prompt for continued exploration.
+      domInspectorState.lockedTarget = target;
+      showDomInspectorPanel(null, '已锁定目标元素。继续 hover 测其他元素，点击新元素换基准，Esc 退出。');
+      return;
+    }
+
+    // Third+ click: replace the anchor with the clicked element so the user
+    // can start a fresh measurement pair without re-entering the mode.
+    domInspectorState.anchor = target;
+    domInspectorState.lockedTarget = null;
+    updateAnchorOverlay();
+    showDomInspectorPanel(null, '已换为新基准（蓝框）。移动鼠标查看距离，点击锁定或换基准。Esc 退出。');
   };
 
   const onKey = (event) => {
@@ -1412,8 +1569,12 @@ function startDomInspector() {
   document.addEventListener('click', onClick, true);
   document.addEventListener('keydown', onKey, true);
 
-  // Show a hint panel while picking.
-  showDomInspectorPanel(null, 'Move your mouse over the page and click a node to inspect. Press Esc to cancel.');
+  // Entry prompt differs by mode so the user knows which flow they're in.
+  if (domInspectorState.mode === 'measure') {
+    showDomInspectorPanel(null, '点击第一个元素作为基准，再 hover 其他元素查看距离。Esc 退出。');
+  } else {
+    showDomInspectorPanel(null, 'Move your mouse over the page and click a node to inspect. Press Esc to cancel.');
+  }
 }
 
 function stopDomInspector() {
@@ -1425,6 +1586,15 @@ function stopDomInspector() {
     domInspectorState.rafId = null;
   }
   domInspectorState.pendingTarget = null;
+  // Clear the anchor/locked state so the next inspect session starts fresh.
+  domInspectorState.anchor = null;
+  domInspectorState.lockedTarget = null;
+  // Restore the measure button to its idle (non-pulsing) state.
+  if (domInspectorState.measureBtn) {
+    domInspectorState.measureBtn.classList.remove('mockkit-dom-inspector__measure-btn--on');
+    domInspectorState.measureBtn.title = 'Measure distance between two elements';
+  }
+  domInspectorState.mode = 'inspect';
   if (domInspectorState.onMove) document.removeEventListener('mousemove', domInspectorState.onMove, true);
   if (domInspectorState.onClick) document.removeEventListener('click', domInspectorState.onClick, true);
   if (domInspectorState.onKey) document.removeEventListener('keydown', domInspectorState.onKey, true);
@@ -1904,6 +2074,13 @@ function showDomInspectorPanel(node, hint) {
 
   header.appendChild(title);
   header.appendChild(reinspectBtn);
+  // Measure toggle button — lives on the DOM Inspector panel header (NOT the
+  // mock floating rules panel). Red ruler icon, distinct from the green
+  // reinspect aim icon. Reference is stashed on domInspectorState so
+  // start/stopDomInspector can sync its pulsing active state.
+  const measureBtn = createDomInspectorMeasureButton();
+  header.appendChild(measureBtn);
+  domInspectorState.measureBtn = measureBtn;
   header.appendChild(minBtn);
   header.appendChild(closeBtn);
   panel.appendChild(header);
@@ -2526,6 +2703,41 @@ function createFloatingInspectButton() {
   btn.addEventListener('click', (event) => {
     event.stopPropagation();
     startDomInspector();
+  });
+  return btn;
+}
+
+// Measure entry button for the DOM INSPECTOR panel header (NOT the mock
+// floating rules panel). A ruler icon that toggles anchor+hover distance
+// measurement mode. Distinct from the reinspect aim icon (red ruler vs green
+// arrow) so the user knows this is measurement, not element inspection. While
+// active the button stays solid red + pulses; clicking again or pressing Esc
+// exits. See .mockkit-dom-inspector__measure-btn CSS for the active state.
+function createDomInspectorMeasureButton() {
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'mockkit-dom-inspector__measure-btn';
+  btn.title = 'Measure distance between two elements';
+
+  // Ruler icon — a straightedge with tick marks, unambiguous "measurement".
+  const icon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  icon.setAttribute('viewBox', '0 0 16 16');
+  icon.setAttribute('fill', 'none');
+  icon.innerHTML = '<rect x="1.5" y="5" width="13" height="6" rx="1" stroke="currentColor" stroke-width="1.3" fill="none"/><path d="M4 5v2M6.5 5v3M9 5v2M11.5 5v3" stroke="currentColor" stroke-width="1.1" stroke-linecap="round"/>';
+  btn.appendChild(icon);
+
+  btn.addEventListener('click', (event) => {
+    event.stopPropagation();
+    // Toggle: if already measuring, exit; otherwise start in measure mode.
+    if (domInspectorState.active && domInspectorState.mode === 'measure') {
+      stopDomInspector();
+      return;
+    }
+    // If inspect mode is active, switch off it before entering measure.
+    if (domInspectorState.active) {
+      stopDomInspector();
+    }
+    startDomInspector({ mode: 'measure' });
   });
   return btn;
 }

@@ -65,6 +65,15 @@ const shouldPublish = shouldRetry || argv.includes('--publish') || argv.includes
 const shouldBump = !shouldRetry && shouldPublish;
 const forcePublish = argv.includes('--force') || shouldRetry;
 const shouldCommit = argv.includes('--commit') || shouldRetry;
+// Beta builds rename the extension to "MockKit Beta vX" and emit a
+// "-beta-" zip so they are visually distinct from production packages in
+// chrome://extensions and the Downloads folder. Forbidden with --publish
+// because a release must never ship under the beta name.
+const isBetaBuild = argv.includes('--beta');
+if (isBetaBuild && shouldPublish) {
+  console.error('--beta cannot be combined with --publish/--retry (a release must use the production name).');
+  process.exit(1);
+}
 const notesIndex = argv.indexOf('--notes');
 const customNotes = notesIndex !== -1 ? argv[notesIndex + 1] : null;
 
@@ -145,12 +154,25 @@ const runBuild = () => {
 
   // Retry mode: don't bump, just rebuild + re-publish the current version.
   if (shouldRetry) {
-    console.log('\n--- Retry mode: re-publishing current version ---');
+    console.log('\n--- Retry mode: re-publishing the current version ---');
     syncPackageVersionFromManifest(readJsonFile(manifestJsonPath).version);
   } else if (shouldBump) {
     bumpVersion();
   } else {
     syncPackageVersionFromManifest(readJsonFile(manifestJsonPath).version);
+  }
+
+  // Beta builds rewrite the extension display name to "MockKit Beta vX" so
+  // it shows up distinctly in chrome://extensions. We swap the name in
+  // manifest.json before the build (so the zip embeds it) and restore the
+  // original after packaging so the working tree stays on the production name.
+  let originalManifestName = null;
+  if (isBetaBuild) {
+    const manifestJson = readJsonFile(manifestJsonPath);
+    originalManifestName = manifestJson.name;
+    manifestJson.name = `MockKit Beta v${manifestJson.version}`;
+    writeJsonFile(manifestJsonPath, manifestJson);
+    console.log(`Beta build: extension name set to "${manifestJson.name}"`);
   }
 
   const buildProcess = spawn('npm', ['run', 'build'], {
@@ -162,6 +184,13 @@ const runBuild = () => {
   buildProcess.on('exit', (code) => {
     if (code !== 0) {
       console.error(`\nBuild failed with exit code ${code}.`);
+      // Restore the manifest name even on failure so a crashed beta build
+      // never leaves the working tree with the beta name persisted.
+      if (originalManifestName) {
+        const mj = readJsonFile(manifestJsonPath);
+        mj.name = originalManifestName;
+        writeJsonFile(manifestJsonPath, mj);
+      }
       process.exit(code || 1);
       return;
     }
@@ -169,6 +198,14 @@ const runBuild = () => {
     console.log('\nBuild completed successfully.');
     try {
       const zipName = packageExtension();
+      // Packaging has read the manifest; restore the production name so the
+      // working tree (and any subsequent non-beta build) is unaffected.
+      if (originalManifestName) {
+        const mj = readJsonFile(manifestJsonPath);
+        mj.name = originalManifestName;
+        writeJsonFile(manifestJsonPath, mj);
+        console.log('Restored production extension name in manifest.json.');
+      }
       if (shouldPublish) {
         publishToGitHub(zipName);
       }
@@ -195,12 +232,13 @@ const readManifestVersion = () => {
   return manifest.version;
 };
 
-// Sweep leftover smart-chrome-tool-v*.zip from the project root so each local
-// build starts clean. Only deletes files matching our own zip naming scheme —
-// other archives are left untouched. Called at the start of non-publish runs.
+// Sweep leftover smart-chrome-tool(-beta)?-v*.zip from the project root so
+// each local build starts clean. Matches both production and beta naming so
+// switching between the two never leaves stale archives. Other archives are
+// left untouched. Called at the start of non-publish runs.
 const cleanupStaleZips = () => {
   const entries = fs.readdirSync(projectRoot);
-  const zipPattern = /^smart-chrome-tool-v\d+\.\d+\.\d+\.zip$/;
+  const zipPattern = /^smart-chrome-tool-(?:beta-)?v\d+\.\d+\.\d+\.zip$/;
   let removed = 0;
   entries.forEach((entry) => {
     if (zipPattern.test(entry)) {
@@ -221,7 +259,10 @@ const cleanupStaleZips = () => {
 
 const packageExtension = () => {
   const version = readManifestVersion();
-  const zipName = `smart-chrome-tool-v${version}.zip`;
+  // Beta packages carry a "-beta-" infix so they never collide with
+  // production archives and are easy to tell apart in Downloads.
+  const infix = isBetaBuild ? 'beta-' : '';
+  const zipName = `smart-chrome-tool-${infix}v${version}.zip`;
 
   // Verify every runtime entry exists before archiving so a broken build
   // never produces a half-populated zip.

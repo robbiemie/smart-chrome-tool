@@ -119,30 +119,50 @@ opening the full workbench.
 ## 8. DOM Inspector (审查元素)
 
 **Summary:** A self-contained DevTools-style element inspector (no DevTools
-API). Pick mode highlights nodes on hover with a selector+size label; on click,
-shows a draggable panel with selector, Core Styles table (editable colors via
-native picker, live inline-style writes), editable size box, Chrome-style box
-model diagram (margin/border/padding/content, hover-highlight per layer), and a
-collapsible full computed-styles list. Supports hex⇄rgb toggle, click-to-copy,
-re-inspect, minimize, Esc-to-cancel. **Hover pick mode also draws Figma-style
-red measurement guides** to the nearest sibling (or viewport edge) on each of
-the 4 sides, with pixel labels; rendering is rAF-batched to stay smooth.
+API) with two modes, each entered from its own entry on the DOM Inspector
+panel header (the top-left draggable panel created by `showDomInspectorPanel`
+— NOT the mock floating rules panel at bottom-right):
 
-**Lives in:** `content.js` (`startDomInspector`/`stopDomInspector`,
-`pickDomNode`, `showDomInspectorPanel`, `buildSummaryItem`, `buildEditableBox`,
-`buildBoxModelDiagram`, `readComputedStyles`/`readCoreStyles`/`readBoxModel`,
-`bindDomInspectorDrag`, `computeMeasurements`, `drawMeasurements`,
-`renderFrame`); state in `domInspectorState`; cap `DOM_INSPECTOR_MAX_SIBLINGS`.
+- **Inspect mode** (green aim icon, or the workbench DOM Inspect button): pick
+  a node → show a draggable panel with selector, Core Styles table (editable
+  colors via native picker, live inline-style writes), editable size box,
+  Chrome-style box model diagram, and a collapsible full computed-styles list.
+  One-shot: click picks, then exits.
+- **Measure mode** (red ruler icon — visually distinct from the green aim
+  icon): anchor+hover distance measurement. First click anchors baseline A
+  (persistent blue box); hovering draws a red guide from A to the hovered
+  element; second click locks B; subsequent clicks replace A. Esc exits.
+  Distance rendering adapts to the two rects' relative position: vertical line
+  + single value when horizontally overlapping, horizontal line + single value
+  when vertically overlapping, semi-transparent red gap rect with centered
+  "h × v" label when offset on both axes.
 
-**Trigger:** `MOCKKIT_INSPECT_DOM` message from iframe
-(`components/OperationsRail/index.tsx` DOM Inspect button) → content
-`startDomInspector()`.
+The measure button shows a three-level active indicator: solid red background,
+pulsing box-shadow animation, and a tooltip that switches to "测距已开启" when
+active — so the user always knows whether measure mode is on.
 
-**Algorithm:** Sibling + viewport fallback — for each direction, among the
-parent's direct children that overlap the target on the perpendicular axis,
-pick the nearest edge; fall back to the viewport edge when no sibling
-qualifies. Skips rotated elements (visual rect not axis-aligned) and
-oversized sibling sets (> `DOM_INSPECTOR_MAX_SIBLINGS`).
+**Panel distinction (do not confuse):**
+- **DOM Inspector panel** (`mockkit-dom-inspector*`, top-left, created by
+  `showDomInspectorPanel`): shows node details / hints; hosts BOTH the inspect
+  (aim) and measure (ruler) entry buttons on its header.
+- **Mock floating rules panel** (`mockkit-floating-rules*`, bottom-right,
+  created by `createFloatingRulesPanel`): shows rule list; has its own inspect
+  button but NO measure button.
+
+**Lives in:** `content.js` (`startDomInspector`/`stopDomInspector` with `mode`
+param, `createDomInspectorMeasureButton`, `computeAnchorMeasurement`,
+`drawMeasurements`, `updateAnchorOverlay`, `renderFrame`, `pickDomNode`,
+`showDomInspectorPanel`); state in `domInspectorState` (`mode`, `measureBtn`,
+`anchor`, `lockedTarget`, `anchorOverlay`, `overlay`, `measurements`).
+
+**Trigger:** DOM Inspector panel header buttons (aim icon → inspect, ruler
+icon → measure), or `MOCKKIT_INSPECT_DOM` message from iframe
+(`components/OperationsRail/index.tsx` DOM Inspect button → inspect mode).
+
+**Interaction model:** Inspect = click-to-pick-then-exit. Measure =
+click=anchor/lock/replace-baseline (never exits), Esc=exit, hover=live
+measurement. The two modes are mutually exclusive; starting one stops the
+other.
 
 ---
 
