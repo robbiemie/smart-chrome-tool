@@ -43,6 +43,56 @@ authoritative dev loop is the "hybrid" mode below.
 5. After editing React code, Vite HMR updates the dev server; to test against
    the real extension, rebuild `dist/` and reload the extension.
 
+### DevTools panel dev loop (fixed workflow)
+
+The DevTools panel (`devtools.html` / `devtools.js` / `panel.html` /
+`panel.js`) is invisible to "load unpacked" unless the source `manifest.json`
+carries a `devtools_page` field AND the extension is reloaded AND any already
+open DevTools window is fully closed and reopened. The sequence below is the
+agreed fixed workflow — follow it every time you iterate on the panel.
+
+```bash
+# 1. Temporarily bump the source manifest to a Beta name + higher version so
+#    Chrome treats the reload as an upgrade (same version = no reload) and
+#    the Beta badge shows in the toolbar / panel tab.
+#    Edit manifest.json:
+#      "name": "MockKit Beta v0.0.43",
+#      "version": "0.0.43",
+#    (use a patch number higher than the installed production copy)
+
+# 2. Rebuild the workbench so html/iframePage/dist/ is fresh.
+cd html/iframePage && npm run build
+
+# 3. In Chrome:
+#    a. chrome://extensions  ->  find MockKit  ->  click the reload icon ⟳
+#       (MUST be done; otherwise the new devtools_page is not picked up)
+#    b. Fully CLOSE any already-open DevTools window on the target page.
+#       (Open DevTools windows do not discover newly registered panels.)
+#    c. Reopen DevTools (F12) on an http/https page.
+#       The "MockKit Beta v0.0.43" tab appears next to Elements/Console/Network.
+
+# 4. After iterating on panel/devtools files, repeat step 3 only
+#    (no rebuild needed unless service_worker.js / content.js / iframe code changed).
+
+# 5. When done: RESTORE manifest.json to the production state, otherwise the
+#    next `node build.js` will ship a Beta-named package.
+#      "name": "MockKit v0.0.42",
+#      "version": "0.0.42",
+```
+
+**Why the version bump is mandatory for panel testing:** Chrome does not
+reload an unpacked extension's manifest fields (including `devtools_page`)
+when the file content is unchanged and the version number is the same. Bumping
+the patch version forces Chrome to treat the reload as an upgrade and re-read
+the manifest. The bump is reverted in step 5 so the source tree stays clean
+for production builds.
+
+**Alternative (zip-based, no source pollution):** `node build-dev.js` produces
+`smart-chrome-tool-beta-v<next>.zip` with a bumped version and Beta name
+baked into the zip only; the source `manifest.json` is restored automatically
+via a `try/finally`. Drag the zip into `chrome://extensions`. Use this when
+you do not want the working tree to hold a Beta manifest between iterations.
+
 ## Build the extension
 
 From the **project root**:
@@ -63,13 +113,37 @@ What `build.js` does, in order:
    `.build-meta.json` for the workbench's `postbuild` changelog step.
 2. Runs `npm run build` inside `html/iframePage/` (Vite build → `dist/`).
 3. `packageExtension()`: zips the runtime entries only:
-   `manifest.json`, `service_worker.js`, `content.js`, `pageScripts/`,
+   `manifest.json`, `service_worker.js`, `content.js`, `devtools.html`,
+   `devtools.js`, `panel.html`, `panel.js`, `pageScripts/`,
    `icons/`, `html/iframePage/mock.js`, `html/iframePage/dist/`.
    Excludes `.DS_Store` and `dist/CHANGELOG.md`.
 4. (optional) `publishToGitHub()`: creates/pushes a `v<version>` tag and a
    GitHub Release with the zip attached. `--force` deletes a stale tag/release
    first.
 5. (optional) `commitAndPush()`: `git add -A && git commit -m "chore: v<version>" && git push`.
+
+### Dev / Beta build (isolated from production)
+
+```bash
+node build-dev.js          # bump patch, build, zip as "MockKit Beta v<next>"
+```
+
+`build-dev.js` is a **standalone script** that does NOT share code with
+`build.js` and never touches the production publish path. Its contract:
+
+1. Reads `manifest.json`, bumps the patch version (e.g. `0.0.42` → `0.0.43`).
+2. Rewrites `name` → `MockKit Beta v<next>` and `version` → `<next>`
+   **in memory**, writes it to `manifest.json` temporarily.
+3. Runs the Vite workbench build.
+4. Zips the runtime into `smart-chrome-tool-beta-v<next>.zip`.
+5. **Restores the original `manifest.json` byte-for-byte in a `finally`
+   block** — the source tree is never left in a Beta state, even if the build
+   crashes. This is the critical isolation guarantee from `build.js`.
+
+The resulting zip shows up as `MockKit Beta v<next>` in `chrome://extensions`,
+with an orange `B·ON` / `B·OFF` toolbar badge and a `MockKit Beta v<next>`
+DevTools panel tab. Use it to test a higher version than the installed
+production copy without polluting the working tree.
 
 ### Version model (important)
 
@@ -97,6 +171,10 @@ What `build.js` does, in order:
 - Or use the **floating rules panel** (toggle via the workbench's "Floating
   Rules" switch), which is a lightweight DOM panel rendered by `content.js`
   directly on the page.
+- Or open **DevTools** (F12) → **MockKit** tab → mounts the same workbench on
+  the inspected page. Useful where the toolbar action's content-script
+  auto-injection is gated (e.g. enterprise-managed browsers). Cannot mount on
+  `chrome://` / `chrome-extension://` / `about:` pages.
 
 ## Publish a new release
 

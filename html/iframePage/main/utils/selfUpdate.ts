@@ -8,6 +8,8 @@
 // files. All heavy lifting runs inside the extension iframe (a secure
 // chrome-extension:// context) so the FS Access API is always available.
 
+import { logger } from './logger';
+
 const DB_NAME = 'ajax-tools-self-update';
 const STORE_NAME = 'handles';
 const HANDLE_KEY = 'extensionDir';
@@ -95,13 +97,13 @@ export async function verifyExtensionDir(handle: AnyDirHandle): Promise<boolean>
     const text = await file.text();
     const manifest = JSON.parse(text);
     const name = String(manifest?.name || '');
-    console.log('[MockKit Update] verifyExtensionDir', { name, version: manifest?.version });
+    logger.log('[MockKit Update] verifyExtensionDir', { name, version: manifest?.version });
     // Accept any name starting with "MockKit" (covers "MockKit", "MockKit
     // v0.0.1", etc.) and the legacy name so users who installed before the
     // rename can still pick their existing folder.
     return name.startsWith('MockKit') || name === 'Ajax Interceptor Tools';
   } catch (e) {
-    console.log('[MockKit Update] verifyExtensionDir failed', e);
+    logger.log('[MockKit Update] verifyExtensionDir failed', e);
     return false;
   }
 }
@@ -111,19 +113,19 @@ export async function downloadWithProgress(
   url: string,
   onProgress: (received: number, total: number) => void
 ): Promise<ArrayBuffer> {
-  console.log('[MockKit Update] downloadWithProgress start', url);
+  logger.log('[MockKit Update] downloadWithProgress start', url);
   const response = await fetch(url);
-  console.log('[MockKit Update] fetch response', { status: response.status, ok: response.ok, headers: Object.fromEntries(response.headers.entries()) });
+  logger.log('[MockKit Update] fetch response', { status: response.status, ok: response.ok, headers: Object.fromEntries(response.headers.entries()) });
   if (!response.ok) {
     throw new Error(`Download failed: HTTP ${response.status}`);
   }
   const totalHeader = response.headers.get('content-length');
   const total = totalHeader ? Number(totalHeader) : 0;
-  console.log('[MockKit Update] content-length', total);
+  logger.log('[MockKit Update] content-length', total);
 
   const reader = response.body?.getReader();
   if (!reader) {
-    console.log('[MockKit Update] no reader, falling back to arrayBuffer');
+    logger.log('[MockKit Update] no reader, falling back to arrayBuffer');
     const buffer = await response.arrayBuffer();
     onProgress(buffer.byteLength, buffer.byteLength);
     return buffer;
@@ -141,7 +143,7 @@ export async function downloadWithProgress(
       onProgress(received, total);
     }
   }
-  console.log('[MockKit Update] download complete', { received, chunks: chunks.length });
+  logger.log('[MockKit Update] download complete', { received, chunks: chunks.length });
 
   const totalLength = chunks.reduce((sum, chunk) => sum + chunk.length, 0);
   const merged = new Uint8Array(totalLength);
@@ -188,7 +190,7 @@ export interface ZipEntry {
 // Parse a ZIP archive by walking its central directory. Supports the two
 // methods our build produces: stored (0) and deflate-raw (8).
 export async function unzip(buffer: ArrayBuffer): Promise<ZipEntry[]> {
-  console.log('[MockKit Update] unzip start', { byteLength: buffer.byteLength });
+  logger.log('[MockKit Update] unzip start', { byteLength: buffer.byteLength });
   const view = new DataView(buffer);
   const bytes = new Uint8Array(buffer);
 
@@ -254,7 +256,7 @@ export async function unzip(buffer: ArrayBuffer): Promise<ZipEntry[]> {
     }
     result.push({ name: entry.name, data });
   }
-  console.log('[MockKit Update] unzip complete', { entries: result.length, names: result.map(f => f.name).slice(0, 10) });
+  logger.log('[MockKit Update] unzip complete', { entries: result.length, names: result.map(f => f.name).slice(0, 10) });
   return result;
 }
 
@@ -265,7 +267,7 @@ export async function writeFilesToDir(
   files: ZipEntry[],
   onFileWritten?: (name: string, index: number, total: number) => void
 ): Promise<void> {
-  console.log('[MockKit Update] writeFilesToDir start', { fileCount: files.length });
+  logger.log('[MockKit Update] writeFilesToDir start', { fileCount: files.length });
   const total = files.length;
   for (let i = 0; i < files.length; i += 1) {
     const file = files[i];

@@ -2,6 +2,7 @@ import { Modal, Tabs, Input, Card, Space, Select } from 'antd';
 import React, { ForwardedRef, useImperativeHandle, useRef, useState } from 'react';
 import MonacoEditor from '../../../common/MonacoEditor';
 import { HEADERS_EXAMPLES, REQUEST_PAYLOAD_EXAMPLES, RESPONSE_EXAMPLES, HTTP_METHOD_MAP } from '../../../common/value';
+import { logger } from '../../utils/logger';
 
 import './index.css';
 
@@ -103,7 +104,7 @@ const ModifyDataModal = (
           return inst.getValue();
         }
       } catch (e) {
-        console.warn('[ModifyDataModal] editor read failed, skipping field', e);
+        logger.warn('[ModifyDataModal] editor read failed, skipping field', e);
       }
       return undefined;
     };
@@ -113,7 +114,7 @@ const ModifyDataModal = (
         const model = inst?.getModel?.();
         return model?.getLanguageId();
       } catch (e) {
-        console.warn('[ModifyDataModal] editor language read failed', e);
+        logger.warn('[ModifyDataModal] editor language read failed', e);
       }
       return undefined;
     };

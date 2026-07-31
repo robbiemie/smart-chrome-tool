@@ -4,6 +4,20 @@ const MANAGED_RULE_IDS_STORAGE_KEY = 'ajaxToolsManagedHeaderRuleIds';
 const WORKBENCH_TARGET_TAB_ID_STORAGE_KEY = 'ajaxToolsWorkbenchTargetTabId';
 const CONTENT_SCRIPT_BOOTSTRAP_DELAY = 120;
 const RULE_ID_BASE = 930000;
+
+// Dev-mode logger: production releases (manifest name without "Beta") get
+// all logs silenced; beta / dev builds log normally. Detection is runtime
+// via chrome.runtime.getManifest() so the same source file works for both
+// profiles without a build-time flag.
+const isDevMode = (() => {
+  try {
+    return /beta/i.test(chrome.runtime.getManifest().name || '');
+  } catch {
+    return false;
+  }
+})();
+const logDev = (...args) => { if (isDevMode) console.log(...args); };
+const warnDev = (...args) => { if (isDevMode) console.warn(...args); };
 // Tracks the page tab that last sent CHECK_UPDATE so RELOAD_EXTENSION can
 // refresh only that tab after a self-update.
 let lastWorkbenchTabId = null;
@@ -224,9 +238,20 @@ async function setPageRenderMode(csrEnabled) {
 }
 
 function setSwitchBadge(switchValue) {
-  chrome.action.setBadgeText({ text: switchValue ? 'ON' : 'OFF' });
+  // Beta builds get an orange "B·ON/B·OFF" badge so the toolbar icon is
+  // visually distinct from the production install at a glance, even when
+  // both share the same version number.
+  const isBeta = /beta/i.test(chrome.runtime.getManifest().name || '');
+  const text = isBeta
+    ? (switchValue ? 'B·ON' : 'B·OFF')
+    : (switchValue ? 'ON' : 'OFF');
+  chrome.action.setBadgeText({ text });
   chrome.action.setBadgeTextColor({ color: switchValue ? '#ffffff' : '#333333' });
-  chrome.action.setBadgeBackgroundColor({ color: switchValue ? '#4480f7' : '#bfbfbf' });
+  chrome.action.setBadgeBackgroundColor({
+    color: isBeta
+      ? (switchValue ? '#fa8c16' : '#d4886a')
+      : (switchValue ? '#4480f7' : '#bfbfbf'),
+  });
 }
 
 function parseUrl(url) {
@@ -491,6 +516,57 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 
+  // DevTools panel entry: mount/reveal the workbench on a specific inspected
+  // tab. Unlike the toolbar action (which targets the active tab), the
+  // DevTools panel runs in its own window, so the inspected tab is usually
+  // NOT the active tab — we must use the explicit tabId from the panel.
+  if (message?.type === 'DEVTOOLS_SHOW_WORKBENCH') {
+    const targetTabId = message?.tabId;
+
+    if (typeof targetTabId !== 'number') {
+      sendResponse({ ok: false, message: 'Missing inspected tabId.' });
+      return true;
+    }
+
+    (async () => {
+      try {
+        // Record the inspected tab as the workbench target so existing
+        // CSR / render-mode / header-rule flows (which read this key) keep
+        // operating on the right tab.
+        await chrome.storage.local.set({
+          [WORKBENCH_TARGET_TAB_ID_STORAGE_KEY]: targetTabId,
+        });
+
+        // Make sure content.js is listening on that tab; re-inject if the
+        // initial document_start hook was missed (e.g. page loaded before
+        // the extension, or enterprise policy delayed content-script load).
+        const ensureResponse = await ensurePanelMessageReceiver(targetTabId);
+
+        if (!ensureResponse?.ok) {
+          sendResponse({
+            ok: false,
+            message: ensureResponse?.message || 'Content runtime is unavailable on this tab.',
+          });
+          return;
+        }
+
+        // Force-reveal the iframe workbench (not a toggle): opening the
+        // DevTools panel is an explicit "show me the workbench" intent.
+        await sendMessageToContentScript(targetTabId, {
+          type: 'iframeToggle',
+          iframeVisible: true,
+        });
+        await chrome.storage.local.set({ iframeVisible: true });
+
+        sendResponse({ ok: true });
+      } catch (error) {
+        sendResponse({ ok: false, message: error?.message || 'DevTools mount failed.' });
+      }
+    })();
+
+    return true;
+  }
+
   return false;
 });
 
@@ -498,7 +574,7 @@ chrome.runtime.onInstalled.addListener(() => {
   syncHeaderRules().catch((error) => {
     console.error('[ajax-tools] sync header rules failed onInstalled', error);
   });
-  console.log('%c Mock Fetch Data onInstalled', 'color: #3aa757');
+  logDev('%c Mock Fetch Data onInstalled', 'color: #3aa757');
 });
 
 chrome.runtime.onStartup.addListener(() => {
@@ -546,13 +622,13 @@ function compareVersions(remote, local) {
 // the API is unavailable — which is the common case behind shared IPs.
 async function fetchLatestRelease() {
   const apiUrl = `https://api.github.com/repos/${GITHUB_REPO}/releases/latest`;
-  console.log('[MockKit Update SW] fetchLatestRelease', apiUrl);
+  logDev('[MockKit Update SW] fetchLatestRelease', apiUrl);
 
   const localVersion = chrome.runtime.getManifest().version;
 
   const parseRelease = async (headers) => {
     const response = await fetch(apiUrl, { headers });
-    console.log('[MockKit Update SW] GitHub API response', { status: response.status, ok: response.ok, authenticated: !!headers.Authorization });
+    logDev('[MockKit Update SW] GitHub API response', { status: response.status, ok: response.ok, authenticated: !!headers.Authorization });
     return response;
   };
 
@@ -560,7 +636,7 @@ async function fetchLatestRelease() {
 
   // Rate-limited anonymous request — retry with token if available.
   if (response.status === 403) {
-    console.log('[MockKit Update SW] anonymous 403, trying with token');
+    logDev('[MockKit Update SW] anonymous 403, trying with token');
     const stored = await chrome.storage.local.get(['ajaxToolsGithubToken']);
     const token = stored?.ajaxToolsGithubToken || '';
     if (token) {
@@ -575,12 +651,12 @@ async function fetchLatestRelease() {
   if (response.ok) {
     const data = await response.json();
     const remoteTag = data.tag_name || '';
-    console.log('[MockKit Update SW] versions', { remoteTag, localVersion });
+    logDev('[MockKit Update SW] versions', { remoteTag, localVersion });
 
     const assets = Array.isArray(data.assets) ? data.assets : [];
     const namedAsset = assets.find((a) => a.name && a.name.startsWith(DOWNLOAD_PREFIX) && a.name.endsWith('.zip'));
     const asset = namedAsset || assets[0];
-    console.log('[MockKit Update SW] asset', { named: !!namedAsset, name: asset?.name, downloadUrl: asset?.browser_download_url, zipballUrl: data.zipball_url });
+    logDev('[MockKit Update SW] asset', { named: !!namedAsset, name: asset?.name, downloadUrl: asset?.browser_download_url, zipballUrl: data.zipball_url });
 
     const result = {
       hasUpdate: compareVersions(remoteTag, localVersion) > 0,
@@ -592,14 +668,14 @@ async function fetchLatestRelease() {
       publishedAt: data.published_at || '',
       source: 'api',
     };
-    console.log('[MockKit Update SW] fetchLatestRelease result', result);
+    logDev('[MockKit Update SW] fetchLatestRelease result', result);
     return result;
   }
 
   // API failed (rate limit / 5xx / network) — fall back to the releases
   // HTML page. github.com/.../releases/latest is an ordinary web page with
   // no per-IP rate limit, and it 302-redirects to /releases/tag/<tag>.
-  console.log('[MockKit Update SW] API unavailable (' + response.status + '), falling back to HTML scrape');
+  logDev('[MockKit Update SW] API unavailable (' + response.status + '), falling back to HTML scrape');
   return fetchLatestReleaseViaHtml(localVersion);
 }
 
@@ -609,7 +685,7 @@ async function fetchLatestRelease() {
 // "no update" rather than a misleading "rate limited" message.
 async function fetchLatestReleaseViaHtml(localVersion) {
   const pageUrl = `https://github.com/${GITHUB_REPO}/releases/latest`;
-  console.log('[MockKit Update SW] HTML fallback', pageUrl);
+  logDev('[MockKit Update SW] HTML fallback', pageUrl);
 
   // redirect: 'follow' (default) — response.url holds the final /tag/<tag> URL.
   let htmlResponse;
@@ -661,7 +737,7 @@ async function fetchLatestReleaseViaHtml(localVersion) {
     publishedAt: '',
     source: 'html',
   };
-  console.log('[MockKit Update SW] HTML fallback result', result);
+  logDev('[MockKit Update SW] HTML fallback result', result);
   return result;
 }
 
@@ -669,17 +745,17 @@ async function fetchLatestReleaseViaHtml(localVersion) {
 // Stores the result so the badge stays accurate without re-hitting the API
 // on every popup open.
 async function checkForUpdate(force = false) {
-  console.log('[MockKit Update SW] checkForUpdate', { force });
+  logDev('[MockKit Update SW] checkForUpdate', { force });
   const now = Date.now();
   const stored = await chrome.storage.local.get({ [UPDATE_LAST_CHECK_KEY]: 0, [UPDATE_AVAILABLE_KEY]: null });
   if (!force && stored[UPDATE_LAST_CHECK_KEY] && now - stored[UPDATE_LAST_CHECK_KEY] < UPDATE_CHECK_INTERVAL_MS) {
-    console.log('[MockKit Update SW] using cached result', stored[UPDATE_AVAILABLE_KEY]);
+    logDev('[MockKit Update SW] using cached result', stored[UPDATE_AVAILABLE_KEY]);
     return stored[UPDATE_AVAILABLE_KEY] || { hasUpdate: false, localVersion: chrome.runtime.getManifest().version };
   }
 
   try {
     const result = await fetchLatestRelease();
-    console.log('[MockKit Update SW] storing result', result);
+    logDev('[MockKit Update SW] storing result', result);
     await chrome.storage.local.set({
       [UPDATE_LAST_CHECK_KEY]: now,
       [UPDATE_AVAILABLE_KEY]: result,

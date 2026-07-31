@@ -2,6 +2,18 @@
 const AJAX_TOOLS_RUNTIME_STATE_KEY = '__ajaxToolsRuntimeState__';
 const AJAX_TOOLS_STYLE_ID = 'mockkit-interceptor-runtime-style';
 
+// Dev-mode logger: production releases (manifest name without "Beta") get
+// all logs silenced; beta / dev builds log normally. Same pattern as
+// service_worker.js — runtime detection via manifest name.
+const isDevMode = (() => {
+  try {
+    return /beta/i.test(chrome.runtime.getManifest().name || '');
+  } catch {
+    return false;
+  }
+})();
+const logDev = (...args) => { if (isDevMode) console.log(...args); };
+
 const ajaxToolsRuntimeState = window[AJAX_TOOLS_RUNTIME_STATE_KEY] || (window[AJAX_TOOLS_RUNTIME_STATE_KEY] = {
   panelContainer: null,
   panelMessageListenerBound: false,
@@ -1193,6 +1205,202 @@ injectedStyle(`
   .mockkit-dom-inspector__full-details--open {
     display: block;
   }
+
+  /* ===== Mark by Class module ===== */
+  /* Independent module placed below Element Box. Lets the user type a class
+     name and outline every matching element on the page. Uses purple to
+     stay visually distinct from inspect (green) and measure (orange). */
+  .mockkit-dom-inspector__mark-module {
+    border-top: 1px solid rgb(27 40 34 / 6%);
+    padding: 10px 14px;
+  }
+  .mockkit-dom-inspector__mark-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 6px;
+  }
+  .mockkit-dom-inspector__mark-title {
+    font-size: 11px;
+    font-weight: 600;
+    color: #1b2822;
+  }
+  .mockkit-dom-inspector__mark-clear-btn {
+    flex-shrink: 0;
+    padding: 2px 8px;
+    border: 1px solid rgb(124 58 237 / 30%);
+    border-radius: 4px;
+    background: transparent;
+    cursor: pointer;
+    color: rgb(124 58 237 / 70%);
+    font-size: 10px;
+    font-weight: 600;
+    transition: all 0.15s ease;
+  }
+  .mockkit-dom-inspector__mark-clear-btn:hover {
+    background: rgb(124 58 237 / 10%);
+    color: #7c3aed;
+  }
+  .mockkit-dom-inspector__mark-clear-btn:disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+  }
+  .mockkit-dom-inspector__mark-input-row {
+    display: flex;
+    gap: 6px;
+  }
+  .mockkit-dom-inspector__mark-input {
+    flex: 1;
+    min-width: 0;
+    font-family: Menlo, Monaco, Consolas, monospace;
+    font-size: 11px;
+    color: #1b2822;
+    border: 1px solid rgb(124 58 237 / 30%);
+    border-radius: 5px;
+    padding: 4px 8px;
+    background: rgb(255 255 255 / 95%);
+    outline: none;
+    transition: border-color 0.15s ease;
+  }
+  .mockkit-dom-inspector__mark-input:focus {
+    border-color: #7c3aed;
+    box-shadow: 0 0 0 2px rgb(124 58 237 / 15%);
+  }
+  .mockkit-dom-inspector__mark-btn {
+    flex-shrink: 0;
+    padding: 4px 12px;
+    border: none;
+    border-radius: 5px;
+    background: #7c3aed;
+    color: #fff;
+    font-size: 11px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s ease;
+  }
+  .mockkit-dom-inspector__mark-btn:hover {
+    background: #6d28d9;
+  }
+  .mockkit-dom-inspector__mark-hint {
+    margin-top: 6px;
+    font-size: 10px;
+    line-height: 1.5;
+    color: rgb(27 40 34 / 45%);
+  }
+  .mockkit-dom-inspector__mark-status {
+    margin-top: 4px;
+    font-size: 10px;
+    font-weight: 600;
+    color: #7c3aed;
+    min-height: 14px;
+  }
+  .mockkit-dom-inspector__mark-status--err {
+    color: #d4380d;
+  }
+  /* Overlay rendered on the page for each matched element. Semi-transparent
+     so the underlying element is still visible and inspectable. */
+  .mockkit-dom-inspector__mark-overlay {
+    position: fixed;
+    z-index: 2147483645;
+    pointer-events: none;
+    border: 2px solid rgb(124 58 237 / 0.65);
+    border-radius: 3px;
+    background: rgb(124 58 237 / 0.08);
+    box-shadow: 0 0 0 1px rgb(124 58 237 / 0.15);
+    transition: opacity 0.15s ease;
+  }
+  .mockkit-dom-inspector__mark-badge {
+    position: fixed;
+    z-index: 2147483645;
+    pointer-events: none;
+    background: rgb(124 58 237 / 0.85);
+    color: #fff;
+    font-size: 10px;
+    font-weight: 700;
+    font-family: Menlo, Monaco, Consolas, monospace;
+    padding: 1px 5px;
+    border-radius: 3px 0 3px 0;
+    line-height: 1.4;
+  }
+  /* Custom autocomplete dropdown (replaces native datalist so we can bind
+     per-option hover for live preview). z-index matches the panel so it
+     stacks above by DOM order (dropdown is appended after the panel). */
+  .mockkit-dom-inspector__mark-dropdown {
+    position: fixed;
+    z-index: 2147483647;
+    max-height: 200px;
+    overflow-y: auto;
+    min-width: 160px;
+    border-radius: 6px;
+    border: 1px solid rgb(124 58 237 / 20%);
+    background: rgb(255 255 255 / 96%);
+    backdrop-filter: blur(12px);
+    box-shadow: 0 8px 24px rgb(37 54 46 / 12%);
+    font-family: Menlo, Monaco, Consolas, monospace;
+    font-size: 11px;
+    padding: 4px 0;
+    opacity: 0;
+    transform: translateY(-6px) scale(0.98);
+    transform-origin: top center;
+    transition: opacity 0.18s ease, transform 0.18s ease;
+  }
+  .mockkit-dom-inspector__mark-dropdown--open {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  .mockkit-dom-inspector__mark-dropdown-option {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 4px 10px;
+    cursor: pointer;
+    color: #1b2822;
+    transition: background 0.1s ease;
+  }
+  .mockkit-dom-inspector__mark-dropdown-option:hover {
+    background: rgb(124 58 237 / 10%);
+  }
+  .mockkit-dom-inspector__mark-dropdown-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .mockkit-dom-inspector__mark-dropdown-count {
+    flex-shrink: 0;
+    font-size: 9px;
+    font-weight: 700;
+    color: rgb(124 58 237 / 60%);
+    background: rgb(124 58 237 / 8%);
+    border-radius: 8px;
+    padding: 1px 5px;
+  }
+  /* Preview overlay: dashed style to distinguish from committed marks.
+     Uses background-color + transform for a more visible animation than
+     opacity alone (the overlay is already very light, so opacity fade is
+     hard to perceive). */
+  .mockkit-dom-inspector__mark-preview {
+    position: fixed;
+    z-index: 2147483644;
+    pointer-events: none;
+    border: 2px dashed rgb(124 58 237 / 0.7);
+    border-radius: 3px;
+    background: rgb(124 58 237 / 0);
+    opacity: 1;
+    transform: scale(0.96);
+    transform-origin: center;
+    transition: background-color 0.2s ease, transform 0.2s ease, border-color 0.2s ease;
+  }
+  .mockkit-dom-inspector__mark-preview--in {
+    background: rgb(124 58 237 / 0.12);
+    transform: scale(1);
+  }
+  .mockkit-dom-inspector__mark-preview--fade {
+    background: rgb(124 58 237 / 0);
+    transform: scale(0.96);
+    border-color: rgb(124 58 237 / 0);
+  }
 `);
 
 let domInspectorState = {
@@ -1215,6 +1423,25 @@ let domInspectorState = {
   lastTarget: null,
   pendingTarget: null,
   rafId: null,
+  // ----- Mark by Class state -----
+  // Overlays persist on document.body independent of panel rebuilds. The
+  // input value is preserved across rebuilds so the user does not lose what
+  // they typed when inspecting another node.
+  markOverlays: [],
+  markBadges: [],
+  markInputValue: '',
+  markClassName: '',
+  markKeyListener: null,
+  markRepositionFrame: null,
+  markDatalistBuilt: false,
+  // ----- Hover preview state -----
+  // Transient overlays shown when the user hovers a class name in the
+  // autocomplete dropdown. Distinct from committed marks (markOverlays):
+  // preview uses dashed border + fade animation; marks use solid border.
+  markPreviewOverlays: [],
+  markPreviewClassName: '',
+  markDropdown: null,
+  markClassList: [],
 };
 
 function createDomInspectorOverlay() {
@@ -1949,6 +2176,463 @@ function buildEditableBox(node, bgColor) {
   return wrap;
 }
 
+// ===== Mark by Class =====
+// Independent module: type a class name, every matching element on the page
+// gets a purple outline + numbered badge. ESC or the Clear button removes
+// all marks. Overlays live on document.body (not inside the inspector panel)
+// so they survive panel rebuilds; state is kept in domInspectorState.
+
+// Remove every mark overlay + badge and detach listeners. Safe to call when
+// no marks exist (no-op).
+function clearClassMarks() {
+  domInspectorState.markOverlays.forEach((el) => el.remove());
+  domInspectorState.markBadges.forEach((el) => el.remove());
+  domInspectorState.markOverlays = [];
+  domInspectorState.markBadges = [];
+
+  // Detach the dedicated ESC listener once marks are gone.
+  if (domInspectorState.markKeyListener) {
+    document.removeEventListener('keydown', domInspectorState.markKeyListener, true);
+    domInspectorState.markKeyListener = null;
+  }
+
+  // Detach scroll/resize reposition listeners.
+  if (domInspectorState.markRepositionFrame) {
+    cancelAnimationFrame(domInspectorState.markRepositionFrame);
+    domInspectorState.markRepositionFrame = null;
+  }
+  document.removeEventListener('scroll', scheduleMarkReposition, true);
+  window.removeEventListener('resize', scheduleMarkReposition);
+
+  domInspectorState.markClassName = '';
+
+  // Clear the input field, the cached input value, and the autocomplete
+  // datalist so the next Mark run starts from a clean slate.
+  domInspectorState.markInputValue = '';
+  domInspectorState.markDatalistBuilt = false;
+  domInspectorState.markClassList = [];
+  const inputEl = domInspectorState.panel?.querySelector('.mockkit-dom-inspector__mark-input');
+  if (inputEl) {
+    inputEl.value = '';
+  }
+  // Close the custom dropdown and clear any active hover preview.
+  closeMarkDropdown();
+  clearPreviewMarks(false);
+
+  // Refresh the status text on the panel if it still exists.
+  const statusEl = domInspectorState.panel?.querySelector('.mockkit-dom-inspector__mark-status');
+  if (statusEl) {
+    statusEl.textContent = '';
+    statusEl.classList.remove('mockkit-dom-inspector__mark-status--err');
+  }
+  const clearBtn = domInspectorState.panel?.querySelector('.mockkit-dom-inspector__mark-clear-btn');
+  if (clearBtn) clearBtn.disabled = true;
+}
+
+// rAF-throttled reposition: called on scroll/resize. Deferred to the next
+// animation frame so rapid scroll events do not thrash layout.
+function scheduleMarkReposition() {
+  if (domInspectorState.markRepositionFrame) return;
+  domInspectorState.markRepositionFrame = requestAnimationFrame(() => {
+    domInspectorState.markRepositionFrame = null;
+    repositionClassMarks();
+  });
+}
+
+// Recompute the bounding rect of each marked element and move its overlay +
+// badge to match. Elements that were removed from the DOM or have a zero-size
+// rect are hidden rather than removed (the user may re-add them).
+function repositionClassMarks() {
+  const { markOverlays, markBadges } = domInspectorState;
+  for (let i = 0; i < markOverlays.length; i++) {
+    const overlay = markOverlays[i];
+    const badge = markBadges[i];
+    const el = overlay._target;
+    if (!el || !el.isConnected) {
+      overlay.style.display = 'none';
+      if (badge) badge.style.display = 'none';
+      continue;
+    }
+    const rect = el.getBoundingClientRect();
+    if (rect.width === 0 && rect.height === 0) {
+      overlay.style.display = 'none';
+      if (badge) badge.style.display = 'none';
+      continue;
+    }
+    overlay.style.display = 'block';
+    overlay.style.left = `${rect.left}px`;
+    overlay.style.top = `${rect.top}px`;
+    overlay.style.width = `${rect.width}px`;
+    overlay.style.height = `${rect.height}px`;
+    if (badge) {
+      badge.style.display = 'block';
+      badge.style.left = `${rect.left}px`;
+      badge.style.top = `${rect.top}px`;
+    }
+  }
+}
+
+// ===== Hover preview =====
+// When the user hovers a class name in the autocomplete dropdown, show a
+// dashed purple outline on every matching element so they can see what
+// would be marked before committing. Uses a lighter visual style than
+// committed marks to keep the two states visually distinct.
+
+// Show preview overlays for the given class name. If a different preview is
+// already active, clear it first (instantly, no fade — the user moved
+// directly to a new option).
+function previewClassMarks(className) {
+  const trimmed = String(className || '').trim();
+  if (!trimmed) {
+    clearPreviewMarks(false);
+    return;
+  }
+  // Skip rebuild if hovering the same class (e.g. dropdown repositioned).
+  if (domInspectorState.markPreviewClassName === trimmed) return;
+
+  clearPreviewMarks(false);
+  domInspectorState.markPreviewClassName = trimmed;
+
+  const elements = document.getElementsByClassName(trimmed);
+  for (let i = 0; i < elements.length; i++) {
+    const el = elements[i];
+    const rect = el.getBoundingClientRect();
+    if (rect.width === 0 && rect.height === 0) continue;
+
+    const overlay = document.createElement('div');
+    overlay.className = 'mockkit-dom-inspector__mark-preview';
+    overlay._target = el;
+    overlay.style.left = `${rect.left}px`;
+    overlay.style.top = `${rect.top}px`;
+    overlay.style.width = `${rect.width}px`;
+    overlay.style.height = `${rect.height}px`;
+    document.body.appendChild(overlay);
+    domInspectorState.markPreviewOverlays.push(overlay);
+
+    // Trigger the enter animation (background-color + scale) on the next
+    // frame so the transition fires from the initial transparent state.
+    requestAnimationFrame(() => {
+      overlay.classList.add('mockkit-dom-inspector__mark-preview--in');
+    });
+  }
+}
+
+// Remove all preview overlays. When fade is true, apply the fade-out class
+// first and remove after the transition ends — used when the dropdown closes
+// or the user moves away entirely. When fade is false, remove instantly —
+// used when switching between options (no point fading through empty state).
+function clearPreviewMarks(fade = true) {
+  const overlays = domInspectorState.markPreviewOverlays;
+  if (overlays.length === 0) {
+    domInspectorState.markPreviewClassName = '';
+    return;
+  }
+
+  if (fade) {
+    // Trigger the CSS fade-out (background + scale + border-color), then
+    // remove after the transition completes.
+    overlays.forEach((el) => {
+      el.classList.remove('mockkit-dom-inspector__mark-preview--in');
+      el.classList.add('mockkit-dom-inspector__mark-preview--fade');
+    });
+    const toRemove = overlays.slice();
+    setTimeout(() => {
+      toRemove.forEach((el) => el.remove());
+    }, 220);
+  } else {
+    overlays.forEach((el) => el.remove());
+  }
+
+  domInspectorState.markPreviewOverlays = [];
+  domInspectorState.markPreviewClassName = '';
+}
+
+// Query the page for all elements with the given class name and create one
+// overlay + numbered badge per match. Registers ESC + scroll/resize listeners
+// so marks can be cleared and stay aligned during navigation.
+function applyClassMarks(className) {
+  // Clean up any previous marks before applying new ones.
+  clearClassMarks();
+
+  const trimmed = String(className || '').trim();
+  if (!trimmed) return;
+
+  const elements = document.getElementsByClassName(trimmed);
+  if (elements.length === 0) {
+    const statusEl = domInspectorState.panel?.querySelector('.mockkit-dom-inspector__mark-status');
+    if (statusEl) {
+      statusEl.textContent = `No elements found for ".${trimmed}"`;
+      statusEl.classList.add('mockkit-dom-inspector__mark-status--err');
+    }
+    return;
+  }
+
+  domInspectorState.markClassName = trimmed;
+
+  for (let i = 0; i < elements.length; i++) {
+    const el = elements[i];
+    const rect = el.getBoundingClientRect();
+
+    const overlay = document.createElement('div');
+    overlay.className = 'mockkit-dom-inspector__mark-overlay';
+    overlay._target = el;
+    overlay.style.left = `${rect.left}px`;
+    overlay.style.top = `${rect.top}px`;
+    overlay.style.width = `${rect.width}px`;
+    overlay.style.height = `${rect.height}px`;
+    document.body.appendChild(overlay);
+    domInspectorState.markOverlays.push(overlay);
+
+    // Numbered badge in the top-left corner so the user can count and
+    // reference individual matches.
+    const badge = document.createElement('div');
+    badge.className = 'mockkit-dom-inspector__mark-badge';
+    badge.textContent = String(i + 1);
+    badge.style.left = `${rect.left}px`;
+    badge.style.top = `${rect.top}px`;
+    // Hide badge for zero-size elements to avoid floating numbers.
+    if (rect.width === 0 && rect.height === 0) {
+      overlay.style.display = 'none';
+      badge.style.display = 'none';
+    }
+    document.body.appendChild(badge);
+    domInspectorState.markBadges.push(badge);
+  }
+
+  // Update status text.
+  const count = elements.length;
+  const statusEl = domInspectorState.panel?.querySelector('.mockkit-dom-inspector__mark-status');
+  if (statusEl) {
+    statusEl.textContent = `${count} element${count > 1 ? 's' : ''} marked ".${trimmed}" — press Esc to clear`;
+    statusEl.classList.remove('mockkit-dom-inspector__mark-status--err');
+  }
+  const clearBtn = domInspectorState.panel?.querySelector('.mockkit-dom-inspector__mark-clear-btn');
+  if (clearBtn) clearBtn.disabled = false;
+
+  // Dedicated ESC listener: fires only while marks exist. Uses capture phase
+  // to intercept before page-level handlers. Does NOT stopPropagation — the
+  // inspect/measure ESC handler may also run, which is the expected "ESC
+  // resets everything" behavior.
+  domInspectorState.markKeyListener = (event) => {
+    if (event.key === 'Escape') {
+      clearClassMarks();
+    }
+  };
+  document.addEventListener('keydown', domInspectorState.markKeyListener, true);
+
+  // Reposition overlays on scroll/resize so marks stay aligned with their
+  // elements during page navigation. Capture-phase scroll catches both
+  // window and element-level scroll containers.
+  document.addEventListener('scroll', scheduleMarkReposition, true);
+  window.addEventListener('resize', scheduleMarkReposition);
+}
+
+// ===== Custom autocomplete dropdown =====
+// Replaces native <datalist> so each option can bind mouseenter → live
+// preview, mouseleave → fade-out, click → commit. Positioned under the input.
+
+function openMarkDropdown(input) {
+  const classList = domInspectorState.markClassList;
+  if (!classList || classList.length === 0) return;
+
+  // Filter by current input value (prefix match, case-insensitive).
+  const query = input.value.trim().toLowerCase();
+  const filtered = query
+    ? classList.filter((c) => c.toLowerCase().includes(query))
+    : classList;
+  if (filtered.length === 0) {
+    closeMarkDropdown();
+    return;
+  }
+
+  // Reuse existing dropdown or create one.
+  let dropdown = domInspectorState.markDropdown;
+  if (!dropdown || !dropdown.isConnected) {
+    dropdown = document.createElement('div');
+    dropdown.className = 'mockkit-dom-inspector__mark-dropdown';
+    document.body.appendChild(dropdown);
+    domInspectorState.markDropdown = dropdown;
+  } else {
+    dropdown.innerHTML = '';
+  }
+
+  // Position below the input.
+  const rect = input.getBoundingClientRect();
+  dropdown.style.left = `${rect.left}px`;
+  dropdown.style.top = `${rect.bottom + 4}px`;
+  dropdown.style.minWidth = `${rect.width}px`;
+
+  // Build options with match counts.
+  filtered.slice(0, 50).forEach((className) => {
+    const option = document.createElement('div');
+    option.className = 'mockkit-dom-inspector__mark-dropdown-option';
+
+    const nameSpan = document.createElement('span');
+    nameSpan.className = 'mockkit-dom-inspector__mark-dropdown-name';
+    nameSpan.textContent = className;
+
+    // Show match count so the user knows how many elements each class hits
+    // before even hovering. Cheap: getElementsByClassName is fast.
+    const count = document.getElementsByClassName(className).length;
+    const countSpan = document.createElement('span');
+    countSpan.className = 'mockkit-dom-inspector__mark-dropdown-count';
+    countSpan.textContent = String(count);
+
+    option.appendChild(nameSpan);
+    option.appendChild(countSpan);
+
+    // Hover → live preview (dashed overlay on all matches).
+    option.addEventListener('mouseenter', () => {
+      previewClassMarks(className);
+    });
+    option.addEventListener('mouseleave', () => {
+      clearPreviewMarks(false);
+    });
+
+    // Click → fill input and commit marks.
+    option.addEventListener('mousedown', (event) => {
+      // mousedown fires before input blur, so we can set the value and
+      // trigger Mark without the blur handler closing things prematurely.
+      event.preventDefault();
+      input.value = className;
+      domInspectorState.markInputValue = className;
+      applyClassMarks(className);
+      closeMarkDropdown();
+      clearPreviewMarks(false);
+    });
+
+    dropdown.appendChild(option);
+  });
+
+  // Trigger open animation on next frame.
+  requestAnimationFrame(() => {
+    dropdown.classList.add('mockkit-dom-inspector__mark-dropdown--open');
+  });
+}
+
+function closeMarkDropdown() {
+  const dropdown = domInspectorState.markDropdown;
+  if (!dropdown) return;
+  dropdown.classList.remove('mockkit-dom-inspector__mark-dropdown--open');
+  // Remove after the fade-out transition completes.
+  setTimeout(() => {
+    if (dropdown.isConnected) dropdown.remove();
+  }, 150);
+  domInspectorState.markDropdown = null;
+}
+
+// Build the "Mark by Class" module DOM. Always appended to the panel body
+// (after Element Box / Computed Styles), regardless of whether a node is
+// picked — the feature is independent of node inspection.
+function buildMarkByClassModule() {
+  const wrap = document.createElement('div');
+  wrap.className = 'mockkit-dom-inspector__mark-module';
+
+  // Header: title + clear button.
+  const header = document.createElement('div');
+  header.className = 'mockkit-dom-inspector__mark-header';
+  const title = document.createElement('span');
+  title.className = 'mockkit-dom-inspector__mark-title';
+  title.textContent = 'Mark by Class';
+  const clearBtn = document.createElement('button');
+  clearBtn.className = 'mockkit-dom-inspector__mark-clear-btn';
+  clearBtn.textContent = 'Clear';
+  clearBtn.title = 'Clear all marks (Esc)';
+  clearBtn.disabled = domInspectorState.markOverlays.length === 0;
+  clearBtn.addEventListener('click', () => clearClassMarks());
+  header.appendChild(title);
+  header.appendChild(clearBtn);
+
+  // Input row: text field + Mark button.
+  const inputRow = document.createElement('div');
+  inputRow.className = 'mockkit-dom-inspector__mark-input-row';
+  const input = document.createElement('input');
+  input.className = 'mockkit-dom-inspector__mark-input';
+  input.type = 'text';
+  input.placeholder = 'class name (without dot)';
+  input.value = domInspectorState.markInputValue || '';
+  input.title = 'Enter a CSS class name (without the leading dot). Press Enter or click Mark.';
+
+  // Autocomplete: a custom dropdown (not native datalist) so we can bind
+  // per-option hover for live preview. Built on first focus from the page's
+  // unique class names (capped at 200). The built flag lives on
+  // domInspectorState so clearClassMarks can reset it.
+  input.addEventListener('focus', () => {
+    if (domInspectorState.markDatalistBuilt) {
+      openMarkDropdown(input);
+      return;
+    }
+    domInspectorState.markDatalistBuilt = true;
+    try {
+      const all = document.querySelectorAll('[class]');
+      const classes = new Set();
+      for (let i = 0; i < all.length && classes.size < 200; i++) {
+        all[i].classList.forEach((c) => {
+          if (c) classes.add(c);
+        });
+      }
+      // Cache the class list so reopening the dropdown does not re-scan.
+      domInspectorState.markClassList = Array.from(classes).sort();
+      openMarkDropdown(input);
+    } catch (e) {
+      // If collection fails (huge DOM, sandbox), silently skip — the input
+      // still works without autocomplete.
+    }
+  });
+
+  // Close dropdown + fade out preview on blur (deferred so option clicks fire).
+  input.addEventListener('blur', () => {
+    setTimeout(() => {
+      closeMarkDropdown();
+      clearPreviewMarks(true);
+    }, 150);
+  });
+
+  // Reopen / filter dropdown as the user types.
+  input.addEventListener('input', () => {
+    if (domInspectorState.markDatalistBuilt) {
+      openMarkDropdown(input);
+    }
+  });
+
+  const markBtn = document.createElement('button');
+  markBtn.className = 'mockkit-dom-inspector__mark-btn';
+  markBtn.textContent = 'Mark';
+  markBtn.addEventListener('click', () => {
+    const value = input.value.trim();
+    if (!value) return;
+    domInspectorState.markInputValue = value;
+    applyClassMarks(value);
+  });
+  input.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      markBtn.click();
+    }
+  });
+  inputRow.appendChild(input);
+  inputRow.appendChild(markBtn);
+
+  // Usage hint.
+  const hint = document.createElement('div');
+  hint.className = 'mockkit-dom-inspector__mark-hint';
+  hint.textContent = 'Enter a class name (without the dot) and press Enter or click Mark. All matching elements get a purple outline with a numbered badge. Press Esc or click Clear to remove marks.';
+
+  // Status line (populated by applyClassMarks / clearClassMarks).
+  const status = document.createElement('div');
+  status.className = 'mockkit-dom-inspector__mark-status';
+  if (domInspectorState.markOverlays.length > 0 && domInspectorState.markClassName) {
+    const count = domInspectorState.markOverlays.length;
+    status.textContent = `${count} element${count > 1 ? 's' : ''} marked ".${domInspectorState.markClassName}" — press Esc to clear`;
+  }
+
+  wrap.appendChild(header);
+  wrap.appendChild(inputRow);
+  wrap.appendChild(hint);
+  wrap.appendChild(status);
+  return wrap;
+}
+
 function buildBoxModelDiagram(box, node) {
   const wrap = document.createElement('div');
   wrap.className = 'mockkit-dom-inspector__box-model';
@@ -2264,6 +2948,12 @@ function showDomInspectorPanel(node, hint) {
     body.appendChild(fullDetails);
   }
 
+  // Mark by Class module: always visible at the bottom of the panel,
+  // independent of whether a node was picked. Overlays persist on
+  // document.body across panel rebuilds; the input value is preserved in
+  // domInspectorState.markInputValue.
+  body.appendChild(buildMarkByClassModule());
+
   panel.appendChild(body);
   document.body.appendChild(panel);
   domInspectorState.panel = panel;
@@ -2334,6 +3024,14 @@ window.addEventListener('message', (event) => {
 });
 injectedCss('icons/iconfont/iconfont.css');
 injectedScript('html/iframePage/mock.js');
+// Inject the dev-mode flag into the PAGE context before pageScripts loads,
+// so the page script can gate its console.info calls without needing
+// chrome.runtime (which is unavailable in the page world). The flag is a
+// boolean — harmless if read by the page.
+const devFlagScript = document.createElement('script');
+devFlagScript.textContent = `window.__MOCKKIT_DEV_MODE__ = ${isDevMode};`;
+(document.head || document.documentElement).appendChild(devFlagScript);
+devFlagScript.remove();
 const pageScripts = injectedScript('pageScripts/index.js');
 if (pageScripts) {
   pageScripts.addEventListener('load', () => {
@@ -3292,7 +3990,7 @@ function bindPanelMessageListener(container) {
   };
 
   chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-    console.log('【content】【mockkit-tools-iframe-show】receive message', request);
+    logDev('【content】【mockkit-tools-iframe-show】receive message', request);
     const {type, iframeVisible, csrEnabled} = request;
     if (type === 'PING_AJAX_TOOLS_PANEL') {
       sendResponse({ ok: true });

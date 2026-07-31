@@ -1,4 +1,12 @@
 
+// Dev-mode flag: injected by content.js before this script loads (see the
+// devFlagScript block in content.js). The page script runs in the PAGE world
+// where chrome.runtime is unavailable, so it cannot read the manifest name
+// itself. Default to false (production-safe) if the flag was not injected.
+const isDevMode = Boolean(window.__MOCKKIT_DEV_MODE__);
+const logDev = (...args) => { if (isDevMode) console.log(...args); };
+const infoDev = (...args) => { if (isDevMode) console.info(...args); };
+
 const ajax_tools_space = {
   ajaxToolsSwitchOn: true,
   ajaxToolsSwitchOnNot200: true,
@@ -131,7 +139,7 @@ const ajax_tools_space = {
       const [requestPayload] = this._sendArgs;
       const matchedInterface = this._matchedInterface;
       if (matchedInterface && matchedInterface.responseText) {
-        console.log("【mock match url】🟢 : "+"%c" + `${requestUrl}`, "color: #f50; font-weight: bold;");
+        logDev("【mock match url】🟢 : "+"%c" + `${requestUrl}`, "color: #f50; font-weight: bold;");
         const funcArgs = {
           method,
           payload: {
@@ -149,12 +157,12 @@ const ajax_tools_space = {
         if (matchedInterface.replacementStatusCode) {
           this.status = matchedInterface.replacementStatusCode;
         }
-        // console.info('ⓢ ►►►►►►►►►►►►►►►►►►►►►►►►►►►►►►►► ⓢ');
+        // infoDev('ⓢ ►►►►►►►►►►►►►►►►►►►►►►►►►►►►►►►► ⓢ');
         console.groupCollapsed(`%cMatched XHR Response modified：${matchedInterface.request}`, 'background-color: #108ee9; color: white; padding: 4px');
-        console.info(`%cOriginal Request Url：`, 'background-color: #ff8040; color: white;', this.responseURL);
-        console.info('%cModified Response Payload：', 'background-color: #ff5500; color: white;', JSON.parse(overrideText));
+        infoDev(`%cOriginal Request Url：`, 'background-color: #ff8040; color: white;', this.responseURL);
+        infoDev('%cModified Response Payload：', 'background-color: #ff5500; color: white;', JSON.parse(overrideText));
         console.groupEnd();
-        // console.info('ⓔ ▣▣▣▣▣▣▣▣▣▣▣▣▣▣▣▣▣▣▣▣▣▣▣▣▣▣▣▣▣▣▣▣ ⓔ')
+        // infoDev('ⓔ ▣▣▣▣▣▣▣▣▣▣▣▣▣▣▣▣▣▣▣▣▣▣▣▣▣▣▣▣▣▣▣▣ ⓔ')
       }
     }
 
@@ -204,15 +212,15 @@ const ajax_tools_space = {
             const { replacementUrl, replacementMethod, headers, requestPayloadText } = matchedInterface;
             if (replacementUrl || replacementMethod || headers || requestPayloadText) {
               console.groupCollapsed(`%cMatched XHR Request modified：${matchedInterface.request}`, 'background-color: #fa8c16; color: white; padding: 4px');
-              console.info(`%cOriginal Request Url：`, 'background-color: #ff8040; color: white;', requestUrl);
+              infoDev(`%cOriginal Request Url：`, 'background-color: #ff8040; color: white;', requestUrl);
             }
             if (matchedInterface.replacementUrl && args[1]) {
               args[1] = matchedInterface.replacementUrl;
-              console.info(`%cModified Url：`, 'background-color: #ff8040; color: white;', matchedInterface.replacementUrl);
+              infoDev(`%cModified Url：`, 'background-color: #ff8040; color: white;', matchedInterface.replacementUrl);
             }
             if (matchedInterface.replacementMethod && args[0]) {
               args[0] = matchedInterface.replacementMethod;
-              console.info(`%cModified Method：`, 'background-color: #ff8040; color: white;', matchedInterface.replacementMethod);
+              infoDev(`%cModified Method：`, 'background-color: #ff8040; color: white;', matchedInterface.replacementMethod);
             }
             if (matchedInterface.requestPayloadText && args[0] && args[1] && args[0].toUpperCase() === 'GET') {
               const queryStringParameters = ajax_tools_space.getRequestParams(args[1]);
@@ -221,7 +229,7 @@ const ajax_tools_space = {
                 queryStringParameters
               }
               args[1] = ajax_tools_space.executeStringFunction(matchedInterface.requestPayloadText, data);
-              console.info(`%cModified Request Payload, GET：`, 'background-color: #ff8040; color: white;', args[1]);
+              infoDev(`%cModified Request Payload, GET：`, 'background-color: #ff8040; color: white;', args[1]);
             }
           }
           xhr.open && xhr.open.apply(xhr, args);
@@ -239,12 +247,12 @@ const ajax_tools_space = {
           if (matchedInterface) {
             if (matchedInterface.headers) {
               ruleHeaders = ajax_tools_space.getOverrideText(matchedInterface.headers, this._openArgs, true);
-              console.info(`%cModified Rule Headers：`, 'background-color: #ff8040; color: white;', ruleHeaders);
+              infoDev(`%cModified Rule Headers：`, 'background-color: #ff8040; color: white;', ruleHeaders);
             }
             const [method] = this._openArgs;
             if (matchedInterface.requestPayloadText && method !== 'GET') { // Not GET
               args[0] = ajax_tools_space.executeStringFunction(matchedInterface.requestPayloadText, args[0]);
-              console.info(`%cModified Request Payload, ${method}：`, 'background-color: #ff8040; color: white;', args[0]);
+              infoDev(`%cModified Request Payload, ${method}：`, 'background-color: #ff8040; color: white;', args[0]);
             }
             console.groupEnd();
           }
@@ -309,19 +317,19 @@ const ajax_tools_space = {
       const { replacementUrl, replacementMethod, headers, requestPayloadText } = matchedInterface;
       if (replacementUrl || replacementMethod || headers || requestPayloadText) {
         console.groupCollapsed(`%cMatched Fetch Request modified：${matchedInterface.request}`, 'background-color: #fa8c16; color: white; padding: 4px');
-        console.info(`%cOriginal Request Url：`, 'background-color: #ff8040; color: white;', requestUrl);
+        infoDev(`%cOriginal Request Url：`, 'background-color: #ff8040; color: white;', requestUrl);
       }
       if (matchedInterface.replacementUrl && args[0]) {
         args[0] = matchedInterface.replacementUrl;
-        console.info(`%cModified Url：`, 'background-color: #ff8040; color: white;', matchedInterface.replacementUrl);
+        infoDev(`%cModified Url：`, 'background-color: #ff8040; color: white;', matchedInterface.replacementUrl);
       }
       if (matchedInterface.replacementMethod && args[1]) {
         args[1].method = matchedInterface.replacementMethod;
-        console.info(`%cModified Method：`, 'background-color: #ff8040; color: white;', matchedInterface.replacementMethod);
+        infoDev(`%cModified Method：`, 'background-color: #ff8040; color: white;', matchedInterface.replacementMethod);
       }
       if (matchedInterface.headers && args[1]) {
         ruleHeaders = ajax_tools_space.getOverrideText(matchedInterface.headers, data, true);
-        console.info(`%cModified Rule Headers：`, 'background-color: #ff8040; color: white;', ruleHeaders);
+        infoDev(`%cModified Rule Headers：`, 'background-color: #ff8040; color: white;', ruleHeaders);
       }
       if (matchedInterface.requestPayloadText && args[0] && data) {
         const {method='GET'} = data;
@@ -332,10 +340,10 @@ const ajax_tools_space = {
             queryStringParameters
           }
           args[0] = ajax_tools_space.executeStringFunction(matchedInterface.requestPayloadText, data);
-          console.info(`%cModified Request Payload, GET：`, 'background-color: #ff8040; color: white;', args[0]);
+          infoDev(`%cModified Request Payload, GET：`, 'background-color: #ff8040; color: white;', args[0]);
         } else {
           data.body = ajax_tools_space.executeStringFunction(matchedInterface.requestPayloadText, data.body);
-          console.info(`%cModified Request Payload, ${method}：`, 'background-color: #ff8040; color: white;', data.body);
+          infoDev(`%cModified Request Payload, ${method}：`, 'background-color: #ff8040; color: white;', data.body);
         }
       }
       console.groupEnd();
@@ -361,12 +369,12 @@ const ajax_tools_space = {
           originalResponse: originalResponseText
         };
         overrideText = ajax_tools_space.getOverrideText(matchedInterface.responseText, funcArgs);
-        // console.info('ⓢ ►►►►►►►►►►►►►►►►►►►►►►►►►►►►►►►► ⓢ');
+        // infoDev('ⓢ ►►►►►►►►►►►►►►►►►►►►►►►►►►►►►►►► ⓢ');
         console.groupCollapsed(`%cMatched Fetch Response modified：${matchedInterface.request}`, 'background-color: #108ee9; color: white; padding: 4px');
-        console.info(`%cOriginal Request Url：`, 'background-color: #ff8040; color: white;', response.url);
-        console.info('%cModified Response Payload：', 'background-color: #ff5500; color: white;', JSON.parse(overrideText));
+        infoDev(`%cOriginal Request Url：`, 'background-color: #ff8040; color: white;', response.url);
+        infoDev('%cModified Response Payload：', 'background-color: #ff5500; color: white;', JSON.parse(overrideText));
         console.groupEnd();
-        // console.info('ⓔ ▣▣▣▣▣▣▣▣▣▣▣▣▣▣▣▣▣▣▣▣▣▣▣▣▣▣▣▣▣▣▣▣ ⓔ')
+        // infoDev('ⓔ ▣▣▣▣▣▣▣▣▣▣▣▣▣▣▣▣▣▣▣▣▣▣▣▣▣▣▣▣▣▣▣▣ ⓔ')
       } else {
         // Non-matched fetch: clone the response so we can read its body for
         // the Request Sniffer without consuming the original stream that the
@@ -454,7 +462,7 @@ function currentHostWhitelisted() {
 window.addEventListener("message", function (event) {
   const data = event.data;
   if (data.type === 'ajaxTools' && data.to === 'pageScript') {
-    // console.log('【pageScripts/index.js】', data);
+    // logDev('【pageScripts/index.js】', data);
     ajax_tools_space[data.key] = data.value;
   }
   if (ajax_tools_space.ajaxToolsSwitchOn && currentHostWhitelisted()) {

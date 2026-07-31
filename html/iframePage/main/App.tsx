@@ -13,6 +13,7 @@ import OperationsRail from './components/OperationsRail';
 import GroupWorkbench from './components/GroupWorkbench';
 import { AjaxGroup, ModifyDataModalOpenProps } from './types/registry';
 import { useModuleCollapseState } from './hooks/useModuleCollapseState';
+import { logger } from './utils/logger';
 import { usePageRenderMode } from './hooks/usePageRenderMode';
 import { useFloatingRules } from './hooks/useFloatingRules';
 import { useDomainWhitelist } from './hooks/useDomainWhitelist';
@@ -244,7 +245,7 @@ function App() {
     const handleMessage = (event: MessageEvent) => {
       const data = event.data;
       if (!data || data.type !== 'AJAX_TOOLS_APPLY_UPDATE') return;
-      console.log('[MockKit Update] received APPLY_UPDATE', { downloadUrl: data.downloadUrl, remoteVersion: data.remoteVersion, origin: event.origin });
+      logger.log('[MockKit Update] received APPLY_UPDATE', { downloadUrl: data.downloadUrl, remoteVersion: data.remoteVersion, origin: event.origin });
       setUpdateModal({
         open: true,
         downloadUrl: data.downloadUrl || '',

@@ -1,5 +1,36 @@
 # Build Changelog
 
+## v0.0.43
+
+- Built At: 2026-07-31T08:03:51.860Z
+- Previous Version: v0.0.42
+- Git Branch: master
+- Git Commit: c432fd10
+
+### Changed Files
+- .agent/project/features.md
+- .agent/project/setup.md
+- build.js
+- content.js
+- html/iframePage/main/App.tsx
+- html/iframePage/main/components/Footer/index.tsx
+- html/iframePage/main/components/ModifyDataModal/index.tsx
+- html/iframePage/main/components/UpdateModal/index.tsx
+- html/iframePage/main/utils/selfUpdate.ts
+- html/iframePage/package-lock.json
+- html/iframePage/package.json
+- html/iframePage/stats.html
+- manifest.json
+- pageScripts/index.js
+- service_worker.js
+- build-dev.js
+- devtools.html
+- devtools.js
+- html/iframePage/main/utils/logger.ts
+- panel.html
+- panel.js
+
+
 ## v0.0.42
 
 - Built At: 2026-07-31T06:31:38.801Z

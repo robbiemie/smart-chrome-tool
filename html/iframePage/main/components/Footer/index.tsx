@@ -1,6 +1,7 @@
 
 import React, { useEffect, useState } from 'react';
 import './index.css';
+import { logger } from '../../utils/logger';
 
 type UpdateInfo = {
   hasUpdate?: boolean;
@@ -40,7 +41,7 @@ function Footer() {
   const handleCheck = () => {
     if (checking) return;
     setChecking(true);
-    console.log('[MockKit Update] Footer handleCheck — sending CHECK_UPDATE');
+    logger.log('[MockKit Update] Footer handleCheck — sending CHECK_UPDATE');
 
     if (!isExtensionContext) {
       // Dev mode: simulate a successful check that finds a newer version.
@@ -54,7 +55,7 @@ function Footer() {
         releaseUrl: 'https://github.com/robbiemie/smart-chrome-tool/releases/tag/v0.0.22',
       };
       setTimeout(() => {
-        console.log('[MockKit Update] (dev) CHECK_UPDATE mock response', mockResult);
+        logger.log('[MockKit Update] (dev) CHECK_UPDATE mock response', mockResult);
         setUpdateInfo(mockResult);
         setChecking(false);
       }, 800);
@@ -63,16 +64,16 @@ function Footer() {
 
     chrome.runtime?.sendMessage({ type: 'CHECK_UPDATE', force: true }, (response) => {
       setChecking(false);
-      console.log('[MockKit Update] CHECK_UPDATE response', response, chrome.runtime.lastError);
+      logger.log('[MockKit Update] CHECK_UPDATE response', response, chrome.runtime.lastError);
       if (chrome.runtime.lastError || !response) return;
       setUpdateInfo(response);
     });
   };
 
   const handleInstall = () => {
-    console.log('[MockKit Update] Footer handleInstall called', { updateInfo, hasDownloadUrl: Boolean(updateInfo?.downloadUrl) });
+    logger.log('[MockKit Update] Footer handleInstall called', { updateInfo, hasDownloadUrl: Boolean(updateInfo?.downloadUrl) });
     if (!updateInfo?.downloadUrl) {
-      console.warn('[MockKit Update] no downloadUrl, abort');
+      logger.warn('[MockKit Update] no downloadUrl, abort');
       return;
     }
 
@@ -88,7 +89,7 @@ function Footer() {
         },
         '*'
       );
-      console.log('[MockKit Update] (dev) APPLY_UPDATE posted to window');
+      logger.log('[MockKit Update] (dev) APPLY_UPDATE posted to window');
       return;
     }
 
@@ -99,7 +100,7 @@ function Footer() {
     const pageUrl = chrome.runtime.getURL('html/iframePage/dist/index.html');
     const hash = `#update=1&downloadUrl=${encodeURIComponent(updateInfo.downloadUrl)}&remoteVersion=${encodeURIComponent(updateInfo.remoteVersion || '')}`;
     window.open(`${pageUrl}${hash}`, '_blank');
-    console.log('[MockKit Update] opened update tab', `${pageUrl}${hash}`);
+    logger.log('[MockKit Update] opened update tab', `${pageUrl}${hash}`);
   };
 
   const currentVersion = isExtensionContext

@@ -10,6 +10,7 @@ import {
   verifyExtensionDir,
   isFsAccessSupported,
 } from '../../utils/selfUpdate';
+import { logger } from '../../utils/logger';
 
 export interface UpdateModalProps {
   open: boolean;
@@ -207,7 +208,7 @@ export default function UpdateModal({
   // retry). Steps before `startStep` are assumed to have completed and their
   // artifacts are already in the refs.
   const run = async (startStep = 0) => {
-    console.log('[MockKit Update] run() called', { startStep, downloadUrl, remoteVersion });
+    logger.log('[MockKit Update] run() called', { startStep, downloadUrl, remoteVersion });
     setError('');
     setFailedStepIndex(-1);
     if (startStep === 0) {
@@ -218,12 +219,12 @@ export default function UpdateModal({
     }
 
     for (let i = startStep; i < STEP_RUNNERS.length; i += 1) {
-      console.log('[MockKit Update] running step', i, STEP_LABELS[i].title);
+      logger.log('[MockKit Update] running step', i, STEP_LABELS[i].title);
       try {
         const cont = await STEP_RUNNERS[i]();
-        console.log('[MockKit Update] step', i, 'result', cont);
+        logger.log('[MockKit Update] step', i, 'result', cont);
         if (cont === false) {
-          console.log('[MockKit Update] step cancelled by user');
+          logger.log('[MockKit Update] step cancelled by user');
           return;
         }
       } catch (e: any) {
@@ -234,7 +235,7 @@ export default function UpdateModal({
         return;
       }
     }
-    console.log('[MockKit Update] all steps done');
+    logger.log('[MockKit Update] all steps done');
     setPhase('done');
   };
 

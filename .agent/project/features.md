@@ -191,6 +191,23 @@ click=anchor/lock/replace-baseline (never exits), Esc=exit, hover=live
 measurement. The two modes are mutually exclusive; starting one stops the
 other.
 
+**Mark by Class (sub-module):** An independent module at the bottom of the
+DOM Inspector panel (below Element Box / Computed Styles). The user types a
+CSS class name (without the dot) and presses Enter or clicks "Mark" — every
+matching element on the page gets a purple outline (`#7c3aed`) with a
+numbered badge in the top-left corner. A status line shows the match count
+(e.g. "3 elements marked .foo — press Esc to clear"). Autocomplete
+suggestions are built on first input focus from the page's unique class
+names (capped at 200 entries). Marks are cleared via Esc or a "Clear"
+button. Overlays persist on `document.body` across panel rebuilds and are
+repositioned on scroll/resize via a rAF-throttled handler. State lives in
+`domInspectorState` (`markOverlays`, `markBadges`, `markInputValue`,
+`markClassName`, `markKeyListener`).
+
+**Lives in:** `content.js` (`buildMarkByClassModule`, `applyClassMarks`,
+`clearClassMarks`, `repositionClassMarks`, `scheduleMarkReposition`); CSS
+classes `mockkit-dom-inspector__mark-*`.
+
 ---
 
 ## 9. Request Sniffer (live capture)
@@ -246,6 +263,41 @@ picture-in-picture, dark-theme (invert), open-in-new-tab, discussions, code-net.
 **Lives in:** `content.js` (`actionBar`, `zoomButton`, `fullscreenButton`,
 `pipButton`, `themeModeButton`, `newTabButton`, `discussionsButton`,
 `codeNetButton`); PiP util `html/iframePage/main/utils/pictureInPicture.ts`.
+
+---
+
+## 13. DevTools panel entry
+
+**Summary:** A Chrome DevTools panel (sibling of Elements / Console / Network)
+that mounts the same React workbench on the inspected page. Serves as an
+alternative entry point to the toolbar action, useful where the toolbar
+action's content-script auto-injection is gated (e.g. enterprise-managed
+browsers) — the DevTools page is permitted in many such environments and
+`chrome.scripting.executeScript` re-injection still works through the
+extension's existing `host_permissions`.
+
+**Lives in:**
+- Panel registration: `devtools.html` → `devtools.js`
+  (`chrome.devtools.panels.create`)
+- Panel UI + mount trigger: `panel.html` → `panel.js`
+  (reads `chrome.devtools.inspectedWindow.tabId`, sends
+  `DEVTOOLS_SHOW_WORKBENCH` to the service worker)
+- Mount handler: `service_worker.js` (`DEVTOOLS_SHOW_WORKBENCH` branch — sets
+  the workbench target tab, calls `ensurePanelMessageReceiver`, force-reveals
+  the iframe via `iframeToggle`)
+- Manifest: `devtools_page: "devtools.html"`
+
+**Wiring:** DevTools panel open → `panel.js` →
+`chrome.runtime.sendMessage({ type: 'DEVTOOLS_SHOW_WORKBENCH', tabId })` →
+SW reuses `ensurePanelMessageReceiver` + `iframeToggle` (force-show) →
+existing content.js iframe workbench on the inspected page. No new UI is
+rendered inside the panel itself; the panel only shows mount status and a
+retry button.
+
+**Constraint:** Cannot mount on `chrome://`, `chrome-extension://`, `edge://`,
+`about:`, or `view-source:` pages — Chrome blocks content-script injection on
+those schemes regardless of entry point. The panel detects this and shows a
+"blocked" status.
 
 ---
 
