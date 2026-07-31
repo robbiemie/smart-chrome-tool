@@ -254,7 +254,9 @@ injectedStyle(`
   .mockkit-floating-rules__csr-btn {
     flex-shrink: 0;
     padding: 3px 8px;
-    border: none;
+    /* 1px transparent base so border-color changes on hover/active render;
+       the old `border: none` made every border-color rule a no-op. */
+    border: 1px solid transparent;
     border-radius: 7px;
     background: transparent;
     cursor: pointer;
@@ -266,20 +268,13 @@ injectedStyle(`
   }
   .mockkit-floating-rules__csr-btn:hover {
     background: rgb(27 40 34 / 8%);
+    border-color: rgb(27 40 34 / 24%);
     color: #1b2822;
   }
-  .mockkit-floating-rules__csr-btn--on {
-    background: rgb(26 155 127 / 14%);
-    color: #1a9b7f;
-  }
-  .mockkit-floating-rules__csr-btn--on:hover {
-    background: rgb(26 155 127 / 22%);
-    color: #1a9b7f;
-  }
-  .mockkit-floating-rules__csr-btn:hover {
-    border-color: rgb(27 40 34 / 24%);
-    color: rgb(27 40 34 / 75%);
-  }
+  /* Active state: solid green gradient. Kept on hover too — previously the
+     --on:hover rule omitted `background`, so it fell back to the weaker
+     22%-alpha green from the earlier duplicate, making the active state
+     nearly invisible while the cursor was over the button. */
   .mockkit-floating-rules__csr-btn--on {
     background: linear-gradient(135deg, #1a9b7f, rgb(26 155 127 / 85%));
     border-color: #1a9b7f;
@@ -287,8 +282,9 @@ injectedStyle(`
     box-shadow: 0 2px 8px rgb(26 155 127 / 30%);
   }
   .mockkit-floating-rules__csr-btn--on:hover {
-    color: #fff;
+    background: linear-gradient(135deg, #1a9b7f, rgb(26 155 127 / 85%));
     border-color: #1a9b7f;
+    color: #fff;
   }
   .mockkit-floating-rules__inspect-btn {
     flex-shrink: 0;
