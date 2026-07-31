@@ -255,7 +255,7 @@ injectedStyle(`
     flex-shrink: 0;
     padding: 3px 8px;
     /* 1px transparent base so border-color changes on hover/active render;
-       the old `border: none` made every border-color rule a no-op. */
+       the old 'border: none' made every border-color rule a no-op. */
     border: 1px solid transparent;
     border-radius: 7px;
     background: transparent;
@@ -271,19 +271,19 @@ injectedStyle(`
     border-color: rgb(27 40 34 / 24%);
     color: #1b2822;
   }
-  /* Active state: solid green gradient. Kept on hover too — previously the
-     --on:hover rule omitted `background`, so it fell back to the weaker
+  /* Active state: soft green tint. Kept on hover too — previously the
+     --on:hover rule omitted 'background', so it fell back to the weaker
      22%-alpha green from the earlier duplicate, making the active state
      nearly invisible while the cursor was over the button. */
   .mockkit-floating-rules__csr-btn--on {
-    background: linear-gradient(135deg, #1a9b7f, rgb(26 155 127 / 85%));
-    border-color: #1a9b7f;
-    color: #fff;
-    box-shadow: 0 2px 8px rgb(26 155 127 / 30%);
+    background: rgb(26 155 127 / 30%);
+    border-color: rgb(26 155 127 / 50%);
+    color: #1a9b7f;
+    box-shadow: 0 2px 8px rgb(26 155 127 / 20%);
   }
   .mockkit-floating-rules__csr-btn--on:hover {
-    background: linear-gradient(135deg, #1a9b7f, rgb(26 155 127 / 85%));
-    border-color: #1a9b7f;
+    background: rgb(26 155 127 / 40%);
+    border-color: rgb(26 155 127 / 60%);
     color: #fff;
   }
   .mockkit-floating-rules__inspect-btn {
@@ -308,17 +308,17 @@ injectedStyle(`
     width: 13px;
     height: 13px;
   }
-  /* Inspect active state: solid green while pick mode is on, mirroring the
-     measure button's red active state. Green matches the aim icon's theme so
+  /* Inspect active state: soft green tint while pick mode is on, mirroring the
+     measure button's red tint. Green matches the aim icon's theme so
      inspect-vs-measure stays distinguishable at a glance. */
   .mockkit-floating-rules__inspect-btn--on {
-    background: #1a9b7f;
-    color: #fff;
-    box-shadow: 0 2px 8px rgb(26 155 127 / 30%);
+    background: rgb(26 155 127 / 30%);
+    color: #1a9b7f;
+    box-shadow: inset 0 0 0 1px rgb(26 155 127 / 50%), 0 2px 8px rgb(26 155 127 / 20%);
   }
   .mockkit-floating-rules__inspect-btn--on:hover {
-    background: #1a9b7f;
-    color: #fff;
+    background: rgb(26 155 127 / 40%);
+    color: #1a9b7f;
   }
   .mockkit-floating-rules__collapse-btn {
     flex-shrink: 0;
@@ -782,16 +782,16 @@ injectedStyle(`
     background: rgb(27 40 34 / 8%);
     color: #1b2822;
   }
-  /* Reinspect active state: solid green while inspect pick mode is on, so the
+  /* Reinspect active state: soft green tint while inspect pick mode is on, so the
      user can tell from the DOM Inspector panel header that a pick is pending. */
   .mockkit-dom-inspector__reinspect--on {
-    background: #1a9b7f;
-    color: #fff;
-    box-shadow: 0 2px 8px rgb(26 155 127 / 30%);
+    background: rgb(26 155 127 / 30%);
+    color: #1a9b7f;
+    box-shadow: inset 0 0 0 1px rgb(26 155 127 / 50%), 0 2px 8px rgb(26 155 127 / 20%);
   }
   .mockkit-dom-inspector__reinspect--on:hover {
-    background: #1a9b7f;
-    color: #fff;
+    background: rgb(26 155 127 / 40%);
+    color: #1a9b7f;
   }
   .mockkit-dom-inspector__reinspect svg {
     width: 13px;
@@ -824,16 +824,17 @@ injectedStyle(`
     height: 13px;
   }
   .mockkit-dom-inspector__measure-btn--on {
-    background: #ff4d4f;
-    color: #fff;
+    background: rgb(255 77 79 / 30%);
+    color: #ff4d4f;
+    box-shadow: inset 0 0 0 1px rgb(255 77 79 / 50%), 0 2px 8px rgb(255 77 79 / 20%);
     animation: mockkit-dom-inspector-measure-pulse 1.6s ease-in-out infinite;
   }
   .mockkit-dom-inspector__measure-btn--on:hover {
-    background: #ff4d4f;
-    color: #fff;
+    background: rgb(255 77 79 / 40%);
+    color: #ff4d4f;
   }
   @keyframes mockkit-dom-inspector-measure-pulse {
-    0%, 100% { box-shadow: 0 0 0 0 rgb(255 77 79 / 45%); }
+    0%, 100% { box-shadow: 0 0 0 0 rgb(255 77 79 / 35%); }
     50% { box-shadow: 0 0 0 5px rgb(255 77 79 / 0%); }
   }
   .mockkit-dom-inspector__close:hover {
@@ -2269,6 +2270,15 @@ function showDomInspectorPanel(node, hint) {
 
   // Enable drag on the header (position kept in memory only).
   bindDomInspectorDrag(panel, header);
+
+  // Sync entry-button active indicators AFTER the panel is in the DOM. The
+  // reinspect/measure buttons are created here, so the sync call inside
+  // startDomInspector (which runs before this panel exists) never reached
+  // them — leaving them without their --on state. Measure mode also rebuilds
+  // this panel on every anchor click, which previously wiped the active
+  // class. Re-syncing here keeps inspect (green) and measure (red pulse)
+  // indicators correct across every rebuild.
+  syncInspectorEntryButtons();
 }
 
 function bindDomInspectorDrag(panel, handle) {

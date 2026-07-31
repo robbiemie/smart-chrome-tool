@@ -143,7 +143,12 @@ panel header (the top-left draggable panel created by `showDomInspectorPanel`
 solid active state while its mode is on, synced across ALL entry points by
 `syncInspectorEntryButtons()` (queries by class, so it survives the DOM
 Inspector panel being destroyed/rebuilt — the old single-ref `measureBtn`
-approach lost sync on rebuild):
+approach lost sync on rebuild). It is called from `startDomInspector`,
+`stopDomInspector`, AND at the end of `showDomInspectorPanel` — the last call
+is essential because the reinspect/measure buttons are created inside
+`showDomInspectorPanel`, so syncing only in `startDomInspector` (which runs
+before the panel exists) left them without their `--on` state, and measure
+mode's per-click panel rebuild kept wiping it:
 - **Inspect** (green aim icon, 3 entry points: floating-rules panel aim, DOM
   Inspector panel reinspect, iframe OperationsRail): solid green background +
   tooltip switches to "Inspecting — click a node, Esc to cancel". One-shot —
