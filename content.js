@@ -312,6 +312,18 @@ injectedStyle(`
     width: 13px;
     height: 13px;
   }
+  /* Inspect active state: solid green while pick mode is on, mirroring the
+     measure button's red active state. Green matches the aim icon's theme so
+     inspect-vs-measure stays distinguishable at a glance. */
+  .mockkit-floating-rules__inspect-btn--on {
+    background: #1a9b7f;
+    color: #fff;
+    box-shadow: 0 2px 8px rgb(26 155 127 / 30%);
+  }
+  .mockkit-floating-rules__inspect-btn--on:hover {
+    background: #1a9b7f;
+    color: #fff;
+  }
   .mockkit-floating-rules__collapse-btn {
     flex-shrink: 0;
     width: 24px;
@@ -593,6 +605,15 @@ injectedStyle(`
     border-radius: 3px;
     display: none;
   }
+  /* Measure mode overrides the hover-overlay color to orange so the hovered
+     element B is visually distinct from: the green inspect-mode hover, the
+     blue anchor A, and the red measurement guides. Toggled by
+     start/stopDomInspector based on the active mode. */
+  .mockkit-dom-inspector-overlay--measure {
+    border-color: #fa8c16;
+    background: rgb(250 140 22 / 12%);
+    box-shadow: 0 0 0 1px rgb(255 255 255 / 80%), 0 4px 16px rgb(250 140 22 / 30%);
+  }
   /* Anchor overlay: persistent blue highlight marking the locked baseline
      element A. Visually distinct from the green hover overlay so the user can
      tell "what I picked as reference" from "what I'm hovering". */
@@ -623,20 +644,12 @@ injectedStyle(`
     white-space: nowrap;
     display: none;
     box-shadow: 0 2px 8px rgb(26 155 127 / 40%);
-  }
-
-  /* Figma-style measurement guides: 1px red lines + pixel labels drawn from
-     the hovered node to its nearest sibling (or viewport) edge on each side.
-     Lives in its own pointer-events:none container so it never blocks clicks. */
-  .mockkit-dom-inspector-measurements {
-    position: fixed;
-    z-index: 2147483645;
-    top: 0;
-    left: 0;
-    width: 0;
-    height: 0;
-    pointer-events: none;
     display: none;
+  }
+  /* Measure-mode label color matches the orange hover overlay. */
+  .mockkit-dom-inspector-overlay__label--measure {
+    background: #fa8c16;
+    box-shadow: 0 2px 8px rgb(250 140 22 / 40%);
   }
   .mockkit-dom-inspector-measurements__line {
     position: fixed;
@@ -772,6 +785,17 @@ injectedStyle(`
   .mockkit-dom-inspector__reinspect:hover {
     background: rgb(27 40 34 / 8%);
     color: #1b2822;
+  }
+  /* Reinspect active state: solid green while inspect pick mode is on, so the
+     user can tell from the DOM Inspector panel header that a pick is pending. */
+  .mockkit-dom-inspector__reinspect--on {
+    background: #1a9b7f;
+    color: #fff;
+    box-shadow: 0 2px 8px rgb(26 155 127 / 30%);
+  }
+  .mockkit-dom-inspector__reinspect--on:hover {
+    background: #1a9b7f;
+    color: #fff;
   }
   .mockkit-dom-inspector__reinspect svg {
     width: 13px;
@@ -1179,9 +1203,6 @@ let domInspectorState = {
   // 'inspect' = pick-then-show-panel (the original flow); 'measure' =
   // anchor+hover distance measurement (no panel). Decides click behavior.
   mode: 'inspect',
-  // Reference to the floating measure button so we can sync its active
-  // (pulsing red) state when measure mode starts/stops.
-  measureBtn: null,
   overlay: null,
   overlayLabel: null,
   measurements: null,
@@ -1413,13 +1434,20 @@ function startDomInspector(opts) {
   domInspectorState.mode = opts?.mode === 'measure' ? 'measure' : 'inspect';
   createDomInspectorOverlay();
 
-  // Sync the floating measure button's active (pulsing red) state so the
-  // user can tell at a glance whether measure mode is on.
-  if (domInspectorState.measureBtn) {
-    const on = domInspectorState.mode === 'measure';
-    domInspectorState.measureBtn.classList.toggle('mockkit-dom-inspector__measure-btn--on', on);
-    domInspectorState.measureBtn.title = on ? '测距已开启，点击关闭' : 'Measure distance between two elements';
+  // Hover-overlay color is mode-aware so the user can tell inspect vs measure
+  // apart at a glance: green border for inspect, orange for measure (distinct
+  // from the blue anchor A and red measurement guides used in measure mode).
+  const isMeasureMode = domInspectorState.mode === 'measure';
+  if (domInspectorState.overlay) {
+    domInspectorState.overlay.classList.toggle('mockkit-dom-inspector-overlay--measure', isMeasureMode);
   }
+  if (domInspectorState.overlayLabel) {
+    domInspectorState.overlayLabel.classList.toggle('mockkit-dom-inspector-overlay__label--measure', isMeasureMode);
+  }
+
+  // Sync every entry button's active indicator (inspect = green, measure =
+  // red). Done via class query, not a held ref, so it survives panel rebuilds.
+  syncInspectorEntryButtons();
 
   // Position the persistent anchor (blue) overlay over the anchored element A.
   // Called whenever the anchor is set or replaced so the blue box tracks A.
@@ -1589,16 +1617,39 @@ function stopDomInspector() {
   // Clear the anchor/locked state so the next inspect session starts fresh.
   domInspectorState.anchor = null;
   domInspectorState.lockedTarget = null;
-  // Restore the measure button to its idle (non-pulsing) state.
-  if (domInspectorState.measureBtn) {
-    domInspectorState.measureBtn.classList.remove('mockkit-dom-inspector__measure-btn--on');
-    domInspectorState.measureBtn.title = 'Measure distance between two elements';
-  }
   domInspectorState.mode = 'inspect';
+  // Clear all entry-button active indicators. Uses class query so it works
+  // even if the DOM Inspector panel was rebuilt since the last start.
+  syncInspectorEntryButtons();
   if (domInspectorState.onMove) document.removeEventListener('mousemove', domInspectorState.onMove, true);
   if (domInspectorState.onClick) document.removeEventListener('click', domInspectorState.onClick, true);
   if (domInspectorState.onKey) document.removeEventListener('keydown', domInspectorState.onKey, true);
   destroyDomInspectorOverlay();
+}
+
+// Sync every inspector entry button's active indicator to the current
+// domInspectorState. Queries by class (not by a held reference) so it stays
+// correct even after the DOM Inspector panel is destroyed/rebuilt — the old
+// single-ref approach lost sync when showDomInspectorPanel re-created the
+// header buttons. Inspect = green solid, measure = red solid + pulse.
+function syncInspectorEntryButtons() {
+  const inspectOn = domInspectorState.active && domInspectorState.mode === 'inspect';
+  const measureOn = domInspectorState.active && domInspectorState.mode === 'measure';
+  document.querySelectorAll('.mockkit-floating-rules__inspect-btn')
+    .forEach((b) => {
+      b.classList.toggle('mockkit-floating-rules__inspect-btn--on', inspectOn);
+      b.title = inspectOn ? 'Inspecting — click a node, Esc to cancel' : 'Inspect a DOM node';
+    });
+  document.querySelectorAll('.mockkit-dom-inspector__reinspect')
+    .forEach((b) => {
+      b.classList.toggle('mockkit-dom-inspector__reinspect--on', inspectOn);
+      b.title = inspectOn ? 'Inspecting — click a node, Esc to cancel' : 'Inspect another element';
+    });
+  document.querySelectorAll('.mockkit-dom-inspector__measure-btn')
+    .forEach((b) => {
+      b.classList.toggle('mockkit-dom-inspector__measure-btn--on', measureOn);
+      b.title = measureOn ? '测距已开启，点击关闭' : 'Measure distance between two elements';
+    });
 }
 
 function describeDomNode(node) {
@@ -2046,6 +2097,11 @@ function showDomInspectorPanel(node, hint) {
   reinspectBtn.appendChild(reIcon);
   reinspectBtn.addEventListener('click', (e) => {
     e.stopPropagation();
+    // If a different mode (measure) is active, stop it first so inspect can
+    // start — startDomInspector otherwise no-ops while active.
+    if (domInspectorState.active && domInspectorState.mode !== 'inspect') {
+      stopDomInspector();
+    }
     startDomInspector();
   });
 
@@ -2076,11 +2132,10 @@ function showDomInspectorPanel(node, hint) {
   header.appendChild(reinspectBtn);
   // Measure toggle button — lives on the DOM Inspector panel header (NOT the
   // mock floating rules panel). Red ruler icon, distinct from the green
-  // reinspect aim icon. Reference is stashed on domInspectorState so
-  // start/stopDomInspector can sync its pulsing active state.
+  // reinspect aim icon. No ref is stashed: syncInspectorEntryButtons() finds
+  // it by class, which survives this panel being destroyed/rebuilt.
   const measureBtn = createDomInspectorMeasureButton();
   header.appendChild(measureBtn);
-  domInspectorState.measureBtn = measureBtn;
   header.appendChild(minBtn);
   header.appendChild(closeBtn);
   panel.appendChild(header);
@@ -2265,6 +2320,10 @@ function pickDomNode(node) {
 window.addEventListener('message', (event) => {
   const data = event.data;
   if (!data || data.type !== 'MOCKKIT_INSPECT_DOM') return;
+  // If measure is active, stop it first so inspect can start.
+  if (domInspectorState.active && domInspectorState.mode !== 'inspect') {
+    stopDomInspector();
+  }
   startDomInspector();
 });
 injectedCss('icons/iconfont/iconfont.css');
@@ -2702,6 +2761,11 @@ function createFloatingInspectButton() {
 
   btn.addEventListener('click', (event) => {
     event.stopPropagation();
+    // If a different mode (measure) is active, stop it first so inspect can
+    // start — startDomInspector otherwise no-ops while active.
+    if (domInspectorState.active && domInspectorState.mode !== 'inspect') {
+      stopDomInspector();
+    }
     startDomInspector();
   });
   return btn;

@@ -137,9 +137,30 @@ panel header (the top-left draggable panel created by `showDomInspectorPanel`
   when vertically overlapping, semi-transparent red gap rect with centered
   "h × v" label when offset on both axes.
 
-The measure button shows a three-level active indicator: solid red background,
-pulsing box-shadow animation, and a tooltip that switches to "测距已开启" when
-active — so the user always knows whether measure mode is on.
+  ![测距示例](../../assets/example5.png)
+
+**Active-state indicators (both modes):** every inspector entry button shows a
+solid active state while its mode is on, synced across ALL entry points by
+`syncInspectorEntryButtons()` (queries by class, so it survives the DOM
+Inspector panel being destroyed/rebuilt — the old single-ref `measureBtn`
+approach lost sync on rebuild):
+- **Inspect** (green aim icon, 3 entry points: floating-rules panel aim, DOM
+  Inspector panel reinspect, iframe OperationsRail): solid green background +
+  tooltip switches to "Inspecting — click a node, Esc to cancel". One-shot —
+  the indicator clears the moment a node is picked (inspect exits) or Esc is
+  pressed.
+- **Measure** (red ruler icon): solid red background + pulsing box-shadow
+  animation + tooltip switches to "测距已开启". Stays on until toggled off or
+  Esc. The two modes are mutually exclusive; starting one stops the other, and
+  every entry button stops a conflicting active mode first (cross-mode
+  stop-then-start) so switching is always possible from any entry.
+
+**Hover-overlay color is mode-aware** so the user can tell inspect vs measure
+apart from the selection border alone, not just the buttons:
+- Inspect mode → green border (`#1a9b7f`) + green label.
+- Measure mode → orange border (`#fa8c16`) + orange label for the hovered
+  element B, kept distinct from the blue anchor A and the red measurement
+  guides.
 
 **Panel distinction (do not confuse):**
 - **DOM Inspector panel** (`mockkit-dom-inspector*`, top-left, created by
@@ -150,10 +171,11 @@ active — so the user always knows whether measure mode is on.
   button but NO measure button.
 
 **Lives in:** `content.js` (`startDomInspector`/`stopDomInspector` with `mode`
-param, `createDomInspectorMeasureButton`, `computeAnchorMeasurement`,
-`drawMeasurements`, `updateAnchorOverlay`, `renderFrame`, `pickDomNode`,
-`showDomInspectorPanel`); state in `domInspectorState` (`mode`, `measureBtn`,
-`anchor`, `lockedTarget`, `anchorOverlay`, `overlay`, `measurements`).
+param, `syncInspectorEntryButtons`, `createDomInspectorMeasureButton`,
+`computeAnchorMeasurement`, `drawMeasurements`, `updateAnchorOverlay`,
+`renderFrame`, `pickDomNode`, `showDomInspectorPanel`); state in
+`domInspectorState` (`mode`, `anchor`, `lockedTarget`, `anchorOverlay`,
+`overlay`, `overlayLabel`, `measurements`).
 
 **Trigger:** DOM Inspector panel header buttons (aim icon → inspect, ruler
 icon → measure), or `MOCKKIT_INSPECT_DOM` message from iframe
