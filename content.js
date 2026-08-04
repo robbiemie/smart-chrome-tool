@@ -5218,7 +5218,13 @@ function createToolkitPanel() {
   rulesSwitch.className = 'mockkit-toolkit-panel__tool-switch';
   rulesSwitch.title = 'Show/hide the floating rules list';
   rulesSwitch.addEventListener('click', () => {
-    setToolkitRulesOpen(!toolkitPanelState.rulesOpen);
+    const open = !toolkitPanelState.rulesOpen;
+    setToolkitRulesOpen(open);
+    // Auto-minimize Toolkit when a sub-panel opens so the master panel gets
+    // out of the way once a sub-tool is on screen. Skipped on the restore
+    // path (setToolkitPanelVisible re-open) because that calls setToolkit*
+    // directly, not this click handler.
+    if (open) autoCollapseToolkitForSubPanel();
   });
   rulesRow.appendChild(rulesIcon);
   rulesRow.appendChild(rulesName);
@@ -5272,7 +5278,9 @@ function createToolkitPanel() {
   animSwitch.className = 'mockkit-toolkit-panel__tool-switch';
   animSwitch.title = 'Show/hide the animation control popup';
   animSwitch.addEventListener('click', () => {
-    setToolkitAnimationOpen(!toolkitPanelState.animationOpen);
+    const open = !toolkitPanelState.animationOpen;
+    setToolkitAnimationOpen(open);
+    if (open) autoCollapseToolkitForSubPanel();
   });
   animRow.appendChild(animIcon);
   animRow.appendChild(animName);
@@ -5297,7 +5305,9 @@ function createToolkitPanel() {
   snifferSwitch.className = 'mockkit-toolkit-panel__tool-switch';
   snifferSwitch.title = 'Show/hide the request sniffer panel';
   snifferSwitch.addEventListener('click', () => {
-    setToolkitSnifferOpen(!toolkitPanelState.snifferOpen);
+    const open = !toolkitPanelState.snifferOpen;
+    setToolkitSnifferOpen(open);
+    if (open) autoCollapseToolkitForSubPanel();
   });
   snifferRow.appendChild(snifferIcon);
   snifferRow.appendChild(snifferName);
@@ -5332,23 +5342,33 @@ function setToolkitPanelVisible(visible) {
   if (visible) {
     repositionToolkitPanel();
     watchWorkbenchForFloatingOverlays();
-    // Restore sub-tool open states from storage. Each sub-tool that was on
-    // when the user last closed Toolkit (or refreshed) re-opens automatically.
-    chrome.storage.local.get([SNIFFER_OPEN_KEY], (result) => {
-      if (result[SNIFFER_OPEN_KEY] === true && !toolkitPanelState.snifferOpen) {
+    // Restore each sub-tool's open state. The hide path preserves intent
+    // (the *Open flags + persisted storage keys) without destroying it, so
+    // re-opening Toolkit brings back whatever sub-panels were on. Guards
+    // check ACTUAL panel visibility (not the intent flags) so a forced-true
+    // flag from the hide path can't mask a still-hidden panel.
+    chrome.storage.local.get([FLOATING_ENABLED_KEY, SNIFFER_OPEN_KEY], (result) => {
+      if (result[FLOATING_ENABLED_KEY] === true && !ajaxToolsRuntimeState.floatingRulesEnabled) {
+        setToolkitRulesOpen(true);
+      }
+      if (result[SNIFFER_OPEN_KEY] === true && !snifferState.visible) {
         setToolkitSnifferOpen(true);
       }
     });
+    // Animation has no persisted state — restore from the in-memory intent flag.
+    if (toolkitPanelState.animationOpen && animationControlState.panelEl?.style.display === 'none') {
+      setToolkitAnimationOpen(true);
+    }
   } else {
     // Hiding the Toolkit panel hides ALL sub-panels — Toolkit is their only
-    // entry point. Sub-tool open states are persisted so re-opening Toolkit
-    // restores them.
+    // entry point. Sub-tool open INTENT is preserved (not reset) so re-opening
+    // Toolkit restores them. We do NOT write storage=false for rules/sniffer
+    // because that would destroy the persisted intent the show path reads back.
     if (toolkitPanelState.rulesOpen) {
-      toolkitPanelState.rulesOpen = false;
+      // Hide the rules panel without destroying intent: flip the runtime flag
+      // off (applyFloatingPanelState reads it) but keep rulesOpen=true and do
+      // NOT persist FLOATING_ENABLED_KEY=false.
       ajaxToolsRuntimeState.floatingRulesEnabled = false;
-      if (chrome.storage?.local) {
-        chrome.storage.local.set({ [FLOATING_ENABLED_KEY]: false });
-      }
       applyFloatingPanelState();
     }
     if (toolkitPanelState.snifferOpen) {
@@ -5398,6 +5418,17 @@ function setToolkitPanelCollapsed(collapsed) {
   // pre-collapse rect).
   ajaxToolsRuntimeState.toolkitPanelDragged = false;
   panel.classList.toggle('mockkit-toolkit-panel--collapsed', collapsed);
+}
+
+// Auto-minimize the Toolkit master panel when a sub-panel (Rules / Animation /
+// Sniffer) opens, so the expanded Toolkit no longer dominates the viewport
+// once a sub-tool is on screen. No-op if Toolkit is already collapsed or not
+// visible. Only called from the sub-tool switch click handlers (user action),
+// never from the restore path — so re-opening Toolkit leaves it expanded.
+function autoCollapseToolkitForSubPanel() {
+  if (!toolkitPanelState.visible) return;
+  if (toolkitPanelState.collapsed) return;
+  setToolkitPanelCollapsed(true);
 }
 
 // Toggle the rules sub-panel. Reuses the existing floating-rules panel DOM:
@@ -6012,10 +6043,14 @@ function mountPanelContainer() {
     mountTarget.appendChild(toolkitPanel);
   }
   // Hydrate Toolkit visibility from storage so the panel re-appears after a
-  // page reload if the user left it on.
+  // page reload if the user left it on. Defaults to COLLAPSED on refresh so
+  // the expanded panel doesn't dominate the viewport on first paint — the
+  // user clicks the dot to expand. Sub-panels still restore to their prior
+  // open state (driven by the show path inside setToolkitPanelVisible).
   chrome.storage.local.get([TOOLKIT_VISIBLE_KEY], (result) => {
     if (result[TOOLKIT_VISIBLE_KEY] === true) {
       setToolkitPanelVisible(true);
+      setToolkitPanelCollapsed(true);
     }
   });
 
@@ -6098,7 +6133,9 @@ chrome.storage.onChanged.addListener(function (changes, namespace) {
       }, '*');
     }
     // Global interceptor switch: forward to the page script and mirror it
-    // locally so the floating rules panel can hide when interception pauses.
+    // locally. applyFloatingPanelState is called for consistency but the
+    // rules panel is intentionally independent of ajaxToolsSwitchOn (users
+    // can toggle rules while interception is paused) — see applyFloatingPanelState.
     if (key === 'ajaxToolsSwitchOn') {
       ajaxToolsRuntimeState.ajaxToolsSwitchOn = newValue !== false;
       applyFloatingPanelState();

@@ -472,6 +472,36 @@ page) restores every controlled animation to its cached original
 `{rate, playState}` via `restoreAnimations` AND lifts the rAF patch.
 finished/idle animations are never force-replayed on restore.
 
+**Sub-panel open intent is preserved across Toolkit hide/show:** when
+`setToolkitPanelVisible(false)` runs, it hides each open sub-panel's DOM but
+does NOT destroy the intent — `toolkitPanelState.*Open` flags stay true, and
+`FLOATING_ENABLED_KEY` / `SNIFFER_OPEN_KEY` are NOT overwritten to false.
+Re-opening Toolkit (`setToolkitPanelVisible(true)`) reads those flags +
+persisted keys back and restores each sub-panel that was on. The restore
+guards check ACTUAL panel visibility (`!floatingRulesEnabled`,
+`!snifferState.visible`, `animationControlState.panelEl?.style.display === 'none'`)
+rather than the intent flags, so a forced-true flag can't mask a still-hidden
+panel. Animation has no persisted key — it restores from the in-memory flag
+only, so it does not survive a page refresh (consistent with its session-only
+design).
+
+**Auto-minimize on sub-panel open:** when the user clicks a sub-tool switch
+(Rules / Animation / Sniffer) to ON, the Toolkit master panel auto-collapses
+to its dot form via `autoCollapseToolkitForSubPanel` so the expanded panel
+gets out of the way once a sub-tool is on screen. This is wired in the switch
+click handlers (not in `setToolkit*Open`), so the restore path
+(`setToolkitPanelVisible(true)` re-opening sub-panels) does NOT trigger
+auto-collapse — Toolkit stays expanded when re-opened so the user can see the
+switches. No-op if Toolkit is already collapsed or hidden.
+
+**Default to collapsed on refresh:** on page load, if
+`ajaxToolsToolkitPanelVisible` is true, the hydrate callback calls
+`setToolkitPanelVisible(true)` immediately followed by
+`setToolkitPanelCollapsed(true)`, so the panel re-appears as the collapsed
+dot rather than the expanded card. The user clicks the dot to expand.
+Sub-panels still restore to their prior open state (driven by the show path).
+This keeps the viewport clean on first paint after a refresh.
+
 **Limitations:** Speed control (playbackRate) applies only to WAAPI-reachable
 animations (CSS); JS/rAF-driven animation speed cannot be scrubbed. Pause covers
 both via WAAPI + rAF patch. setTimeout-based animation loops are not paused.
