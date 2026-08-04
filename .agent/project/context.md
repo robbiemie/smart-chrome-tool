@@ -34,10 +34,12 @@ and a different role. Data crosses the boundaries via `window.postMessage` and
 ### 2. Content script (`content.js`) — CONTENT-SCRIPT context (isolated world)
 
 - Runs at `document_start`, `all_frames: true`, on `<all_urls>`.
-- Owns: the floating rules panel (rendered as DOM, not React), the DOM
-  Inspector (full reimplementation, no DevTools API), the iframe workbench host
-  (mounts the React app), domain-whitelist gating, picture-in-picture / zoom /
-  fullscreen / theme controls for the panel.
+- Owns: the floating rules panel, the DOM Inspector, the iframe workbench host
+  (mounts the React app), the **Toolkit master panel** (consolidates Floating
+  Rules / DOM Inspect / Animation Control / Request Sniffer as sub-tools), the
+  **Request Sniffer panel** (live XHR/fetch capture list with Mock-to-rule), the
+  **Animation Control popup** (WAAPI + rAF patch), domain-whitelist gating,
+  picture-in-picture / zoom / fullscreen / theme controls for the panel.
 - Holds a runtime mirror of interceptor state on
   `window.__ajaxToolsRuntimeState__` (switch state, domain whitelist, target
   tab id).
@@ -66,7 +68,9 @@ and a different role. Data crosses the boundaries via `window.postMessage` and
   `<iframe>` by `content.js`.
 - Owns: the full operator UI — group/rule management, Monaco-based advanced
   editor (`ModifyDataModal`), import/export, page-headers modal, CSR toggle,
-  update modal, request sniffer list, operations rail.
+  update modal, operations rail (Global Controls + Toolkit switch). The Request
+  Sniffer UI has moved to content.js (Toolkit sub-tool); the iframe only
+  receives `MOCKKIT_MOCK_CAPTURE` to promote a capture into a rule.
 - Talks to: `content.js` via `window.parent.postMessage`, and to the service
   worker via `chrome.runtime.sendMessage` (the iframe runs in the extension
   origin so it has chrome API access).
@@ -75,15 +79,18 @@ and a different role. Data crosses the boundaries via `window.postMessage` and
 
 ```
 PAGE (pageScripts)  ──postMessage──▶  CONTENT (content.js)  ──runtime──▶  SW (service_worker.js)
-   XHR/fetch hook                        floating panel                     DNR rules / CSR / update
+   XHR/fetch hook                        floating rules panel               DNR rules / CSR / update
    rule hit dots                         DOM inspector                      badge
-   captured reqs                         iframe host                        reload
-        ▲                                    ▲   │
-        └──────────postMessage──────────────┘   │ postMessage to iframe
-                                                ▼
-                                         IFRAME (React workbench)
-                                             group/rule UI, Monaco editor,
-                                             modals, sniffer list
+   captured reqs ──────────────────┐     Toolkit master panel              reload
+        ▲                          │     Animation Control popup
+        │                          │     Request Sniffer panel
+        │                          │     iframe host
+        │                          ▼
+        │                     IFRAME (React workbench)
+        │                         group/rule UI, Monaco editor,
+        │                         modals, Toolkit switch
+        │                              ▲
+        └──── MOCKKIT_MOCK_CAPTURE ────┘  (sniffer Mock → promote to rule)
 ```
 
 Concrete message types (see `tech-detail.md` for the full table):

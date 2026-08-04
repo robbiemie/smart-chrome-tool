@@ -15,9 +15,9 @@ import { AjaxGroup, ModifyDataModalOpenProps } from './types/registry';
 import { useModuleCollapseState } from './hooks/useModuleCollapseState';
 import { logger } from './utils/logger';
 import { usePageRenderMode } from './hooks/usePageRenderMode';
-import { useFloatingRules } from './hooks/useFloatingRules';
+import { useToolkitPanel } from './hooks/useToolkitPanel';
 import { useDomainWhitelist } from './hooks/useDomainWhitelist';
-import { useRequestSniffer, CapturedRequest } from './hooks/useRequestSniffer';
+import { CapturedRequest } from './hooks/useRequestSniffer';
 
 const SELECTED_GROUP_INDEX_STORAGE_KEY = 'ajaxToolsSelectedGroupIndex';
 
@@ -90,9 +90,9 @@ function App() {
     toggle: toggleCsrMode,
   } = usePageRenderMode();
   const {
-    floatingRulesEnabled,
-    setFloatingRulesEnabled,
-  } = useFloatingRules();
+    toolkitEnabled,
+    setToolkitEnabled,
+  } = useToolkitPanel();
   const {
     domainWhitelist,
     currentHostname,
@@ -101,10 +101,6 @@ function App() {
   } = useDomainWhitelist();
 
   const { moduleCollapseState, updateModuleCollapseState, allModulesCollapsed, toggleCollapseAll } = useModuleCollapseState();
-
-  // Live-captured XHR/fetch traffic from the host page. Each entry can be
-  // promoted to a mock rule via onMockCapturedRequest below.
-  const { requests: capturedRequests, clearRequests: clearCapturedRequests } = useRequestSniffer();
 
   useEffect(() => {
     if (!chrome.storage || !chrome.runtime || isRegistry) return;
@@ -280,6 +276,21 @@ function App() {
     onMockCapture(selectedGroupIndex, capture);
   };
 
+  // The Request Sniffer panel now lives in content.js (Toolkit sub-tool).
+  // When the user clicks "Mock" on a captured row, content.js posts
+  // MOCKKIT_MOCK_CAPTURE here; we promote it to a rule in the selected group.
+  useEffect(() => {
+    const handleMessage = (event: MessageEvent) => {
+      const data = event.data;
+      if (!data || data.type !== 'MOCKKIT_MOCK_CAPTURE' || !data.payload) return;
+      handleMockCapturedRequest(data.payload as CapturedRequest);
+    };
+    window.addEventListener('message', handleMessage);
+    return () => window.removeEventListener('message', handleMessage);
+    // handleMockCapturedRequest closes over ajaxDataList/selectedGroupIndex;
+    // re-bind on every change so the listener sees fresh values.
+  });
+
   const handleGroupOpenChange = (groupIndex: number, open: boolean) => {
     const nextGroupIndex = onGroupOpenChange(groupIndex, open);
 
@@ -365,8 +376,6 @@ function App() {
             csrModeLoading={csrModeLoading}
             csrModeToggling={csrModeToggling}
             globalControlsCollapsed={moduleCollapseState.globalControls}
-            floatingRulesEnabled={floatingRulesEnabled}
-            onToggleFloatingRules={setFloatingRulesEnabled}
             domainWhitelist={domainWhitelist}
             currentHostname={currentHostname}
             onAddDomain={addDomain}
@@ -382,14 +391,11 @@ function App() {
             onGlobalControlsCollapseToggle={() => {
               updateModuleCollapseState('globalControls', !moduleCollapseState.globalControls);
             }}
-            capturedRequests={capturedRequests}
-            snifferCollapsed={moduleCollapseState.requestSniffer}
-            onToggleSnifferCollapse={() => {
-              updateModuleCollapseState('requestSniffer', !moduleCollapseState.requestSniffer);
-            }}
-            onClearCapturedRequests={clearCapturedRequests}
-            onMockCapturedRequest={handleMockCapturedRequest}
-            hasSelectedGroup={Boolean(selectedGroup)}
+            // Toolkit master panel visibility — switch in Global Controls.
+            // Content.js owns the panel; we just persist the desired state to
+            // storage and the content script's storage listener shows/hides it.
+            toolkitEnabled={toolkitEnabled}
+            onToggleToolkit={setToolkitEnabled}
           />
 
           <main className="workbench-main" style={{ opacity: ajaxToolsSwitchOn ? 1 : 0.65 }}>

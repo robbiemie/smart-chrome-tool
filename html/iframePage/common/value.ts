@@ -124,6 +124,19 @@ export const RESPONSE_EXAMPLES = [
   },
   {
     egType: 'javascript',
+    egTitle: 'e.g. javascript Object Literal',
+    egText: `// Plain JS object literal — no return needed, no quoted keys required.
+// Supports trailing commas, unquoted keys, and JS expressions.
+{
+  status: 200,
+  list: [1, 2, 3],
+  nested: { a: 1, b: 2, },
+  timestamp: Date.now(),
+}
+`
+  },
+  {
+    egType: 'javascript',
     egTitle: 'e.g. javascript Basic',
     egText: `const data = [];
 for (let i = 0; i < 10; i++) {

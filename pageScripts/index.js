@@ -10,6 +10,10 @@ const infoDev = (...args) => { if (isDevMode) console.info(...args); };
 const ajax_tools_space = {
   ajaxToolsSwitchOn: true,
   ajaxToolsSwitchOnNot200: true,
+  // Sniffer sub-tool flag — when true, XHR/fetch hooks are installed even
+  // if the Interceptor master switch is off, so live capture works
+  // independently of mock. modifyResponse still honors ajaxToolsSwitchOn.
+  snifferEnabled: false,
   ajaxDataList: [],
   domainWhitelist: ['*'],
   originalXHR: window.XMLHttpRequest,
@@ -49,18 +53,44 @@ const ajax_tools_space = {
     }
     return regexp;
   },
-  getOverrideText: (responseText, args, toJson= false) => {
+  getOverrideText: (responseText, args, toJson= false, language) => {
     let overrideText = responseText;
+    let isParsedFromJs = false;
+    // Path 1: valid JSON text (language === 'json' or JS that happens to be a
+    // JSON string). Use as-is — no transformation needed.
     try {
       JSON.parse(responseText);
     } catch (e) {
-      try {
-        const returnText = (new Function(responseText))(args);
-        if (returnText) {
-          overrideText = typeof returnText === 'object' ? JSON.stringify(returnText) : returnText;
+      // Path 2: JavaScript mode. Two sub-strategies, tried in order:
+      //   (a) Function body with a `return` statement — the historical contract
+      //       shown in RESPONSE_EXAMPLES (e.g. `return { status: 200 }`).
+      //   (b) A bare JS expression / object literal (e.g. `{a:1, b:[1,2,3]}` or
+      //       `[1,2,3]`). Previously this fell through and the raw text was
+      //       returned, which broke page-side JSON.parse. We now wrap it in
+      //       `return ( ... )` so object literals evaluate to a real object.
+      const isJs = language === 'javascript' || !language;
+      if (isJs) {
+        const trimmed = String(responseText || '').trim();
+        const hasReturn = /\breturn\b/.test(trimmed);
+        try {
+          let returnText;
+          if (hasReturn) {
+            // (a) Treat as a function body — args are available as arguments[0].
+            returnText = (new Function(responseText))(args);
+          } else if (trimmed) {
+            // (b) Treat as a bare JS expression. Wrap in `return ( ... )` so
+            // object literals `{a:1}` and array literals `[1,2,3]` evaluate to
+            // a value rather than being parsed as a block statement. args are
+            // still exposed as arguments[0] for consistency with (a).
+            returnText = (new Function('return (' + responseText + ')'))(args);
+          }
+          if (returnText !== undefined) {
+            overrideText = typeof returnText === 'object' ? JSON.stringify(returnText) : returnText;
+            isParsedFromJs = true;
+          }
+        } catch (e) {
+          console.error('【Executing your function reports an error】\n', e);
         }
-      } catch (e) {
-        console.error('【Executing your function reports an error】\n', e);
       }
     }
     if (toJson) {
@@ -134,6 +164,10 @@ const ajax_tools_space = {
   },
   myXHR: function () {
     const modifyResponse = () => {
+      // When the Interceptor master switch is off, skip response rewriting
+      // even if a rule matches — the hook is only installed to feed the
+      // Sniffer. This keeps capture independent of mock.
+      if (!ajax_tools_space.ajaxToolsSwitchOn) return;
       const [method, requestUrl] = this._openArgs;
       const queryStringParameters = ajax_tools_space.getRequestParams(requestUrl);
       const [requestPayload] = this._sendArgs;
@@ -148,7 +182,7 @@ const ajax_tools_space = {
           },
           originalResponse: this.responseText
         };
-        const overrideText = ajax_tools_space.getOverrideText(matchedInterface.responseText, funcArgs);
+        const overrideText = ajax_tools_space.getOverrideText(matchedInterface.responseText, funcArgs, false, matchedInterface.language);
         this.responseText = overrideText;
         this.response = overrideText;
         if (ajax_tools_space.ajaxToolsSwitchOnNot200 && this.status !== 200) {
@@ -357,7 +391,10 @@ const ajax_tools_space = {
     return ajax_tools_space.originalFetch(...args).then(async (response) => {
       let overrideText = undefined;
       let originalResponseText = '';
-      if (matchedInterface && matchedInterface.responseText) {
+      // Only rewrite the response when the Interceptor master switch is on.
+      // When off, the hook is installed solely to feed the Sniffer, so we
+      // skip override but still emit the capture below.
+      if (matchedInterface && matchedInterface.responseText && ajax_tools_space.ajaxToolsSwitchOn) {
         const queryStringParameters = ajax_tools_space.getRequestParams(requestUrl);
         originalResponseText = await getOriginalResponse(response.body);
         const funcArgs = {
@@ -368,7 +405,7 @@ const ajax_tools_space = {
           },
           originalResponse: originalResponseText
         };
-        overrideText = ajax_tools_space.getOverrideText(matchedInterface.responseText, funcArgs);
+        overrideText = ajax_tools_space.getOverrideText(matchedInterface.responseText, funcArgs, false, matchedInterface.language);
         // infoDev('ⓢ ►►►►►►►►►►►►►►►►►►►►►►►►►►►►►►►► ⓢ');
         console.groupCollapsed(`%cMatched Fetch Response modified：${matchedInterface.request}`, 'background-color: #108ee9; color: white; padding: 4px');
         infoDev(`%cOriginal Request Url：`, 'background-color: #ff8040; color: white;', response.url);
@@ -459,16 +496,54 @@ function currentHostWhitelisted() {
   return isHostnameWhitelisted(window.location.hostname, ajax_tools_space.domainWhitelist);
 }
 
-window.addEventListener("message", function (event) {
-  const data = event.data;
-  if (data.type === 'ajaxTools' && data.to === 'pageScript') {
-    // logDev('【pageScripts/index.js】', data);
-    ajax_tools_space[data.key] = data.value;
+// --- Animation pause: requestAnimationFrame neutralization ------------------
+// The Web Animations API (used by content.js) can pause CSS animations and
+// transitions, but it CANNOT reach animations driven by JS rAF loops
+// (canvas, WebGL, GSAP, React rAF loops, hand-rolled frame loops). To make
+// "pause all animations" actually freeze the page, we override
+// requestAnimationFrame in the PAGE context to a drop-only stub while paused.
+// Callbacks are dropped (not queued) so unpausing doesn't fire a burst of
+// stale frames. cancelAnimationFrame becomes a no-op on the fake IDs.
+const originalRequestAnimationFrame = window.requestAnimationFrame
+  ? window.requestAnimationFrame.bind(window)
+  : null;
+const originalCancelAnimationFrame = window.cancelAnimationFrame
+  ? window.cancelAnimationFrame.bind(window)
+  : null;
+let rafFakeIdCounter = 1;
+let rafPatched = false;
+
+function patchedRequestAnimationFrame() {
+  // Return a fake ID so callers can pass it to cancelAnimationFrame without
+  // throwing. The callback is intentionally never invoked.
+  return rafFakeIdCounter++;
+}
+function patchedCancelAnimationFrame() {
+  // No-op: there is nothing to cancel because we never scheduled anything.
+}
+
+function applyRafPatch(paused) {
+  if (paused && !rafPatched) {
+    window.requestAnimationFrame = patchedRequestAnimationFrame;
+    window.cancelAnimationFrame = patchedCancelAnimationFrame;
+    rafPatched = true;
+  } else if (!paused && rafPatched) {
+    if (originalRequestAnimationFrame) window.requestAnimationFrame = originalRequestAnimationFrame;
+    if (originalCancelAnimationFrame) window.cancelAnimationFrame = originalCancelAnimationFrame;
+    rafPatched = false;
   }
-  if (ajax_tools_space.ajaxToolsSwitchOn && currentHostWhitelisted()) {
+}
+
+// Install/restore XHR/fetch hooks based on the current Interceptor + Sniffer
+// state. Called on initial load AND on every state-change message so the
+// hooks track the live flags. When BOTH are off, restore the originals so the
+// page runs unhooked. modifyResponse honors ajaxToolsSwitchOn so mock is
+// skipped when only the sniffer is on.
+function syncHooks() {
+  if ((ajax_tools_space.ajaxToolsSwitchOn || ajax_tools_space.snifferEnabled) && currentHostWhitelisted()) {
     // https://github.com/PengChen96/ajax-tools/pull/14
     for (const k in ajax_tools_space.originalXHR) {
-      ajax_tools_space.myXHR[k] = ajax_tools_space.originalXHR[k]
+      ajax_tools_space.myXHR[k] = ajax_tools_space.originalXHR[k];
     }
     window.XMLHttpRequest = ajax_tools_space.myXHR;
     window.fetch = ajax_tools_space.myFetch;
@@ -476,5 +551,25 @@ window.addEventListener("message", function (event) {
     window.XMLHttpRequest = ajax_tools_space.originalXHR;
     window.fetch = ajax_tools_space.originalFetch;
   }
+}
 
+// Initial install on script load — defaults are ajaxToolsSwitchOn: true, so
+// hooks are active immediately, capturing XHRs the page fires at document_start
+// before content.js has a chance to relay stored state.
+syncHooks();
+
+window.addEventListener("message", function (event) {
+  const data = event.data;
+  if (data.type === 'ajaxTools' && data.to === 'pageScript') {
+    // logDev('【pageScripts/index.js】', data);
+    ajax_tools_space[data.key] = data.value;
+    // Animation pause toggle from content.js's Animation Control module.
+    // WAAPI handles CSS animations/transitions; the rAF patch below covers
+    // JS driven animation loops so pause truly freezes the whole page.
+    if (data.key === 'animationPaused') {
+      applyRafPatch(data.value === true);
+    }
+    // Re-evaluate hook installation on every state change.
+    syncHooks();
+  }
 }, false);

@@ -1,10 +1,8 @@
 import React, { useState } from 'react';
 import { Button, Input, Switch, Tag } from 'antd';
-import { PlusOutlined, SwapOutlined, SettingOutlined, CompressOutlined, ExpandOutlined, CloseOutlined, RadarChartOutlined, AimOutlined } from '@ant-design/icons';
+import { PlusOutlined, SwapOutlined, SettingOutlined, CompressOutlined, ExpandOutlined, CloseOutlined } from '@ant-design/icons';
 import { withErrorBoundary } from '../../common/withErrorBoundary';
 import ModuleSection from '../ModuleSection';
-import RequestSniffer from '../RequestSniffer';
-import { CapturedRequest } from '../../hooks/useRequestSniffer';
 
 interface OperationsRailProps {
   ajaxToolsSwitchOn: boolean;
@@ -12,8 +10,11 @@ interface OperationsRailProps {
   csrModeLoading: boolean;
   csrModeToggling: boolean;
   globalControlsCollapsed: boolean;
-  floatingRulesEnabled: boolean;
-  onToggleFloatingRules: (value: boolean) => void;
+  // Toolkit master panel visibility — driven by this switch in Global Controls.
+  // The Toolkit panel consolidates Floating Rules / DOM Inspect / Animation
+  // Control as sub-tools toggled inside it.
+  toolkitEnabled: boolean;
+  onToggleToolkit: (value: boolean) => void;
   domainWhitelist: string[];
   currentHostname: string;
   onAddDomain: (domain: string) => void;
@@ -25,13 +26,6 @@ interface OperationsRailProps {
   onToggleAjaxToolsSwitch: (value: boolean) => void;
   onToggleCsrMode: (value: boolean) => void;
   onGlobalControlsCollapseToggle: () => void;
-  // Request Sniffer
-  capturedRequests: CapturedRequest[];
-  snifferCollapsed: boolean;
-  onToggleSnifferCollapse: () => void;
-  onClearCapturedRequests: () => void;
-  onMockCapturedRequest: (capture: CapturedRequest) => void;
-  hasSelectedGroup: boolean;
 }
 
 const OperationsRail = ({
@@ -40,8 +34,8 @@ const OperationsRail = ({
   csrModeLoading,
   csrModeToggling,
   globalControlsCollapsed,
-  floatingRulesEnabled,
-  onToggleFloatingRules,
+  toolkitEnabled,
+  onToggleToolkit,
   domainWhitelist,
   currentHostname,
   onAddDomain,
@@ -53,12 +47,6 @@ const OperationsRail = ({
   onToggleAjaxToolsSwitch,
   onToggleCsrMode,
   onGlobalControlsCollapseToggle,
-  capturedRequests,
-  snifferCollapsed,
-  onToggleSnifferCollapse,
-  onClearCapturedRequests,
-  onMockCapturedRequest,
-  hasSelectedGroup,
 }: OperationsRailProps) => {
   const [domainInput, setDomainInput] = useState('');
 
@@ -112,22 +100,10 @@ const OperationsRail = ({
           </div>
           <div className="rail-switch-item">
             <Switch
-              checked={floatingRulesEnabled}
-              onChange={onToggleFloatingRules}
+              checked={toolkitEnabled}
+              onChange={onToggleToolkit}
             />
-            <strong>Floating Rules</strong>
-          </div>
-          <div className="rail-switch-item">
-            <Button
-              type="text"
-              size="small"
-              icon={<AimOutlined />}
-              onClick={() => {
-                window.parent?.postMessage({ type: 'MOCKKIT_INSPECT_DOM' }, '*');
-              }}
-              title="Inspect a DOM node and read its computed styles"
-            />
-            <strong>DOM Inspect</strong>
+            <strong>Toolkit</strong>
           </div>
         </div>
 
@@ -188,26 +164,6 @@ const OperationsRail = ({
             enterButton={<PlusOutlined />}
           />
         </div>
-      </ModuleSection>
-
-      {/* Request Sniffer: live-captured XHR/fetch traffic on the current
-          page. Each row can be promoted to a mock rule in the selected
-          group with one click. */}
-      <ModuleSection
-        title="Request Sniffer"
-        eyebrow="Live Capture"
-        description={`${capturedRequests.length} request(s) captured on this page. Click Mock to add a rule to the current group.`}
-        className="rail-panel"
-        collapsed={snifferCollapsed}
-        onToggleCollapse={onToggleSnifferCollapse}
-        extra={<RadarChartOutlined style={{ color: '#1a9b7f' }} />}
-      >
-        <RequestSniffer
-          requests={capturedRequests}
-          onClear={onClearCapturedRequests}
-          onMockRequest={onMockCapturedRequest}
-          disabled={!hasSelectedGroup}
-        />
       </ModuleSection>
     </aside>
   );

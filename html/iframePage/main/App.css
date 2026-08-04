@@ -252,6 +252,16 @@
   gap: 8px;
 }
 
+/* Left-aligned variant for plugin groups that only hold a couple of entries
+   (e.g. Toolkit). Switches to flex + flex-start so buttons pack at the left
+   instead of spreading edge-to-edge. */
+.rail-switch-list--start {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-start;
+  gap: 8px;
+}
+
 .rail-actions {
   display: flex;
   flex-wrap: wrap;
