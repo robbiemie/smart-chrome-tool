@@ -79,6 +79,16 @@ if (isCi && !ciTag) {
   console.error('--ci requires --tag <vX.Y.Z>');
   process.exit(1);
 }
+// JSON helpers. Defined before any top-level code that reads a JSON file —
+// the --ci validation block below runs eagerly at module load and would
+// otherwise hit a temporal dead zone (ReferenceError: Cannot access
+// 'readJsonFile' before initialization).
+const readJsonFile = (filePath) => JSON.parse(fs.readFileSync(filePath, 'utf8'));
+
+const writeJsonFile = (filePath, content) => {
+  fs.writeFileSync(filePath, `${JSON.stringify(content, null, 2)}\n`, 'utf8');
+};
+
 // CI mode validates that manifest.version matches the pushed tag, so the
 // release asset and the extension's self-reported version always agree.
 if (isCi) {
@@ -116,12 +126,6 @@ if (isBetaBuild && isCi) {
 }
 const notesIndex = argv.indexOf('--notes');
 const customNotes = notesIndex !== -1 ? argv[notesIndex + 1] : null;
-
-const readJsonFile = (filePath) => JSON.parse(fs.readFileSync(filePath, 'utf8'));
-
-const writeJsonFile = (filePath, content) => {
-  fs.writeFileSync(filePath, `${JSON.stringify(content, null, 2)}\n`, 'utf8');
-};
 
 const incrementPatchVersion = (version) => {
   const versionParts = version.split('.');
