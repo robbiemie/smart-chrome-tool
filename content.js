@@ -4479,7 +4479,10 @@ function createSnifferPanel() {
   closeBtn.className = 'mockkit-sniffer-panel__close';
   closeBtn.innerHTML = '<svg viewBox="0 0 16 16" fill="none"><path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>';
   closeBtn.title = 'Hide sniffer panel';
-  closeBtn.addEventListener('click', () => setSnifferPanelVisible(false));
+  // Use setToolkitSnifferOpen(false) instead of setSnifferPanelVisible(false)
+  // so the close button persists SNIFFER_OPEN_KEY=false to storage. Otherwise
+  // a page refresh reads the stale true value and re-opens the sniffer.
+  closeBtn.addEventListener('click', () => setToolkitSnifferOpen(false));
   const collapseBtn = document.createElement('button');
   collapseBtn.type = 'button';
   collapseBtn.className = 'mockkit-sniffer-panel__close';

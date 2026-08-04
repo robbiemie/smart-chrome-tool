@@ -12,6 +12,12 @@
  *           Combined: node build.js --publish --commit  -> bump, build, zip, release, commit, push (one-shot)
  * Retry:    node build.js --retry    -> re-publish the CURRENT version (no bump). Implies --force + --commit.
  *                                      Use when a previous --publish failed midway (stale tag, network error, etc).
+ * CI:       node build.js --ci --tag v0.0.x -> build + zip + attach to an ALREADY-PUSHED tag.
+ *                                      No bump, no commit, no tag creation. Used by GitHub Actions
+ *                                      on tag push events. Reads GITHUB_TOKEN from env.
+ * Cut:      node build.js --cut    -> bump + commit + tag + push, then exit. No build, no release.
+ *                                      The pushed tag triggers the CI workflow which builds &
+ *                                      publishes. One-shot local release command.
  *
  * Version model:
  *   - manifest.json is the single source of truth for the extension version.
@@ -59,16 +65,42 @@ const EXCLUDE_PATTERNS = [
 ];
 
 const argv = process.argv.slice(2);
+const isCi = argv.includes('--ci');
+const isCut = argv.includes('--cut');
+// --cut is the local one-shot release command and is mutually exclusive with
+// the other publish flows (they all build/release locally or assume a tag exists).
+if (isCut && (isCi || argv.includes('--publish') || argv.includes('--release') || argv.includes('--retry'))) {
+  console.error('--cut cannot be combined with --ci/--publish/--release/--retry.');
+  process.exit(1);
+}
+const tagIndex = argv.indexOf('--tag');
+const ciTag = isCi && tagIndex !== -1 ? argv[tagIndex + 1] : null;
+if (isCi && !ciTag) {
+  console.error('--ci requires --tag <vX.Y.Z>');
+  process.exit(1);
+}
+// CI mode validates that manifest.version matches the pushed tag, so the
+// release asset and the extension's self-reported version always agree.
+if (isCi) {
+  const manifestVersion = readJsonFile(manifestJsonPath).version;
+  const tagVersion = ciTag.replace(/^v/, '');
+  if (manifestVersion !== tagVersion) {
+    console.error(`Version mismatch: manifest.json is v${manifestVersion} but tag is ${ciTag}`);
+    process.exit(1);
+  }
+}
 const shouldRetry = argv.includes('--retry');
 // Retry: re-publish the current version without bumping. Used when a previous
 // --publish failed (e.g. gh auth glitch, network timeout). Implies --publish
 // behavior (tag + release), --force (delete stale tag/release), and --commit.
-const shouldPublish = shouldRetry || argv.includes('--publish') || argv.includes('--release');
+const shouldPublish = shouldRetry || isCi || argv.includes('--publish') || argv.includes('--release');
 // Version bumping is explicit: --bump or --publish. Plain builds keep the current version.
-// Retry does NOT bump — it reuses the current manifest version.
-const shouldBump = !shouldRetry && shouldPublish;
+// Retry and CI do NOT bump — they reuse the current manifest version.
+const shouldBump = !shouldRetry && !isCi && shouldPublish;
 const forcePublish = argv.includes('--force') || shouldRetry;
-const shouldCommit = argv.includes('--commit') || shouldRetry;
+// CI never commits back — the tag is already pushed and the workflow runs on a
+// detached HEAD at that tag.
+const shouldCommit = !isCi && (argv.includes('--commit') || shouldRetry);
 // Beta builds rename the extension to "MockKit Beta vX" and emit a
 // "-beta-" zip so they are visually distinct from production packages in
 // chrome://extensions and the Downloads folder. Forbidden with --publish
@@ -76,6 +108,10 @@ const shouldCommit = argv.includes('--commit') || shouldRetry;
 const isBetaBuild = argv.includes('--beta');
 if (isBetaBuild && shouldPublish) {
   console.error('--beta cannot be combined with --publish/--retry (a release must use the production name).');
+  process.exit(1);
+}
+if (isBetaBuild && isCi) {
+  console.error('--beta cannot be combined with --ci (releases must use the production name).');
   process.exit(1);
 }
 const notesIndex = argv.indexOf('--notes');
@@ -149,6 +185,13 @@ const bumpVersion = () => {
 };
 
 const runBuild = () => {
+  // --cut: local one-shot release. Bump + commit + tag + push, then exit. The
+  // pushed tag triggers release.yml to build & publish. No local build here.
+  if (isCut) {
+    cutRelease();
+    return;
+  }
+
   // Local-only builds leave a stale zip from the previous run that is no
   // longer needed once the workbench is rebuilt. Publishing needs a fresh zip
   // produced this run, so only sweep leftovers for non-publish flows.
@@ -348,6 +391,10 @@ const ensureGhAvailable = () => {
     process.exit(1);
   }
 
+  // CI mode authenticates via GITHUB_TOKEN (auto-injected by GitHub Actions).
+  // Skip the interactive gh auth status check, which fails in CI otherwise.
+  if (isCi) return;
+
   const authCheck = spawnSync('gh', ['auth', 'status'], { stdio: 'pipe', encoding: 'utf8' });
   if (authCheck.status !== 0 && !process.env.GH_TOKEN) {
     console.error('\nGitHub CLI is not authenticated.');
@@ -427,24 +474,31 @@ const publishToGitHub = (zipName) => {
   console.log('\n--- Publishing to GitHub Releases ---');
 
   ensureGhAvailable();
-  warnOnDirtyTree();
+  if (!isCi) warnOnDirtyTree();
 
   const version = readManifestVersion();
-  const tag = `v${version}`;
-  const hasLocal = tagExistsLocally(tag);
-  const hasRemote = tagExistsRemote(tag);
+  // CI mode: the tag was already pushed by the workflow trigger — use it
+  // directly and skip all tag existence/force/delete logic.
+  const tag = isCi ? ciTag : `v${version}`;
 
-  if (hasLocal || hasRemote) {
-    if (!forcePublish) {
-      console.error(`\nTag ${tag} already exists. Use --force to delete and recreate.`);
-      process.exit(1);
+  if (!isCi) {
+    const hasLocal = tagExistsLocally(tag);
+    const hasRemote = tagExistsRemote(tag);
+
+    if (hasLocal || hasRemote) {
+      if (!forcePublish) {
+        console.error(`\nTag ${tag} already exists. Use --force to delete and recreate.`);
+        process.exit(1);
+      }
+      console.log(`\n--force: removing existing tag ${tag} ...`);
+      deleteExistingTag(tag);
     }
-    console.log(`\n--force: removing existing tag ${tag} ...`);
-    deleteExistingTag(tag);
-  }
 
-  console.log(`\nCreating and pushing tag ${tag} ...`);
-  createAndPushTag(tag);
+    console.log(`\nCreating and pushing tag ${tag} ...`);
+    createAndPushTag(tag);
+  } else {
+    console.log(`\nCI mode: attaching to existing tag ${tag}`);
+  }
 
   console.log(`\nCreating GitHub release ${tag} with ${zipName} ...`);
   createRelease(tag, zipName, customNotes);
@@ -482,6 +536,84 @@ const commitAndPush = () => {
   }
 
   console.log(`\nCommitted and pushed: ${commitMsg}`);
+};
+
+// One-shot local release: bump version, commit, tag, and push. Does NOT build
+// or create a GitHub Release — the pushed tag triggers the release.yml workflow
+// which handles build + zip + attach to Release. This is the "cut a release"
+// command: the only thing the developer runs locally.
+//
+// Local uncommitted changes are NOT fatal — they get bundled into the same
+// release commit as the version bump. This is the whole point of the one-shot
+// flow: write code → run `--cut` → bump + commit + tag + push in one go. The
+// pre-commit file list is printed so the developer sees exactly what is being
+// shipped under the tag.
+const cutRelease = () => {
+  console.log('\n--- Cutting release (bump + commit + tag + push) ---');
+
+  // Surface any pre-existing working-tree changes so the developer knows they
+  // will land in the release commit alongside the version bump. Informational
+  // only — never aborts. .zip files are gitignored and skipped here.
+  const preStatus = runGit(['status', '--porcelain']);
+  const preDirty = preStatus.stdout.split('\n').filter((line) => line.trim() && !line.endsWith('.zip'));
+  if (preDirty.length > 0) {
+    console.log('\nBundling uncommitted changes into the release commit:');
+    preDirty.forEach((line) => console.log(`  ${line}`));
+  }
+
+  bumpVersion();
+
+  const version = readManifestVersion();
+  const tag = `v${version}`;
+
+  // Stage everything (manifest.json + package.json + package-lock.json + the
+  // .build-meta.json the bump step wrote, PLUS any pre-existing working-tree
+  // changes listed above — all go into one release commit).
+  runGit(['add', '-A'], { stdio: 'inherit' });
+
+  // Sanity: bump should always produce a diff. If not, manifest was unchanged.
+  const diffResult = runGit(['diff', '--cached', '--quiet']);
+  if (diffResult.status === 0) {
+    console.error('\nNothing to commit after bump — manifest version unchanged?');
+    process.exit(1);
+  }
+
+  // Print the full file list that will ship under the tag, so the developer
+  // can eyeball it before the push goes out.
+  const staged = runGit(['diff', '--cached', '--name-status']);
+  const stagedFiles = staged.stdout.split('\n').filter((line) => line.trim());
+  if (stagedFiles.length > 0) {
+    console.log('\nFiles in this release commit:');
+    stagedFiles.forEach((line) => console.log(`  ${line}`));
+  }
+
+  // Refuse to overwrite an existing tag — prevents shadowing a released version.
+  if (tagExistsLocally(tag) || tagExistsRemote(tag)) {
+    console.error(`\nTag ${tag} already exists. Bump manifest.json to a higher version first.`);
+    process.exit(1);
+  }
+
+  const commitResult = runGit(['commit', '-m', `chore: ${tag}`], { stdio: 'inherit' });
+  if (commitResult.status !== 0) {
+    throw new Error('git commit failed.');
+  }
+
+  const tagResult = runGit(['tag', '-a', tag, '-m', `Release ${tag}`], { stdio: 'inherit' });
+  if (tagResult.status !== 0) {
+    throw new Error(`Failed to create tag ${tag}.`);
+  }
+
+  // --follow-tags pushes the branch AND any annotated tags reachable from it,
+  // so the commit and its tag land on origin in one shot, triggering the
+  // release.yml workflow.
+  const pushResult = runGit(['push', 'origin', 'HEAD', '--follow-tags'], { stdio: 'inherit' });
+  if (pushResult.status !== 0) {
+    throw new Error('git push failed.');
+  }
+
+  console.log(`\nRelease ${tag} cut. CI will build and publish.`);
+  console.log(`  Actions:  https://github.com/robbiemie/smart-chrome-tool/actions`);
+  console.log(`  Release:  https://github.com/robbiemie/smart-chrome-tool/releases/tag/${tag}`);
 };
 
 runBuild();

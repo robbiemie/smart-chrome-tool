@@ -1,0 +1,43 @@
+name: Release
+
+# Triggered when a version tag (v0.0.x) is pushed. The tag carries the version,
+# and manifest.json in that commit must already hold the matching version —
+# build.js --ci validates this and fails the job on mismatch.
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write  # required to create a Release and upload assets
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+          cache: 'npm'
+          cache-dependency-path: html/iframePage/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+        working-directory: html/iframePage
+
+      - name: Build, zip, and attach to Release
+        run: node build.js --ci --tag ${{ github.ref_name }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload zip as workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: smart-chrome-tool-${{ github.ref_name }}
+          path: smart-chrome-tool-*.zip
+          if-no-files-found: error
+          retention-days: 30
