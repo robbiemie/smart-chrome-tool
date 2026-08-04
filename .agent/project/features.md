@@ -110,9 +110,31 @@ opening the full workbench.
 **Lives in:**
 - `content.js` (`createFloatingRulesPanel`, `renderFloatingRules`,
   `refreshFloatingHitDots`, `bindFloatingPanelDrag`, `createFloatingCsrButton`,
-  `createFloatingInspectButton`, `applyFloatingPanelState`)
+  `createFloatingInspectButton`, `applyFloatingPanelState`,
+  `repositionFloatingRulesPanel`)
 - Storage: `ajaxToolsFloatingRulesEnabled`, `ajaxToolsFloatingRulesCollapsed`
 - Toggle: `html/iframePage/main/hooks/useFloatingRules.ts`
+
+**Drag (expanded + collapsed):** `bindFloatingPanelDrag` binds drag to BOTH
+the header (expanded state) and the `__mock` widget (collapsed state), so the
+panel is draggable in either form. Drag position is in-memory only (resets to
+the default bottom-right anchor on refresh).
+
+**Positioning (independent):** the rules panel's position is fully
+independent of every other floating overlay (Toolkit, Sniffer, Animation,
+workbench). It anchors to its CSS default `right:24px; bottom:24px` and only
+moves when the user drags it (`floatingPanelDragged` flag). It no longer
+stacks above / follows the Toolkit master panel. To win the shared
+bottom-right anchor against Toolkit/Sniffer, the panel is appended LAST in
+`mountPanelContainer` so at the shared `z-index: 2147483647` it stacks on
+top. `repositionFloatingRulesPanel` is now a no-op hook (kept so callers
+don't special-case the panel).
+
+**Independence from interceptor switch:** the panel stays visible even when
+the global `ajaxToolsSwitchOn` interceptor switch is off — users can toggle
+rules while interception is paused (rules apply once interception resumes).
+`applyFloatingPanelState` no longer hides the panel based on
+`ajaxToolsSwitchOn`.
 
 ---
 
@@ -167,6 +189,19 @@ apart from the selection border alone, not just the buttons:
   element B, kept distinct from the blue anchor A and the red measurement
   guides.
 
+**Margin highlight on inspect:** while inspecting (hovering), a dashed blue
+box (`#3b82f6`) encloses the element's margin box on the page so margins are
+visible at a glance — not just in the Box Model diagram. Hidden when all four
+margins are zero and in measure mode. Created/destroyed with the inspect
+overlay in `createDomInspectorOverlay`/`destroyDomInspectorOverlay`, updated
+per-frame in `renderFrame`; CSS class `mockkit-dom-inspector-margin-overlay`.
+
+After a node is picked (click), a PERSISTENT margin overlay
+(`mockkit-dom-inspector-margin-overlay--picked`) stays on the page until the
+DOM Inspector panel closes — created in `showDomInspectorPanel` via
+`showPickedMarginOverlay(node)`, cleared on panel close or re-pick. It tracks
+the node on scroll/resize via `repositionPickedMarginOverlay` (rAF-throttled).
+
 **Panel distinction (do not confuse):**
 - **DOM Inspector panel** (`mockkit-dom-inspector*`, top-left, created by
   `showDomInspectorPanel`): shows node details / hints; hosts BOTH the inspect
@@ -210,18 +245,47 @@ classes `mockkit-dom-inspector__mark-*`.
 
 ---
 
-## 9. Request Sniffer (live capture)
+## 9. Request Sniffer (live capture) — Toolkit sub-tool
 
 **Summary:** Capture live XHR/fetch traffic on the page and list method/URL/
 status/response; each row can be promoted to a mock rule in the selected group
-with one click. Static assets filtered out.
+with one click. Static assets filtered out. Now lives as a Toolkit sub-tool:
+a draggable floating panel on the host page (content.js DOM), toggled by the
+"Request Sniffer" switch inside the Toolkit master panel. **Decoupled from the
+Interceptor master switch** — the sniffer installs XHR/fetch hooks via a
+separate `snifferEnabled` flag so live capture works even when no mocking is
+active; `modifyResponse` honors `ajaxToolsSwitchOn` so mock is skipped when
+only the sniffer is on.
 
 **Lives in:**
 - Emission: `pageScripts/index.js` (`emitCapturedRequest`)
-- Relay: `content.js` → iframe
-- State/UI: `html/iframePage/main/hooks/useRequestSniffer.ts`,
-  `components/RequestSniffer/`, `components/OperationsRail/`
-- Message: `AJAX_TOOLS_CAPTURED_REQUEST`
+- Hook install gate: `pageScripts/index.js` —
+  `if ((ajaxToolsSwitchOn || snifferEnabled) && currentHostWhitelisted())`
+- Capture + UI: `content.js` (`createSnifferPanel`, `pushSnifferCapture`,
+  `renderSnifferList`, `setSnifferPanelVisible`, `setToolkitSnifferOpen`,
+  `repositionSnifferPanel`, `bindSnifferPanelDrag`)
+- State: `snifferState` (`requests` ring buffer max 100, `keyword`, `visible`)
+- Persistence: `ajaxToolsSnifferPanelOpen` storage key (restored on reload when
+  Toolkit is on); `ajaxToolsToolkitPanelVisible` gates the Toolkit master panel
+- Mock promotion: sniffer "Mock" button → `postMessage MOCKKIT_MOCK_CAPTURE`
+  to iframe → `App.tsx` listener → `onMockCapture(selectedGroupIndex, capture)`
+- Messages: `AJAX_TOOLS_REQUEST_CAPTURED` (page → content, feeds sniffer),
+  `MOCKKIT_MOCK_CAPTURE` (content → iframe, promote to rule),
+  `ajaxTools snifferEnabled` (content → page, install hooks for capture-only)
+
+**Removed from React workbench:** the old `useRequestSniffer` hook +
+`components/RequestSniffer/` + OperationsRail ModuleSection are no longer used
+for the sniffer UI (the hook is kept for the `CapturedRequest` type only).
+
+**Intercept toggle in panel:** the sniffer panel hosts an "拦截请求" switch
+that toggles the global `ajaxToolsSwitchOn` interceptor master switch in-place
+(writes `chrome.storage.local.ajaxToolsSwitchOn` AND postMessages directly to
+the page script for immediate effect — does not rely solely on
+`storage.onChanged`, which may not fire when the value is unchanged). The
+`storage.onChanged` listener relays to the page script + floating panel, and
+`syncSnifferInterceptSwitch` keeps the switch UI in sync (called on panel
+build, on storage changes, and on init from `storage.local.get`). CSS class
+`mockkit-sniffer-panel__intercept*`.
 
 ---
 
@@ -298,6 +362,110 @@ retry button.
 `about:`, or `view-source:` pages — Chrome blocks content-script injection on
 those schemes regardless of entry point. The panel detects this and shows a
 "blocked" status.
+
+---
+
+## 14. Toolkit Panel & Animation Control
+
+**Summary:** A single draggable bottom-right **Toolkit** master panel
+consolidates the auxiliary debug tools — Floating Rules, DOM Inspect, Animation
+Control, and Request Sniffer — under one floating entry, keeping the mock layer
+as the workbench's primary focus. The Toolkit panel is the primary floating
+overlay; each sub-tool is toggled from a row inside it:
+- **Floating Rules** (switch): shows/hides the rules list sub-panel (reuses the
+  existing `mockkit-floating-rules` panel + `renderFloatingRules` logic; the
+  switch writes the same `ajaxToolsFloatingRulesEnabled` storage key so the
+  workbench stays in sync).
+- **DOM Inspect** (button): one-shot — triggers pick mode (`startDomInspector`).
+- **Animation Control** (switch): shows/hides the top-right animation popup.
+- **Request Sniffer** (switch): shows/hides the live-capture panel (see §9).
+
+Animation Control itself takes over every page animation — pause/resume and
+scrub playback rate (0.5× / 1× / 2× / 4×) — so keyframes can be inspected at a
+controlled pace. Pause uses TWO mechanisms so it truly freezes the whole page:
+the Web Animations API (`document.getAnimations()` + `Animation.pause()`) for
+CSS animations/transitions/`element.animate()`, PLUS a page-context override
+of `requestAnimationFrame` (drop-only stub) for JS-driven animation loops
+(canvas / WebGL / GSAP / React rAF loops) that WAAPI cannot reach. Session-only
+state (never persisted) so a forgotten toggle cannot freeze animations on the
+next visit.
+
+**Lives in:**
+- Toolkit master panel: `content.js` (`createToolkitPanel`,
+  `setToolkitPanelVisible`, `setToolkitRulesOpen`, `setToolkitAnimationOpen`,
+  `syncToolkitPanelUi`, `repositionToolkitPanel`, `bindToolkitPanelDrag`)
+- State: `toolkitPanelState` (`visible`, `rulesOpen`, `animationOpen`)
+- Animation popup UI + WAAPI control: `content.js`
+  (`createAnimationControlPanel`, `applyAnimationControl`, `restoreAnimations`,
+  `setAnimationEnabled`/`setAnimationPaused`/`cycleAnimationSpeed`,
+  `syncAnimationPanelUi`, `onAnimationControlKeydown`)
+- Animation state: `animationControlState` (`enabled`, `paused`, `speedIndex`,
+  `originalStates` WeakMap, `pollTimer`, `styleObserver`)
+- rAF neutralization (page context): `pageScripts/index.js`
+  (`applyRafPatch`, `patchedRequestAnimationFrame`, `patchedCancelAnimationFrame`)
+- Relay: `content.js` `setAnimationPaused`/`setAnimationEnabled` →
+  `postMessage({type:'ajaxTools', to:'pageScript', key:'animationPaused', value})`
+  → `pageScripts/index.js` message listener → `applyRafPatch`
+- Styles: dedicated `<style>` blocks injected by `injectToolkitStyle` +
+  `injectAnimationStyle` (NOT the shared `injectedStyle` helper, which dedupes)
+- Rail entry: `html/iframePage/main/components/OperationsRail/index.tsx`
+  ("Toolkit" ModuleSection → "Open Toolkit" button)
+- Collapse state: `domDebug` key in `useModuleCollapseState.ts`
+- Messages: `MOCKKIT_TOGGLE_TOOLKIT_PANEL` (iframe → content) shows/hides the
+  Toolkit master panel
+
+**Wiring:** OperationsRail "Open Toolkit" button → `window.parent.postMessage`
+`MOCKKIT_TOGGLE_TOOLKIT_PANEL` → content.js `setToolkitPanelVisible` → Toolkit
+panel mounted in top frame by `mountPanelContainer`. Inside the Toolkit panel:
+- Floating Rules switch → `setToolkitRulesOpen` → writes
+  `ajaxToolsFloatingRulesEnabled` → storage listener → `applyFloatingPanelState`
+  shows/hides the rules list sub-panel.
+- DOM Inspect button → `startDomInspector()` (one-shot pick mode).
+- Animation Control switch → `setToolkitAnimationOpen` → `setAnimationPanelVisible`
+  → animation popup shows. Enable switch on the popup drives
+  `setAnimationEnabled` → `applyAnimationControl` iterates
+  `document.getAnimations()`, caches each animation's original `{rate, playState}`
+  in a WeakMap, then sets `playbackRate = original * speed` and `pause()`/`play()`.
+  An 800ms `setInterval` re-applies to catch animations created after enable.
+  Pause also relays `animationPaused` to the page script, which swaps
+  `window.requestAnimationFrame` for a drop-only stub so JS animation loops
+  freeze too; disabling control restores the original rAF. Keyboard shortcuts
+  (registered once, top frame, capture phase) self-gate on the master toggle:
+  `⌘⇧S` toggles pause, `⌘⇧X` cycles speed through `[1, 2, 4, 0.5]`. Shortcuts
+  are ignored while focus is in an input/textarea/contenteditable.
+
+**Anti-occlusion:** All right-docked floating overlays — the Toolkit panel
+(bottom-right), the animation popup (top-right), and the floating rules
+sub-panel (bottom-right, above/beside Toolkit) — share the workbench's
+footprint when it is open. Rather than dodging left, each overlay floats
+**above** the workbench via z-index (`2147483647`, same as the workbench, and
+appended after it in the DOM so it stacks on top). A single
+`MutationObserver` on the workbench container's `style`/`class` (plus a
+`resize` listener) still drives `repositionFloatingOverlays`, but only for
+non-shift repositioning (e.g. the rules panel stacking above the Toolkit).
+Each overlay's auto-stacking is skipped once the user drags it
+(`floatingPanelDragged` flag) so auto-reposition never fights an explicit
+placement.
+
+**Lifecycle:** The Toolkit master panel has no close (×) button — its
+visibility is controlled solely by the workbench Toolkit switch
+(`MOCKKIT_TOGGLE_TOOLKIT_PANEL` → `setToolkitPanelVisible`, persisted via
+`ajaxToolsToolkitPanelVisible`). A collapse (—) button shrinks it to a
+minimal circular dot (36px, green dot, no title, no buttons). Both collapsed
+and expanded states anchor to the CSS default `right:24px; bottom:24px` — the
+panel does NOT remember a drag position across collapse/expand, so toggling
+never lands it off-screen. The collapsed dot is not draggable (click expands
+it; a drag-suppress flag `panel.dataset.toolkitDragged` ensures a real drag
+in expanded state never toggles expand). Hiding the Toolkit panel hides all
+sub-panels; the animation popup stays on if it was open (toggle it off inside
+before hiding). Disabling Animation Control's master toggle (or leaving the
+page) restores every controlled animation to its cached original
+`{rate, playState}` via `restoreAnimations` AND lifts the rAF patch.
+finished/idle animations are never force-replayed on restore.
+
+**Limitations:** Speed control (playbackRate) applies only to WAAPI-reachable
+animations (CSS); JS/rAF-driven animation speed cannot be scrubbed. Pause covers
+both via WAAPI + rAF patch. setTimeout-based animation loops are not paused.
 
 ---
 

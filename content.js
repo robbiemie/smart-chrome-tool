@@ -23,6 +23,16 @@ const ajaxToolsRuntimeState = window[AJAX_TOOLS_RUNTIME_STATE_KEY] || (window[AJ
   floatingPanelBound: false,
   floatingRulesEnabled: true,
   floatingRulesCollapsed: false,
+  // Tracks whether the user has manually dragged the floating rules panel.
+  // Once true, the auto-reposition logic (which shifts the panel out of the
+  // workbench's footprint) stays hands-off so it never fights the user's
+  // explicit placement. Resets only on a fresh panel build.
+  floatingPanelDragged: false,
+  // Same flag for the Toolkit master panel — once dragged, auto-reposition
+  // leaves it alone.
+  toolkitPanelDragged: false,
+  // Same flag for the Sniffer sub-panel.
+  snifferPanelDragged: false,
   // Mirror of the global interceptor switch. The floating rules panel is
   // hidden when the master switch is off, because there is nothing for the
   // panel to toggle when interception is globally paused.
@@ -171,7 +181,10 @@ injectedStyle(`
     max-height: 440px !important;
     display: none;
     flex-direction: column;
-    z-index: 2147483646 !important;
+    z-index: 2147483647 !important;
+    /* Rules shares the bottom-right anchor with Toolkit/Sniffer. The panel
+       is appended LAST in mountPanelContainer so at this z-index it stacks
+       above them. Positioning is independent — see repositionFloatingRulesPanel. */
     border: 1px solid rgb(27 40 34 / 8%) !important;
     border-radius: 16px !important;
     box-shadow: 0 20px 60px rgb(37 54 46 / 18%), 0 4px 12px rgb(37 54 46 / 8%) !important;
@@ -344,9 +357,13 @@ injectedStyle(`
     background: transparent;
     cursor: pointer;
     color: rgb(27 40 34 / 40%);
-    font-size: 16px;
-    line-height: 1;
     transition: all 0.15s ease;
+    padding: 0;
+  }
+  .mockkit-floating-rules__collapse-btn svg {
+    width: 14px;
+    height: 14px;
+    display: block;
   }
   .mockkit-floating-rules__collapse-btn:hover {
     background: rgb(27 40 34 / 6%);
@@ -559,12 +576,15 @@ injectedStyle(`
   }
   .mockkit-floating-rules__mock {
     display: none;
-    cursor: pointer;
+    cursor: grab;
     flex-direction: column;
     align-items: center;
     gap: 6px;
     padding: 2px;
     transition: transform 0.15s ease;
+  }
+  .mockkit-floating-rules__mock:active {
+    cursor: grabbing;
   }
   .mockkit-floating-rules__mock:hover {
     transform: scale(1.05);
@@ -611,6 +631,19 @@ injectedStyle(`
     transition: all 0.05s ease;
     box-shadow: 0 0 0 1px rgb(255 255 255 / 80%), 0 4px 16px rgb(26 155 127 / 30%);
     border-radius: 3px;
+    display: none;
+  }
+  /* Margin highlight: a dashed blue box enclosing the element's margin box,
+     shown alongside the green inspect overlay so margins are visible on the
+     page. Color matches the Box Model diagram's margin layer. Sits one
+     z-level below the green overlay. */
+  .mockkit-dom-inspector-margin-overlay {
+    position: fixed;
+    z-index: 2147483645;
+    pointer-events: none;
+    border: 1px dashed #3b82f6;
+    background: rgb(59 130 246 / 6%);
+    border-radius: 2px;
     display: none;
   }
   /* Measure mode overrides the hover-overlay color to orange so the hovered
@@ -1442,6 +1475,15 @@ let domInspectorState = {
   markPreviewClassName: '',
   markDropdown: null,
   markClassList: [],
+  // ----- Picked-node margin overlay -----
+  // Persistent margin highlight for the node picked in inspect mode. Created
+  // in showDomInspectorPanel (when a node is chosen) and removed when the
+  // panel closes. Distinct from the transient hover marginOverlay in
+  // createDomInspectorOverlay (which only shows while hovering).
+  pickedMarginOverlay: null,
+  pickedNode: null,
+  pickedRepositionFrame: null,
+  pickedListenersBound: false,
 };
 
 function createDomInspectorOverlay() {
@@ -1450,6 +1492,14 @@ function createDomInspectorOverlay() {
   overlay.className = 'mockkit-dom-inspector-overlay';
   document.body.appendChild(overlay);
   domInspectorState.overlay = overlay;
+
+  // Margin highlight: a blue dashed outline marking the element's margin box
+  // while inspecting, so margins are visible on the page (not just in the
+  // Box Model diagram). Inspect-mode only — hidden in measure mode.
+  const marginOverlay = document.createElement('div');
+  marginOverlay.className = 'mockkit-dom-inspector-margin-overlay';
+  document.body.appendChild(marginOverlay);
+  domInspectorState.marginOverlay = marginOverlay;
 
   // Info label that floats next to the highlight box, showing the element's
   // selector + size — mirrors the Chrome DevTools inspect behavior.
@@ -1480,6 +1530,10 @@ function destroyDomInspectorOverlay() {
   if (domInspectorState.overlay) {
     domInspectorState.overlay.remove();
     domInspectorState.overlay = null;
+  }
+  if (domInspectorState.marginOverlay) {
+    domInspectorState.marginOverlay.remove();
+    domInspectorState.marginOverlay = null;
   }
   if (domInspectorState.overlayLabel) {
     domInspectorState.overlayLabel.remove();
@@ -1738,6 +1792,32 @@ function startDomInspector(opts) {
       label.style.left = `${rect.left}px`;
       label.style.top = `${labelTop}px`;
       label.style.display = 'block';
+    }
+
+    // Margin highlight (inspect mode only): draw a dashed blue box enclosing
+    // the element's margin box so the user can see margin extents on the
+    // page. Hidden when all margins are zero (no margin to show) and in
+    // measure mode (which has its own overlay semantics).
+    const marginOverlay = domInspectorState.marginOverlay;
+    if (marginOverlay) {
+      if (domInspectorState.mode === 'inspect') {
+        const cs = window.getComputedStyle(target);
+        const mt = parseFloat(cs.marginTop) || 0;
+        const mr = parseFloat(cs.marginRight) || 0;
+        const mb = parseFloat(cs.marginBottom) || 0;
+        const ml = parseFloat(cs.marginLeft) || 0;
+        if (mt || mr || mb || ml) {
+          marginOverlay.style.left = `${rect.left - ml}px`;
+          marginOverlay.style.top = `${rect.top - mt}px`;
+          marginOverlay.style.width = `${rect.width + ml + mr}px`;
+          marginOverlay.style.height = `${rect.height + mt + mb}px`;
+          marginOverlay.style.display = 'block';
+        } else {
+          marginOverlay.style.display = 'none';
+        }
+      } else {
+        marginOverlay.style.display = 'none';
+      }
     }
 
     // Measurement guides only when an anchor is set. Skip the hovered element
@@ -2791,6 +2871,7 @@ function showDomInspectorPanel(node, hint) {
   closeBtn.className = 'mockkit-dom-inspector__close';
   closeBtn.textContent = '×';
   closeBtn.addEventListener('click', () => {
+    clearPickedMarginOverlay();
     panel.remove();
     domInspectorState.panel = null;
   });
@@ -2969,6 +3050,79 @@ function showDomInspectorPanel(node, hint) {
   // class. Re-syncing here keeps inspect (green) and measure (red pulse)
   // indicators correct across every rebuild.
   syncInspectorEntryButtons();
+
+  // Show a persistent margin highlight for the picked node so the user can
+  // see margin extents on the page even after the hover overlay is torn down
+  // by stopDomInspector.
+  if (node) {
+    showPickedMarginOverlay(node);
+  } else {
+    clearPickedMarginOverlay();
+  }
+}
+
+// Create/refresh the persistent margin overlay for a picked node. Sits on
+// the page until the DOM Inspector panel closes. Re-evaluated on scroll/
+// resize via the rAF-throttled reposition handler.
+function showPickedMarginOverlay(node) {
+  clearPickedMarginOverlay();
+  if (!node || !node.isConnected) return;
+  // Register scroll/resize listeners once so the overlay tracks the node.
+  if (!domInspectorState.pickedListenersBound) {
+    domInspectorState.pickedListenersBound = true;
+    window.addEventListener('scroll', repositionPickedMarginOverlay, true);
+    window.addEventListener('resize', repositionPickedMarginOverlay);
+  }
+  const cs = window.getComputedStyle(node);
+  const mt = parseFloat(cs.marginTop) || 0;
+  const mr = parseFloat(cs.marginRight) || 0;
+  const mb = parseFloat(cs.marginBottom) || 0;
+  const ml = parseFloat(cs.marginLeft) || 0;
+  if (!mt && !mr && !mb && !ml) return;
+  const rect = node.getBoundingClientRect();
+  const overlay = document.createElement('div');
+  overlay.className = 'mockkit-dom-inspector-margin-overlay mockkit-dom-inspector-margin-overlay--picked';
+  overlay.style.left = `${rect.left - ml}px`;
+  overlay.style.top = `${rect.top - mt}px`;
+  overlay.style.width = `${rect.width + ml + mr}px`;
+  overlay.style.height = `${rect.height + mt + mb}px`;
+  overlay.style.display = 'block';
+  document.body.appendChild(overlay);
+  domInspectorState.pickedMarginOverlay = overlay;
+  domInspectorState.pickedNode = node;
+}
+
+function clearPickedMarginOverlay() {
+  if (domInspectorState.pickedMarginOverlay) {
+    domInspectorState.pickedMarginOverlay.remove();
+    domInspectorState.pickedMarginOverlay = null;
+  }
+  domInspectorState.pickedNode = null;
+}
+
+// Reposition the picked-node margin overlay on scroll/resize so it tracks
+// the element. rAF-throttled to coalesce bursts.
+function repositionPickedMarginOverlay() {
+  if (domInspectorState.pickedRepositionFrame) return;
+  domInspectorState.pickedRepositionFrame = requestAnimationFrame(() => {
+    domInspectorState.pickedRepositionFrame = null;
+    const overlay = domInspectorState.pickedMarginOverlay;
+    const node = domInspectorState.pickedNode;
+    if (!overlay || !node || !node.isConnected) {
+      clearPickedMarginOverlay();
+      return;
+    }
+    const cs = window.getComputedStyle(node);
+    const mt = parseFloat(cs.marginTop) || 0;
+    const mr = parseFloat(cs.marginRight) || 0;
+    const mb = parseFloat(cs.marginBottom) || 0;
+    const ml = parseFloat(cs.marginLeft) || 0;
+    const rect = node.getBoundingClientRect();
+    overlay.style.left = `${rect.left - ml}px`;
+    overlay.style.top = `${rect.top - mt}px`;
+    overlay.style.width = `${rect.width + ml + mr}px`;
+    overlay.style.height = `${rect.height + mt + mb}px`;
+  });
 }
 
 function bindDomInspectorDrag(panel, handle) {
@@ -3035,21 +3189,28 @@ devFlagScript.remove();
 const pageScripts = injectedScript('pageScripts/index.js');
 if (pageScripts) {
   pageScripts.addEventListener('load', () => {
-    chrome.storage.local.get(['iframeVisible', 'ajaxToolsSwitchOn', 'ajaxToolsSwitchOnNot200', 'ajaxDataList', 'ajaxToolsSkin', 'ajaxToolsDomainWhitelist'], (result) => {
+    chrome.storage.local.get(['iframeVisible', 'ajaxToolsSwitchOn', 'ajaxToolsSwitchOnNot200', 'ajaxDataList', 'ajaxToolsSkin', 'ajaxToolsDomainWhitelist', SNIFFER_OPEN_KEY], (result) => {
       // console.log('【ajaxTools content.js】【storage】', result);
       const {ajaxToolsSwitchOn = true, ajaxToolsSwitchOnNot200 = true, ajaxDataList = []} = result;
       const domainWhitelist = Array.isArray(result.ajaxToolsDomainWhitelist) && result.ajaxToolsDomainWhitelist.length > 0
         ? result.ajaxToolsDomainWhitelist
         : ['*'];
+      const snifferOpen = result[SNIFFER_OPEN_KEY] === true;
       ajaxToolsRuntimeState.domainWhitelist = domainWhitelist;
       // Keep the runtime mirror of the global interceptor switch in sync so
       // applyFloatingPanelState() can hide the floating panel when paused.
       ajaxToolsRuntimeState.ajaxToolsSwitchOn = ajaxToolsSwitchOn;
       applyFloatingPanelState();
-      postMessage({type: 'ajaxTools', to: 'pageScript', key: 'ajaxDataList', value: ajaxDataList});
-      postMessage({type: 'ajaxTools', to: 'pageScript', key: 'ajaxToolsSwitchOn', value: ajaxToolsSwitchOn});
-      postMessage({type: 'ajaxTools', to: 'pageScript', key: 'ajaxToolsSwitchOnNot200', value: ajaxToolsSwitchOnNot200});
-      postMessage({type: 'ajaxTools', to: 'pageScript', key: 'domainWhitelist', value: domainWhitelist});
+      // Sync the sniffer panel's intercept switch with the real storage value
+      // (the runtime default is true, but storage may hold false).
+      syncSnifferInterceptSwitch();
+      postMessage({type: 'ajaxTools', to: 'pageScript', key: 'ajaxDataList', value: ajaxDataList}, '*');
+      postMessage({type: 'ajaxTools', to: 'pageScript', key: 'ajaxToolsSwitchOn', value: ajaxToolsSwitchOn}, '*');
+      postMessage({type: 'ajaxTools', to: 'pageScript', key: 'ajaxToolsSwitchOnNot200', value: ajaxToolsSwitchOnNot200}, '*');
+      postMessage({type: 'ajaxTools', to: 'pageScript', key: 'domainWhitelist', value: domainWhitelist}, '*');
+      // Relay sniffer state so the page script installs XHR/fetch hooks for
+      // live capture even when the Interceptor master switch is off.
+      postMessage({type: 'ajaxTools', to: 'pageScript', key: 'snifferEnabled', value: snifferOpen}, '*');
     });
   });
 }
@@ -3299,6 +3460,10 @@ window.addEventListener('message', (event) => {
   // Request Sniffer module can list it. The page script runs in the page
   // context and cannot message the iframe directly.
   if (data.type === 'AJAX_TOOLS_REQUEST_CAPTURED' && data.payload) {
+    // Feed the Toolkit's sniffer sub-panel (host-page DOM). This is the
+    // primary consumer now; the iframe forward below is kept for any legacy
+    // listeners but is no longer required by the React workbench.
+    pushSnifferCapture(data.payload);
     const iframe = document.querySelector('.mockkit-interceptor-iframe');
     if (iframe && iframe.contentWindow) {
       iframe.contentWindow.postMessage({
@@ -3314,6 +3479,14 @@ window.addEventListener('message', (event) => {
 // The panel is hidden entirely when the master toggle is off; otherwise it
 // toggles between the expanded list view and the collapsed mock grid.
 function applyFloatingPanelState() {
+  // Lazily ensure the panel element exists before applying state. Some entry
+  // paths (e.g. toggling the Floating Rules switch from the workbench) can
+  // arrive here before mountPanelContainer has run to completion on slow
+  // sites; without this, the early `if (!panel) return` would leave the
+  // panel stuck at its CSS default (display:none) forever.
+  if (!ajaxToolsRuntimeState.floatingPanel) {
+    createFloatingRulesPanel();
+  }
   const panel = ajaxToolsRuntimeState.floatingPanel;
   if (!panel) return;
 
@@ -3323,13 +3496,10 @@ function applyFloatingPanelState() {
     return;
   }
 
-  // Hide the floating panel when the global interceptor switch is off —
-  // without interception active, the panel's toggles have no effect, so
-  // showing it would be misleading.
-  if (!ajaxToolsRuntimeState.ajaxToolsSwitchOn) {
-    panel.style.display = 'none';
-    return;
-  }
+  // The floating rules panel is independent of the global interceptor
+  // switch — users can toggle rules even when interception is paused
+  // (the rules simply won't apply until interception resumes). Do NOT
+  // hide the panel based on ajaxToolsSwitchOn.
 
   if (!ajaxToolsRuntimeState.floatingRulesEnabled) {
     panel.style.display = 'none';
@@ -3341,6 +3511,15 @@ function applyFloatingPanelState() {
     'mockkit-floating-rules--collapsed',
     ajaxToolsRuntimeState.floatingRulesCollapsed
   );
+  // Shift out of the workbench's footprint whenever the panel (re)appears,
+  // so it is never hidden behind the open side panel.
+  repositionFloatingRulesPanel();
+  // The panel DOM may have been (re)built; make sure it's in the document
+  // before relying on getBoundingClientRect inside reposition.
+  if (!panel.isConnected) {
+    const mountTarget = document.body || document.documentElement;
+    if (mountTarget) mountTarget.appendChild(panel);
+  }
 }
 
 function loadFloatingRulesState(callback) {
@@ -3348,6 +3527,9 @@ function loadFloatingRulesState(callback) {
     ajaxToolsRuntimeState.floatingRulesEnabled = result[FLOATING_ENABLED_KEY] !== false;
     ajaxToolsRuntimeState.floatingRulesCollapsed = result[FLOATING_COLLAPSED_KEY] === true;
     applyFloatingPanelState();
+    // Reflect the persisted collapsed state into the shared dock so a chip
+    // shows on reload if the rules panel was left collapsed.
+    setPanelCollapsedInDock('rules', ajaxToolsRuntimeState.floatingRulesCollapsed);
     if (typeof callback === 'function') callback();
   });
 }
@@ -3356,59 +3538,70 @@ function toggleFloatingRulesCollapsed() {
   const next = !ajaxToolsRuntimeState.floatingRulesCollapsed;
   ajaxToolsRuntimeState.floatingRulesCollapsed = next;
   applyFloatingPanelState();
+  // When collapsed, hide the panel entirely and show a dock chip (consistent
+  // with the other floating panels). When expanded, remove the chip.
+  setPanelCollapsedInDock('rules', next);
   chrome.storage.local.set({ [FLOATING_COLLAPSED_KEY]: next });
 }
 
-// Drag the floating panel by its header. Position is kept in memory only —
-// a page refresh resets it to the default bottom-right corner.
+// Drag the floating panel by its header (expanded) or the mock widget
+// (collapsed). Position is kept in memory only — a page refresh resets it to
+// the default bottom-right corner.
 function bindFloatingPanelDrag(panel) {
   const header = panel.querySelector('.mockkit-floating-rules__header');
-  if (!header || header.dataset.dragBound === '1') return;
-  header.dataset.dragBound = '1';
+  const mock = panel.querySelector('.mockkit-floating-rules__mock');
+  const dragHandles = [header, mock].filter(Boolean);
+  dragHandles.forEach((handle) => {
+    if (handle.dataset.dragBound === '1') return;
+    handle.dataset.dragBound = '1';
 
-  let startX = 0;
-  let startY = 0;
-  let originLeft = 0;
-  let originTop = 0;
-  let dragging = false;
+    let startX = 0;
+    let startY = 0;
+    let originLeft = 0;
+    let originTop = 0;
+    let dragging = false;
 
-  const onMove = (event) => {
-    if (!dragging) return;
-    const nextLeft = originLeft + (event.clientX - startX);
-    const nextTop = originTop + (event.clientY - startY);
-    // Clamp to the viewport so the panel cannot be dragged fully off-screen.
-    const maxLeft = window.innerWidth - 60;
-    const maxTop = window.innerHeight - 60;
-    // Use setProperty with !important because the base stylesheet pins
-    // right/bottom with !important — plain inline styles can't override
-    // that, which previously made the panel un-draggable.
-    panel.style.setProperty('left', `${Math.max(0, Math.min(nextLeft, maxLeft))}px`, 'important');
-    panel.style.setProperty('top', `${Math.max(0, Math.min(nextTop, maxTop))}px`, 'important');
-    panel.style.setProperty('right', 'auto', 'important');
-    panel.style.setProperty('bottom', 'auto', 'important');
-  };
+    const onMove = (event) => {
+      if (!dragging) return;
+      const nextLeft = originLeft + (event.clientX - startX);
+      const nextTop = originTop + (event.clientY - startY);
+      // Clamp to the viewport so the panel cannot be dragged fully off-screen.
+      const maxLeft = window.innerWidth - 60;
+      const maxTop = window.innerHeight - 60;
+      // Use setProperty with !important because the base stylesheet pins
+      // right/bottom with !important — plain inline styles can't override
+      // that, which previously made the panel un-draggable.
+      panel.style.setProperty('left', `${Math.max(0, Math.min(nextLeft, maxLeft))}px`, 'important');
+      panel.style.setProperty('top', `${Math.max(0, Math.min(nextTop, maxTop))}px`, 'important');
+      panel.style.setProperty('right', 'auto', 'important');
+      panel.style.setProperty('bottom', 'auto', 'important');
+    };
 
-  const onUp = () => {
-    if (!dragging) return;
-    dragging = false;
-    header.classList.remove('mockkit-floating-rules__header--dragging');
-    document.removeEventListener('mousemove', onMove);
-    document.removeEventListener('mouseup', onUp);
-  };
+    const onUp = () => {
+      if (!dragging) return;
+      dragging = false;
+      handle.classList.remove('mockkit-floating-rules__header--dragging');
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+    };
 
-  header.addEventListener('mousedown', (event) => {
-    // Ignore drag when clicking on buttons (collapse / csr) inside the header.
-    if (event.target.closest('button')) return;
-    dragging = true;
-    header.classList.add('mockkit-floating-rules__header--dragging');
-    const rect = panel.getBoundingClientRect();
-    originLeft = rect.left;
-    originTop = rect.top;
-    startX = event.clientX;
-    startY = event.clientY;
-    document.addEventListener('mousemove', onMove);
-    document.addEventListener('mouseup', onUp);
-    event.preventDefault();
+    handle.addEventListener('mousedown', (event) => {
+      // Ignore drag when clicking on buttons (collapse / csr) inside the header.
+      if (event.target.closest('button')) return;
+      dragging = true;
+      // Mark the panel as user-positioned so the auto-reposition logic (which
+      // shifts it left when the workbench opens) stops overriding its place.
+      ajaxToolsRuntimeState.floatingPanelDragged = true;
+      handle.classList.add('mockkit-floating-rules__header--dragging');
+      const rect = panel.getBoundingClientRect();
+      originLeft = rect.left;
+      originTop = rect.top;
+      startX = event.clientX;
+      startY = event.clientY;
+      document.addEventListener('mousemove', onMove);
+      document.addEventListener('mouseup', onUp);
+      event.preventDefault();
+    });
   });
 }
 
@@ -3912,7 +4105,7 @@ function createFloatingRulesPanel() {
   collapseBtn.className = 'mockkit-floating-rules__collapse-btn';
   collapseBtn.type = 'button';
   collapseBtn.title = 'Collapse';
-  collapseBtn.textContent = '—';
+  collapseBtn.innerHTML = '<svg viewBox="0 0 16 16" fill="none"><path d="M3 8h10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>';
   collapseBtn.addEventListener('click', toggleFloatingRulesCollapsed);
   headerActions.appendChild(collapseBtn);
   header.appendChild(headerActions);
@@ -4029,6 +4222,1859 @@ function bindPanelMessageListener(container) {
   ajaxToolsRuntimeState.panelMessageListenerBound = true;
 }
 
+// --- Request Sniffer panel (Toolkit sub-tool) ------------------------------
+// A floating panel that lists live-captured XHR/fetch traffic on the page.
+// Each row can be promoted to a mock rule in the currently selected group via
+// the Mock button (posts MOCKKIT_MOCK_CAPTURE to the iframe, which calls
+// onMockCapture). Mirrors the sniffer state in content.js so the UI lives on
+// the host page alongside the other Toolkit sub-tools, keeping the iframe
+// focused on rule editing.
+const SNIFFER_PANEL_ID = 'mockkit-sniffer-panel';
+const SNIFFER_MAX_CAPTURES = 100;
+// Persisted sniffer sub-toggle state so a page refresh restores it. Lives
+// under the Toolkit panel — only meaningful when the Toolkit is visible, but
+// stored independently so the state survives even if the user closes Toolkit.
+const SNIFFER_OPEN_KEY = 'ajaxToolsSnifferPanelOpen';
+let snifferState = {
+  panelEl: null,
+  requests: [],      // ring buffer of captures (newest first)
+  nextId: 1,
+  keyword: '',       // search filter (method or url substring)
+  visible: false,
+  collapsed: false,  // when true, only the header bar is visible
+};
+
+function injectSnifferStyle() {
+  if (document.getElementById('mockkit-sniffer-style')) return;
+  const style = document.createElement('style');
+  style.id = 'mockkit-sniffer-style';
+  style.textContent = `
+    .mockkit-sniffer-panel {
+      position: fixed !important;
+      right: 24px !important;
+      bottom: 24px !important;
+      width: 380px !important;
+      max-height: 480px !important;
+      display: none;
+      flex-direction: column;
+      z-index: 2147483647 !important;
+      border: 1px solid rgb(27 40 34 / 8%) !important;
+      border-radius: 16px !important;
+      box-shadow: 0 20px 60px rgb(37 54 46 / 18%), 0 4px 12px rgb(37 54 46 / 8%) !important;
+      background: linear-gradient(160deg, rgb(255 255 255 / 96%), rgb(248 245 238 / 94%)) !important;
+      backdrop-filter: blur(20px);
+      overflow: hidden;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      font-size: 12px;
+      color: #1b2822;
+      transition: box-shadow 0.2s ease, right 0.3s ease, bottom 0.3s ease;
+    }
+    .mockkit-sniffer-panel__header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 16px;
+      border-bottom: 1px solid rgb(27 40 34 / 6%);
+      font-weight: 700;
+      font-size: 13px;
+      background: linear-gradient(135deg, rgb(255 255 255 / 80%), rgb(247 244 236 / 70%));
+      flex-shrink: 0;
+      cursor: grab;
+      user-select: none;
+      letter-spacing: 0.02em;
+    }
+    .mockkit-sniffer-panel__header--dragging {
+      cursor: grabbing;
+      background: linear-gradient(135deg, rgb(26 155 127 / 6%), rgb(247 244 236 / 70%));
+    }
+    .mockkit-sniffer-panel__title {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .mockkit-sniffer-panel__title::before {
+      content: '';
+      width: 6px; height: 6px; border-radius: 999px;
+      background: #1a9b7f; flex-shrink: 0;
+    }
+    .mockkit-sniffer-panel__count {
+      font-weight: 500;
+      font-size: 11px;
+      color: rgb(27 40 34 / 45%);
+      padding: 1px 7px;
+      border-radius: 999px;
+      background: rgb(27 40 34 / 5%);
+    }
+    .mockkit-sniffer-panel__close {
+      flex-shrink: 0;
+      width: 24px; height: 24px;
+      display: flex; align-items: center; justify-content: center;
+      border: none; border-radius: 8px;
+      background: transparent; cursor: pointer;
+      color: rgb(27 40 34 / 40%); line-height: 1;
+      transition: all 0.15s ease;
+      padding: 0;
+    }
+    .mockkit-sniffer-panel__close svg {
+      width: 14px; height: 14px;
+      display: block;
+    }
+    .mockkit-sniffer-panel__close:hover {
+      background: rgb(27 40 34 / 6%);
+      color: rgb(27 40 34 / 70%);
+    }
+    .mockkit-sniffer-panel__toolbar {
+      display: flex;
+      gap: 6px;
+      padding: 10px 12px;
+      border-bottom: 1px solid rgb(27 40 34 / 5%);
+      flex-shrink: 0;
+    }
+    .mockkit-sniffer-panel__search {
+      flex: 1;
+      min-width: 0;
+      border: 1px solid rgb(27 40 34 / 14%);
+      border-radius: 8px;
+      padding: 5px 10px;
+      font-size: 12px;
+      font-family: inherit;
+      background: rgb(255 255 255 / 80%);
+      color: #1b2822;
+      outline: none;
+      transition: border-color 0.15s ease;
+    }
+    .mockkit-sniffer-panel__search:focus {
+      border-color: rgb(26 155 127 / 55%);
+      box-shadow: 0 0 0 2px rgb(26 155 127 / 12%);
+    }
+    .mockkit-sniffer-panel__clear {
+      flex-shrink: 0;
+      border: 1px solid rgb(27 40 34 / 14%);
+      border-radius: 8px;
+      padding: 5px 10px;
+      background: #fff;
+      cursor: pointer;
+      font-size: 11px;
+      font-weight: 600;
+      color: rgb(27 40 34 / 60%);
+      transition: all 0.15s ease;
+    }
+    .mockkit-sniffer-panel__clear:hover:not(:disabled) {
+      border-color: rgb(27 40 34 / 30%);
+      color: #1b2822;
+    }
+    .mockkit-sniffer-panel__clear:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+    /* Intercept toggle bar: sits between header and toolbar. The switch
+       mirrors the global ajaxToolsSwitchOn state. */
+    .mockkit-sniffer-panel__intercept {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 9px 12px;
+      border-bottom: 1px solid rgb(27 40 34 / 5%);
+      flex-shrink: 0;
+    }
+    .mockkit-sniffer-panel__intercept-label {
+      font-size: 12px;
+      font-weight: 600;
+      color: #1b2822;
+    }
+    .mockkit-sniffer-panel__intercept-switch {
+      position: relative;
+      width: 36px; height: 20px; border-radius: 999px;
+      border: none; cursor: pointer; padding: 0;
+      background: rgb(27 40 34 / 22%);
+      transition: background 0.2s ease;
+      flex-shrink: 0;
+    }
+    .mockkit-sniffer-panel__intercept-switch::after {
+      content: '';
+      position: absolute; top: 2px; left: 2px;
+      width: 16px; height: 16px; border-radius: 50%;
+      background: #fff; box-shadow: 0 1px 3px rgb(0 0 0 / 30%);
+      transition: transform 0.2s ease;
+    }
+    .mockkit-sniffer-panel__intercept-switch.is-on {
+      background: #1a9b7f;
+    }
+    .mockkit-sniffer-panel__intercept-switch.is-on::after {
+      transform: translateX(16px);
+    }
+    .mockkit-sniffer-panel__list {
+      overflow-y: auto;
+      flex: 1;
+      min-height: 0;
+      padding: 6px;
+    }
+    .mockkit-sniffer-panel__list::-webkit-scrollbar { width: 6px; }
+    .mockkit-sniffer-panel__list::-webkit-scrollbar-thumb {
+      background: rgb(27 40 34 / 12%);
+      border-radius: 999px;
+    }
+    .mockkit-sniffer-panel__list::-webkit-scrollbar-track { background: transparent; }
+    .mockkit-sniffer-panel__item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 10px;
+      border-radius: 10px;
+      transition: background 0.15s ease;
+    }
+    .mockkit-sniffer-panel__item:hover {
+      background: rgb(26 155 127 / 5%);
+    }
+    .mockkit-sniffer-panel__item-main {
+      flex: 1;
+      min-width: 0;
+    }
+    .mockkit-sniffer-panel__item-meta {
+      display: flex;
+      gap: 4px;
+      margin-bottom: 2px;
+    }
+    .mockkit-sniffer-panel__tag {
+      flex-shrink: 0;
+      padding: 1px 6px;
+      border-radius: 4px;
+      font-size: 10px;
+      font-weight: 600;
+      line-height: 1.5;
+    }
+    .mockkit-sniffer-panel__tag--fetch {
+      background: rgb(24 144 255 / 12%);
+      color: #1890ff;
+    }
+    .mockkit-sniffer-panel__tag--xhr {
+      background: rgb(194 61 92 / 12%);
+      color: #c23d5c;
+    }
+    .mockkit-sniffer-panel__tag--method {
+      background: rgb(213 99 33 / 12%);
+      color: #d56321;
+    }
+    .mockkit-sniffer-panel__tag--ok {
+      background: rgb(26 155 127 / 14%);
+      color: #1a9b7f;
+    }
+    .mockkit-sniffer-panel__tag--err {
+      background: rgb(245 34 45 / 12%);
+      color: #f5222d;
+    }
+    .mockkit-sniffer-panel__tag--other {
+      background: rgb(27 40 34 / 8%);
+      color: rgb(27 40 34 / 55%);
+    }
+    .mockkit-sniffer-panel__url {
+      display: block;
+      font-family: Menlo, Monaco, Consolas, monospace;
+      font-size: 11px;
+      color: rgb(27 40 34 / 75%);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      line-height: 1.4;
+    }
+    .mockkit-sniffer-panel__mock {
+      flex-shrink: 0;
+      border: 1px solid rgb(26 155 127 / 40%);
+      border-radius: 7px;
+      padding: 4px 10px;
+      background: rgb(26 155 127 / 8%);
+      cursor: pointer;
+      color: #1a9b7f;
+      font-size: 11px;
+      font-weight: 600;
+      transition: all 0.15s ease;
+    }
+    .mockkit-sniffer-panel__mock:hover {
+      background: #1a9b7f;
+      color: #fff;
+    }
+    .mockkit-sniffer-panel__empty {
+      padding: 36px 16px;
+      text-align: center;
+      color: rgb(27 40 34 / 35%);
+      font-size: 12px;
+      line-height: 1.6;
+    }
+    /* Collapsed state: hide the toolbar + list, keep only the header bar. */
+    .mockkit-sniffer-panel--collapsed {
+      width: auto !important;
+      max-height: none !important;
+    }
+    .mockkit-sniffer-panel--collapsed .mockkit-sniffer-panel__toolbar,
+    .mockkit-sniffer-panel--collapsed .mockkit-sniffer-panel__list {
+      display: none !important;
+    }
+  `;
+  document.documentElement.appendChild(style);
+}
+
+function bindSnifferPanelDrag(panel) {
+  const header = panel.querySelector('.mockkit-sniffer-panel__header');
+  if (!header || header.dataset.dragBound === '1') return;
+  header.dataset.dragBound = '1';
+
+  let startX = 0;
+  let startY = 0;
+  let originLeft = 0;
+  let originTop = 0;
+  let dragging = false;
+
+  const onMove = (event) => {
+    if (!dragging) return;
+    const nextLeft = originLeft + (event.clientX - startX);
+    const nextTop = originTop + (event.clientY - startY);
+    const maxLeft = window.innerWidth - 60;
+    const maxTop = window.innerHeight - 60;
+    panel.style.setProperty('left', `${Math.max(0, Math.min(nextLeft, maxLeft))}px`, 'important');
+    panel.style.setProperty('top', `${Math.max(0, Math.min(nextTop, maxTop))}px`, 'important');
+    panel.style.setProperty('right', 'auto', 'important');
+    panel.style.setProperty('bottom', 'auto', 'important');
+  };
+
+  const onUp = () => {
+    if (!dragging) return;
+    dragging = false;
+    header.classList.remove('mockkit-sniffer-panel__header--dragging');
+    document.removeEventListener('mousemove', onMove);
+    document.removeEventListener('mouseup', onUp);
+  };
+
+  header.addEventListener('mousedown', (event) => {
+    if (event.target.closest('button')) return;
+    dragging = true;
+    ajaxToolsRuntimeState.snifferPanelDragged = true;
+    header.classList.add('mockkit-sniffer-panel__header--dragging');
+    const rect = panel.getBoundingClientRect();
+    originLeft = rect.left;
+    originTop = rect.top;
+    startX = event.clientX;
+    startY = event.clientY;
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+    event.preventDefault();
+  });
+}
+
+function createSnifferPanel() {
+  if (snifferState.panelEl?.isConnected) return snifferState.panelEl;
+  const existing = document.getElementById(SNIFFER_PANEL_ID);
+  if (existing) {
+    snifferState.panelEl = existing;
+    return existing;
+  }
+
+  injectSnifferStyle();
+
+  const panel = document.createElement('div');
+  panel.className = 'mockkit-sniffer-panel';
+  panel.id = SNIFFER_PANEL_ID;
+  panel.style.display = 'none';
+
+  const header = document.createElement('div');
+  header.className = 'mockkit-sniffer-panel__header';
+  const titleWrap = document.createElement('div');
+  titleWrap.className = 'mockkit-sniffer-panel__title';
+  const title = document.createElement('span');
+  title.textContent = 'Request Sniffer';
+  const countBadge = document.createElement('span');
+  countBadge.className = 'mockkit-sniffer-panel__count';
+  countBadge.textContent = '0';
+  titleWrap.appendChild(title);
+  titleWrap.appendChild(countBadge);
+  const closeBtn = document.createElement('button');
+  closeBtn.type = 'button';
+  closeBtn.className = 'mockkit-sniffer-panel__close';
+  closeBtn.innerHTML = '<svg viewBox="0 0 16 16" fill="none"><path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>';
+  closeBtn.title = 'Hide sniffer panel';
+  closeBtn.addEventListener('click', () => setSnifferPanelVisible(false));
+  const collapseBtn = document.createElement('button');
+  collapseBtn.type = 'button';
+  collapseBtn.className = 'mockkit-sniffer-panel__close';
+  collapseBtn.innerHTML = '<svg viewBox="0 0 16 16" fill="none"><path d="M3 8h10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>';
+  collapseBtn.title = 'Collapse';
+  collapseBtn.addEventListener('click', () => setSnifferPanelCollapsed(!snifferState.collapsed));
+  header.appendChild(titleWrap);
+  const headerActions = document.createElement('div');
+  headerActions.style.display = 'flex';
+  headerActions.style.gap = '2px';
+  headerActions.appendChild(collapseBtn);
+  headerActions.appendChild(closeBtn);
+  header.appendChild(headerActions);
+  panel.appendChild(header);
+
+  // Intercept toggle: controls the global XHR/fetch interceptor switch
+  // (ajaxToolsSwitchOn). Lives in the sniffer panel so users can pause
+  // mocking while still capturing live traffic.
+  const interceptBar = document.createElement('div');
+  interceptBar.className = 'mockkit-sniffer-panel__intercept';
+  const interceptLabel = document.createElement('span');
+  interceptLabel.className = 'mockkit-sniffer-panel__intercept-label';
+  interceptLabel.textContent = '拦截请求';
+  const interceptSwitch = document.createElement('button');
+  interceptSwitch.type = 'button';
+  interceptSwitch.className = 'mockkit-sniffer-panel__intercept-switch';
+  interceptSwitch.title = 'Toggle XHR/fetch interception (mock layer)';
+  interceptSwitch.addEventListener('click', (event) => {
+    event.stopPropagation();
+    const next = !ajaxToolsRuntimeState.ajaxToolsSwitchOn;
+    ajaxToolsRuntimeState.ajaxToolsSwitchOn = next;
+    if (chrome.storage?.local) {
+      chrome.storage.local.set({ ajaxToolsSwitchOn: next });
+    }
+    // Relay directly to the page script so interception pauses/resumes
+    // immediately — do not rely solely on storage.onChanged (which may
+    // not fire if the value is unchanged, and is async).
+    postMessage({ type: 'ajaxTools', to: 'pageScript', key: 'ajaxToolsSwitchOn', value: next }, '*');
+    syncSnifferInterceptSwitch();
+  });
+  interceptBar.appendChild(interceptLabel);
+  interceptBar.appendChild(interceptSwitch);
+  panel.appendChild(interceptBar);
+
+  const toolbar = document.createElement('div');
+  toolbar.className = 'mockkit-sniffer-panel__toolbar';
+  const search = document.createElement('input');
+  search.type = 'text';
+  search.className = 'mockkit-sniffer-panel__search';
+  search.placeholder = 'Search url or method...';
+  search.value = snifferState.keyword;
+  search.addEventListener('input', () => {
+    snifferState.keyword = search.value;
+    renderSnifferList();
+  });
+  const clearBtn = document.createElement('button');
+  clearBtn.type = 'button';
+  clearBtn.className = 'mockkit-sniffer-panel__clear';
+  clearBtn.textContent = 'Clear';
+  clearBtn.addEventListener('click', () => {
+    snifferState.requests = [];
+    renderSnifferList();
+  });
+  toolbar.appendChild(search);
+  toolbar.appendChild(clearBtn);
+  panel.appendChild(toolbar);
+
+  const list = document.createElement('div');
+  list.className = 'mockkit-sniffer-panel__list';
+  panel.appendChild(list);
+
+  bindSnifferPanelDrag(panel);
+  snifferState.panelEl = panel;
+  renderSnifferList();
+  syncSnifferInterceptSwitch();
+  return panel;
+}
+
+// Sync the sniffer panel's "拦截请求" switch with the global interceptor
+// state (ajaxToolsSwitchOn). Called on panel build and whenever the state
+// changes via storage.onChanged.
+function syncSnifferInterceptSwitch() {
+  const panel = snifferState.panelEl;
+  if (!panel) return;
+  const sw = panel.querySelector('.mockkit-sniffer-panel__intercept-switch');
+  if (sw) sw.classList.toggle('is-on', ajaxToolsRuntimeState.ajaxToolsSwitchOn !== false);
+}
+
+// Filter the capture list by the current keyword (url or method substring).
+function getFilteredSnifferRequests() {
+  const trimmed = snifferState.keyword.trim().toLowerCase();
+  if (!trimmed) return snifferState.requests;
+  return snifferState.requests.filter(
+    (item) => item.url.toLowerCase().includes(trimmed) || (item.method || '').toLowerCase().includes(trimmed)
+  );
+}
+
+// Re-render the sniffer list body + count badge. Called whenever captures
+// change or the search keyword updates.
+function renderSnifferList() {
+  const panel = snifferState.panelEl;
+  if (!panel) return;
+  const list = panel.querySelector('.mockkit-sniffer-panel__list');
+  const countBadge = panel.querySelector('.mockkit-sniffer-panel__count');
+  const clearBtn = panel.querySelector('.mockkit-sniffer-panel__clear');
+  if (countBadge) countBadge.textContent = String(snifferState.requests.length);
+  if (clearBtn) clearBtn.disabled = snifferState.requests.length === 0;
+  if (!list) return;
+
+  const filtered = getFilteredSnifferRequests();
+  if (filtered.length === 0) {
+    list.innerHTML = `<div class="mockkit-sniffer-panel__empty">${
+      snifferState.requests.length === 0 ? 'No XHR captured yet' : 'No matches'
+    }</div>`;
+    return;
+  }
+
+  list.innerHTML = '';
+  filtered.forEach((item) => {
+    const row = document.createElement('div');
+    row.className = 'mockkit-sniffer-panel__item';
+
+    const main = document.createElement('div');
+    main.className = 'mockkit-sniffer-panel__item-main';
+
+    const meta = document.createElement('div');
+    meta.className = 'mockkit-sniffer-panel__item-meta';
+    // Source tag (fetch / xhr)
+    const sourceTag = document.createElement('span');
+    sourceTag.className = `mockkit-sniffer-panel__tag mockkit-sniffer-panel__tag--${item.source}`;
+    sourceTag.textContent = item.source;
+    meta.appendChild(sourceTag);
+    // Method tag
+    if (item.method) {
+      const methodTag = document.createElement('span');
+      methodTag.className = 'mockkit-sniffer-panel__tag mockkit-sniffer-panel__tag--method';
+      methodTag.textContent = item.method;
+      meta.appendChild(methodTag);
+    }
+    // Status tag
+    const statusTag = document.createElement('span');
+    const statusOk = item.status >= 200 && item.status < 300;
+    const statusErr = item.status >= 400;
+    statusTag.className = `mockkit-sniffer-panel__tag mockkit-sniffer-panel__tag--${statusOk ? 'ok' : statusErr ? 'err' : 'other'}`;
+    statusTag.textContent = String(item.status || '—');
+    meta.appendChild(statusTag);
+    main.appendChild(meta);
+
+    const url = document.createElement('span');
+    url.className = 'mockkit-sniffer-panel__url';
+    url.textContent = item.url;
+    url.title = item.url;
+    main.appendChild(url);
+    row.appendChild(main);
+
+    // Mock button — posts the capture to the iframe so it can be promoted to
+    // a rule in the currently selected group.
+    const mockBtn = document.createElement('button');
+    mockBtn.type = 'button';
+    mockBtn.className = 'mockkit-sniffer-panel__mock';
+    mockBtn.textContent = 'Mock';
+    mockBtn.title = 'Add this request/response as a mock rule to the current group';
+    mockBtn.addEventListener('click', (event) => {
+      event.stopPropagation();
+      const iframe = document.querySelector('.mockkit-interceptor-iframe');
+      if (iframe && iframe.contentWindow) {
+        iframe.contentWindow.postMessage({
+          type: 'MOCKKIT_MOCK_CAPTURE',
+          payload: {
+            source: item.source,
+            method: item.method,
+            url: item.url,
+            status: item.status,
+            responseText: item.responseText,
+          },
+        }, '*');
+      }
+    });
+    row.appendChild(mockBtn);
+    list.appendChild(row);
+  });
+}
+
+// Push a new capture into the ring buffer and re-render. Called from the
+// AJAX_TOOLS_REQUEST_CAPTURED message handler.
+function pushSnifferCapture(payload) {
+  if (!payload || !payload.url) return;
+  // Filter static assets — same logic as the iframe-side hook used to do.
+  const STATIC_EXT_REGEX = /\.(js|css|mjs|map|png|jpe?g|gif|svg|ico|webp|woff2?|ttf|eot|otf|mp4|webm|mp3|wav|pdf|zip|tar|gz|wasm)(\?|$)/i;
+  try {
+    const path = payload.url.split('?')[0];
+    if (STATIC_EXT_REGEX.test(path)) return;
+  } catch (e) { /* ignore */ }
+
+  const captured = {
+    id: snifferState.nextId++,
+    source: payload.source === 'fetch' ? 'fetch' : 'xhr',
+    method: (payload.method || '').toUpperCase(),
+    url: payload.url,
+    status: typeof payload.status === 'number' ? payload.status : 0,
+    responseText: typeof payload.responseText === 'string' ? payload.responseText : '',
+    capturedAt: Date.now(),
+  };
+  snifferState.requests = [captured, ...snifferState.requests].slice(0, SNIFFER_MAX_CAPTURES);
+  renderSnifferList();
+}
+
+function setSnifferPanelVisible(visible) {
+  const panel = createSnifferPanel();
+  snifferState.visible = visible;
+  panel.style.display = visible ? 'flex' : 'none';
+  if (visible) {
+    repositionSnifferPanel();
+    watchWorkbenchForFloatingOverlays();
+  }
+  // Keep the Toolkit panel's sniffer sub-toggle in sync.
+  if (!visible && toolkitPanelState.snifferOpen) {
+    toolkitPanelState.snifferOpen = false;
+    syncToolkitPanelUi();
+  }
+  // Clear collapsed state when the panel is hidden so no dock chip lingers.
+  if (!visible && snifferState.collapsed) {
+    snifferState.collapsed = false;
+    setPanelCollapsedInDock('sniffer', false);
+  }
+}
+
+// Collapse/expand the sniffer panel. When collapsed, the panel hides entirely
+// and a chip appears in the shared collapsed dock. Session-only state.
+function setSnifferPanelCollapsed(collapsed) {
+  snifferState.collapsed = collapsed;
+  const panel = snifferState.panelEl;
+  if (!panel) return;
+  if (panel.style.display !== 'none') {
+    panel.style.display = collapsed ? 'none' : 'flex';
+  }
+  setPanelCollapsedInDock('sniffer', collapsed);
+}
+
+// Toggle the sniffer sub-panel from the Toolkit master panel. Persists the
+// open/closed state so a page refresh restores it (when Toolkit is on). Also
+// relays snifferEnabled to the page script so XHR/fetch hooks stay installed
+// for live capture even when the Interceptor master switch is off.
+function setToolkitSnifferOpen(open) {
+  toolkitPanelState.snifferOpen = open;
+  setSnifferPanelVisible(open);
+  syncToolkitPanelUi();
+  if (chrome.storage?.local) {
+    chrome.storage.local.set({ [SNIFFER_OPEN_KEY]: open });
+  }
+  // Tell the page script to install/keep XHR/fetch hooks for capture,
+  // independent of the Interceptor master switch.
+  postMessage({
+    type: 'ajaxTools',
+    to: 'pageScript',
+    key: 'snifferEnabled',
+    value: open,
+  }, '*');
+}
+
+// The sniffer panel holds its ground when the workbench opens — it floats
+// above the workbench via z-index instead of dodging left. Kept as a
+// repositioning hook (e.g. for future stacking logic).
+function repositionSnifferPanel() {
+  const panel = snifferState.panelEl;
+  if (!panel || panel.style.display === 'none') return;
+}
+
+// --- Collapsed panels → Toolkit section ------------------------------------
+// When a floating sub-panel (Animation / Sniffer / Rules) is collapsed, it
+// hides entirely and a compact chip appears in a dedicated section at the
+// bottom of the Toolkit master panel. Clicking the chip re-expands its panel.
+// This keeps everything inside the single Toolkit entry — no separate dock
+// element floating on the page.
+// Registry of panels that can collapse into the Toolkit. Each entry maps a
+// panel key to { label, icon, expand() }.
+const collapsedPanelRegistry = {
+  animation: { label: 'Animation', icon: '✨', expand: () => setAnimationPanelCollapsed(false) },
+  sniffer: { label: 'Sniffer', icon: '📡', expand: () => setSnifferPanelCollapsed(false) },
+  rules: { label: 'Rules', icon: '📋', expand: () => toggleFloatingRulesCollapsed() },
+};
+let collapsedPanelState = {
+  // Set of panel keys currently shown as chips in the Toolkit section.
+  collapsed: new Set(),
+};
+
+// Mark a panel as collapsed (shows its chip in the Toolkit) or expanded
+// (removes its chip). Called by each panel's setCollapsed function.
+function setPanelCollapsedInDock(key, collapsed) {
+  if (collapsed) {
+    collapsedPanelState.collapsed.add(key);
+  } else {
+    collapsedPanelState.collapsed.delete(key);
+  }
+  renderCollapsedSection();
+}
+
+// Rebuild the collapsed-section chip list inside the Toolkit panel. The
+// section is hidden when no panels are collapsed.
+function renderCollapsedSection() {
+  const toolkitPanel = toolkitPanelState.panelEl;
+  if (!toolkitPanel) return;
+  let section = toolkitPanel.querySelector('.mockkit-toolkit-panel__collapsed');
+  if (collapsedPanelState.collapsed.size === 0) {
+    if (section) section.remove();
+    return;
+  }
+  if (!section) {
+    section = document.createElement('div');
+    section.className = 'mockkit-toolkit-panel__collapsed';
+    toolkitPanel.appendChild(section);
+  }
+  section.innerHTML = '';
+  const title = document.createElement('div');
+  title.className = 'mockkit-toolkit-panel__collapsed-title';
+  title.textContent = 'Collapsed';
+  section.appendChild(title);
+  const chipRow = document.createElement('div');
+  chipRow.className = 'mockkit-toolkit-panel__collapsed-chips';
+  collapsedPanelState.collapsed.forEach((key) => {
+    const entry = collapsedPanelRegistry[key];
+    if (!entry) return;
+    const chip = document.createElement('button');
+    chip.type = 'button';
+    chip.className = 'mockkit-toolkit-panel__collapsed-chip';
+    chip.title = `Expand ${entry.label}`;
+    chip.innerHTML = `<span class="mockkit-toolkit-panel__collapsed-chip-icon">${entry.icon}</span><span>${entry.label}</span>`;
+    chip.addEventListener('click', () => entry.expand());
+    chipRow.appendChild(chip);
+  });
+  section.appendChild(chipRow);
+}
+
+
+// A single draggable bottom-right panel that consolidates the auxiliary debug
+// tools: Floating Rules, DOM Inspect, Animation Control. It replaces the old
+// standalone floating-rules panel as the primary floating entry — the rules
+// list now lives inside it as a collapsible sub-section, toggled by the
+// "Floating Rules" row. This gives a single source of truth for which debug
+// overlays are active and keeps the mock layer as the workbench's focus.
+const TOOLKIT_PANEL_ID = 'mockkit-toolkit-panel';
+const TOOLKIT_VISIBLE_KEY = 'ajaxToolsToolkitPanelVisible';
+let toolkitPanelState = {
+  panelEl: null,
+  visible: false,
+  collapsed: false,
+  // Sub-tool visibility: when true, the corresponding sub-panel/overlay shows.
+  rulesOpen: false,
+  animationOpen: false,
+  snifferOpen: false,
+};
+
+function injectToolkitStyle() {
+  if (document.getElementById('mockkit-toolkit-style')) return;
+  const style = document.createElement('style');
+  style.id = 'mockkit-toolkit-style';
+  style.textContent = `
+    .mockkit-toolkit-panel {
+      position: fixed !important;
+      right: 24px !important;
+      bottom: 24px !important;
+      width: 280px !important;
+      display: none;
+      flex-direction: column;
+      z-index: 2147483647 !important;
+      border: 1px solid rgb(27 40 34 / 8%) !important;
+      border-radius: 16px !important;
+      box-shadow: 0 20px 60px rgb(37 54 46 / 18%), 0 4px 12px rgb(37 54 46 / 8%) !important;
+      background: linear-gradient(160deg, rgb(255 255 255 / 96%), rgb(248 245 238 / 94%)) !important;
+      backdrop-filter: blur(20px);
+      overflow: hidden;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      font-size: 12px;
+      color: #1b2822;
+      transition: box-shadow 0.2s ease, right 0.3s ease;
+    }
+    .mockkit-toolkit-panel__header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 16px;
+      border-bottom: 1px solid rgb(27 40 34 / 6%);
+      font-weight: 700;
+      font-size: 13px;
+      background: linear-gradient(135deg, rgb(255 255 255 / 80%), rgb(247 244 236 / 70%));
+      flex-shrink: 0;
+      cursor: grab;
+      user-select: none;
+      letter-spacing: 0.02em;
+    }
+    .mockkit-toolkit-panel__header--dragging {
+      cursor: grabbing;
+      background: linear-gradient(135deg, rgb(26 155 127 / 6%), rgb(247 244 236 / 70%));
+    }
+    .mockkit-toolkit-panel__title {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .mockkit-toolkit-panel__title::before {
+      content: '';
+      width: 6px; height: 6px; border-radius: 999px;
+      background: #1a9b7f; flex-shrink: 0;
+    }
+    .mockkit-toolkit-panel__close {
+      flex-shrink: 0;
+      width: 24px; height: 24px;
+      display: flex; align-items: center; justify-content: center;
+      border: none; border-radius: 8px;
+      background: transparent; cursor: pointer;
+      color: rgb(27 40 34 / 40%); line-height: 1;
+      transition: all 0.15s ease;
+      padding: 0;
+    }
+    .mockkit-toolkit-panel__close svg {
+      width: 14px; height: 14px;
+      display: block;
+    }
+    .mockkit-toolkit-panel__close:hover {
+      background: rgb(27 40 34 / 6%);
+      color: rgb(27 40 34 / 70%);
+    }
+    .mockkit-toolkit-panel__body {
+      padding: 8px;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+    .mockkit-toolkit-panel__tool {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 12px;
+      border-radius: 10px;
+      transition: background 0.15s ease;
+    }
+    .mockkit-toolkit-panel__tool:hover {
+      background: rgb(26 155 127 / 5%);
+    }
+    .mockkit-toolkit-panel__tool-icon {
+      flex-shrink: 0;
+      width: 26px; height: 26px;
+      display: flex; align-items: center; justify-content: center;
+      border-radius: 7px;
+      background: rgb(26 155 127 / 8%);
+      color: #1a9b7f;
+    }
+    .mockkit-toolkit-panel__tool-icon svg {
+      width: 14px; height: 14px;
+    }
+    .mockkit-toolkit-panel__tool-name {
+      flex: 1;
+      min-width: 0;
+      font-weight: 600;
+      font-size: 12px;
+    }
+    .mockkit-toolkit-panel__tool-hint {
+      display: block;
+      font-weight: 400;
+      font-size: 10px;
+      color: rgb(27 40 34 / 45%);
+      margin-top: 1px;
+    }
+    .mockkit-toolkit-panel__tool-btn {
+      flex-shrink: 0;
+      border: 1px solid rgb(26 155 127 / 30%);
+      border-radius: 7px;
+      padding: 4px 10px;
+      background: #fff;
+      cursor: pointer;
+      color: #1a9b7f;
+      font-size: 11px;
+      font-weight: 600;
+      transition: all 0.15s ease;
+    }
+    .mockkit-toolkit-panel__tool-btn:hover {
+      background: rgb(26 155 127 / 12%);
+    }
+    .mockkit-toolkit-panel__tool-switch {
+      position: relative;
+      width: 36px; height: 20px; border-radius: 999px;
+      border: none; cursor: pointer; padding: 0;
+      background: rgb(27 40 34 / 22%);
+      transition: background 0.2s ease;
+      flex-shrink: 0;
+    }
+    .mockkit-toolkit-panel__tool-switch::after {
+      content: '';
+      position: absolute; top: 2px; left: 2px;
+      width: 16px; height: 16px; border-radius: 50%;
+      background: #fff; box-shadow: 0 1px 3px rgb(0 0 0 / 30%);
+      transition: transform 0.2s ease;
+    }
+    .mockkit-toolkit-panel__tool-switch.is-on {
+      background: #1a9b7f;
+    }
+    .mockkit-toolkit-panel__tool-switch.is-on::after {
+      transform: translateX(16px);
+    }
+    /* Collapsed (compact) state: a minimal circular dot — no title, no
+       buttons, no chrome. Click the dot to expand. Visibility is
+       controlled by the workbench Toolkit switch. */
+    .mockkit-toolkit-panel--collapsed {
+      width: 36px !important;
+      height: 36px !important;
+      border-radius: 50% !important;
+      padding: 0 !important;
+    }
+    .mockkit-toolkit-panel--collapsed .mockkit-toolkit-panel__body {
+      display: none !important;
+    }
+    .mockkit-toolkit-panel--collapsed .mockkit-toolkit-panel__header-actions {
+      display: none !important;
+    }
+    .mockkit-toolkit-panel--collapsed .mockkit-toolkit-panel__title {
+      display: none !important;
+    }
+    .mockkit-toolkit-panel--collapsed .mockkit-toolkit-panel__header {
+      cursor: pointer;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-bottom: none;
+    }
+    .mockkit-toolkit-panel--collapsed .mockkit-toolkit-panel__header::after {
+      content: '';
+      width: 10px; height: 10px; border-radius: 50%;
+      background: #1a9b7f;
+      flex-shrink: 0;
+    }
+    /* Collapsed-panels section: chips for sub-panels that were minimized. Sits
+       at the bottom of the Toolkit panel, below the tool rows. */
+    .mockkit-toolkit-panel__collapsed {
+      padding: 10px 12px 12px;
+      border-top: 1px solid rgb(27 40 34 / 6%);
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      flex-shrink: 0;
+    }
+    .mockkit-toolkit-panel__collapsed-title {
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: rgb(27 40 34 / 40%);
+    }
+    .mockkit-toolkit-panel__collapsed-chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+    .mockkit-toolkit-panel__collapsed-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 5px 10px;
+      border-radius: 999px;
+      border: 1px solid rgb(26 155 127 / 25%);
+      background: rgb(26 155 127 / 6%);
+      cursor: pointer;
+      font-size: 11px;
+      font-weight: 600;
+      color: #1a9b7f;
+      transition: all 0.15s ease;
+    }
+    .mockkit-toolkit-panel__collapsed-chip:hover {
+      background: #1a9b7f;
+      color: #fff;
+      border-color: #1a9b7f;
+    }
+    .mockkit-toolkit-panel__collapsed-chip-icon {
+      font-size: 12px;
+      line-height: 1;
+    }
+    /* When the floating rules sub-panel is open inside the Toolkit, we hide the
+       standalone floating-rules panel (it is rendered separately at the DOM
+       level for reuse of the existing renderFloatingRules logic). The Toolkit
+       positions itself above it. */
+    .mockkit-toolkit-panel__rules-section {
+      display: none;
+      border-top: 1px solid rgb(27 40 34 / 6%);
+    }
+    .mockkit-toolkit-panel__rules-section.is-open {
+      display: block;
+    }
+  `;
+  document.documentElement.appendChild(style);
+}
+
+// Drag the Toolkit panel by its header. Position kept in memory only.
+function bindToolkitPanelDrag(panel) {
+  const header = panel.querySelector('.mockkit-toolkit-panel__header');
+  if (!header || header.dataset.dragBound === '1') return;
+  header.dataset.dragBound = '1';
+
+  let startX = 0;
+  let startY = 0;
+  let originLeft = 0;
+  let originTop = 0;
+  let dragging = false;
+  let moved = false;
+
+  const onMove = (event) => {
+    if (!dragging) return;
+    moved = true;
+    const nextLeft = originLeft + (event.clientX - startX);
+    const nextTop = originTop + (event.clientY - startY);
+    const maxLeft = window.innerWidth - 60;
+    const maxTop = window.innerHeight - 60;
+    panel.style.setProperty('left', `${Math.max(0, Math.min(nextLeft, maxLeft))}px`, 'important');
+    panel.style.setProperty('top', `${Math.max(0, Math.min(nextTop, maxTop))}px`, 'important');
+    panel.style.setProperty('right', 'auto', 'important');
+    panel.style.setProperty('bottom', 'auto', 'important');
+  };
+
+  const onUp = () => {
+    if (!dragging) return;
+    dragging = false;
+    header.classList.remove('mockkit-toolkit-panel__header--dragging');
+    document.removeEventListener('mousemove', onMove);
+    document.removeEventListener('mouseup', onUp);
+    // Suppress the click that follows a real drag so dragging the compact
+    // pill never toggles expand.
+    if (moved) {
+      panel.dataset.toolkitDragged = '1';
+      window.setTimeout(() => { panel.dataset.toolkitDragged = ''; }, 60);
+    }
+    moved = false;
+  };
+
+  header.addEventListener('mousedown', (event) => {
+    if (event.target.closest('button')) return;
+    // The collapsed dot is locked to the default anchor — do not start a
+    // drag. Click (not drag) expands it; see header click handler.
+    if (toolkitPanelState.collapsed) return;
+    dragging = true;
+    moved = false;
+    ajaxToolsRuntimeState.toolkitPanelDragged = true;
+    header.classList.add('mockkit-toolkit-panel__header--dragging');
+    const rect = panel.getBoundingClientRect();
+    originLeft = rect.left;
+    originTop = rect.top;
+    startX = event.clientX;
+    startY = event.clientY;
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+    event.preventDefault();
+  });
+}
+
+function createToolkitPanel() {
+  if (toolkitPanelState.panelEl?.isConnected) {
+    return toolkitPanelState.panelEl;
+  }
+  const existing = document.getElementById(TOOLKIT_PANEL_ID);
+  if (existing) {
+    toolkitPanelState.panelEl = existing;
+    return existing;
+  }
+
+  injectToolkitStyle();
+
+  const panel = document.createElement('div');
+  panel.className = 'mockkit-toolkit-panel';
+  panel.id = TOOLKIT_PANEL_ID;
+  panel.style.display = 'none';
+
+  const header = document.createElement('div');
+  header.className = 'mockkit-toolkit-panel__header';
+  const title = document.createElement('span');
+  title.className = 'mockkit-toolkit-panel__title';
+  title.textContent = 'Toolkit';
+  const collapseBtn = document.createElement('button');
+  collapseBtn.type = 'button';
+  collapseBtn.className = 'mockkit-toolkit-panel__close';
+  collapseBtn.innerHTML = '<svg viewBox="0 0 16 16" fill="none"><path d="M3 8h10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>';
+  collapseBtn.title = 'Collapse';
+  collapseBtn.addEventListener('click', (event) => {
+    event.stopPropagation();
+    setToolkitPanelCollapsed(!toolkitPanelState.collapsed);
+  });
+  header.appendChild(title);
+  const headerActions = document.createElement('div');
+  headerActions.className = 'mockkit-toolkit-panel__header-actions';
+  headerActions.appendChild(collapseBtn);
+  header.appendChild(headerActions);
+  // Click the header (not a button) to expand when collapsed. A real drag
+  // sets panel.dataset.toolkitDragged to suppress this click (see
+  // bindToolkitPanelDrag) so dragging the compact pill never toggles expand.
+  header.addEventListener('click', () => {
+    if (toolkitPanelState.collapsed && panel.dataset.toolkitDragged !== '1') {
+      setToolkitPanelCollapsed(false);
+    }
+  });
+  panel.appendChild(header);
+
+  const body = document.createElement('div');
+  body.className = 'mockkit-toolkit-panel__body';
+
+  // Tool 1: Floating Rules — toggle shows/hides the rules list sub-panel.
+  const rulesRow = document.createElement('div');
+  rulesRow.className = 'mockkit-toolkit-panel__tool';
+  const rulesIcon = document.createElement('span');
+  rulesIcon.className = 'mockkit-toolkit-panel__tool-icon';
+  rulesIcon.innerHTML = '<svg viewBox="0 0 16 16" fill="none"><path d="M3 3h10v6a5 5 0 01-10 0V3z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>';
+  const rulesName = document.createElement('span');
+  rulesName.className = 'mockkit-toolkit-panel__tool-name';
+  rulesName.textContent = 'Floating Rules';
+  const rulesHint = document.createElement('span');
+  rulesHint.className = 'mockkit-toolkit-panel__tool-hint';
+  rulesHint.textContent = 'Mock rule list';
+  rulesName.appendChild(rulesHint);
+  const rulesSwitch = document.createElement('button');
+  rulesSwitch.type = 'button';
+  rulesSwitch.className = 'mockkit-toolkit-panel__tool-switch';
+  rulesSwitch.title = 'Show/hide the floating rules list';
+  rulesSwitch.addEventListener('click', () => {
+    setToolkitRulesOpen(!toolkitPanelState.rulesOpen);
+  });
+  rulesRow.appendChild(rulesIcon);
+  rulesRow.appendChild(rulesName);
+  rulesRow.appendChild(rulesSwitch);
+  body.appendChild(rulesRow);
+
+  // Tool 2: DOM Inspect — one-shot button, triggers pick mode.
+  const inspectRow = document.createElement('div');
+  inspectRow.className = 'mockkit-toolkit-panel__tool';
+  const inspectIcon = document.createElement('span');
+  inspectIcon.className = 'mockkit-toolkit-panel__tool-icon';
+  inspectIcon.innerHTML = '<svg viewBox="0 0 16 16" fill="none"><path d="M3 2l4.5 11 1.8-4.2L13.5 7 3 2z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" fill="none"/></svg>';
+  const inspectName = document.createElement('span');
+  inspectName.className = 'mockkit-toolkit-panel__tool-name';
+  inspectName.textContent = 'DOM Inspect';
+  const inspectHint = document.createElement('span');
+  inspectHint.className = 'mockkit-toolkit-panel__tool-hint';
+  inspectHint.textContent = 'Pick a node to inspect';
+  inspectName.appendChild(inspectHint);
+  const inspectBtn = document.createElement('button');
+  inspectBtn.type = 'button';
+  inspectBtn.className = 'mockkit-toolkit-panel__tool-btn';
+  inspectBtn.textContent = 'Inspect';
+  inspectBtn.addEventListener('click', (event) => {
+    event.stopPropagation();
+    if (domInspectorState.active && domInspectorState.mode !== 'inspect') {
+      stopDomInspector();
+    }
+    startDomInspector();
+  });
+  inspectRow.appendChild(inspectIcon);
+  inspectRow.appendChild(inspectName);
+  inspectRow.appendChild(inspectBtn);
+  body.appendChild(inspectRow);
+
+  // Tool 3: Animation Control — toggle shows/hides the animation popup.
+  const animRow = document.createElement('div');
+  animRow.className = 'mockkit-toolkit-panel__tool';
+  const animIcon = document.createElement('span');
+  animIcon.className = 'mockkit-toolkit-panel__tool-icon';
+  animIcon.innerHTML = '<svg viewBox="0 0 16 16" fill="none"><path d="M8 1v3M8 12v3M1 8h3M12 8h3M3.5 3.5l2 2M10.5 10.5l2 2M3.5 12.5l2-2M10.5 5.5l2-2" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><circle cx="8" cy="8" r="2.5" stroke="currentColor" stroke-width="1.4" fill="none"/></svg>';
+  const animName = document.createElement('span');
+  animName.className = 'mockkit-toolkit-panel__tool-name';
+  animName.textContent = 'Animation Control';
+  const animHint = document.createElement('span');
+  animHint.className = 'mockkit-toolkit-panel__tool-hint';
+  animHint.textContent = 'Pause / speed (⌘⇧S / ⌘⇧X)';
+  animName.appendChild(animHint);
+  const animSwitch = document.createElement('button');
+  animSwitch.type = 'button';
+  animSwitch.className = 'mockkit-toolkit-panel__tool-switch';
+  animSwitch.title = 'Show/hide the animation control popup';
+  animSwitch.addEventListener('click', () => {
+    setToolkitAnimationOpen(!toolkitPanelState.animationOpen);
+  });
+  animRow.appendChild(animIcon);
+  animRow.appendChild(animName);
+  animRow.appendChild(animSwitch);
+  body.appendChild(animRow);
+
+  // Tool 4: Request Sniffer — toggle shows/hides the live-capture panel.
+  const snifferRow = document.createElement('div');
+  snifferRow.className = 'mockkit-toolkit-panel__tool';
+  const snifferIcon = document.createElement('span');
+  snifferIcon.className = 'mockkit-toolkit-panel__tool-icon';
+  snifferIcon.innerHTML = '<svg viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.4" fill="none"/><circle cx="8" cy="8" r="2" stroke="currentColor" stroke-width="1.4" fill="none"/><path d="M2 8h2M12 8h2M8 2v2M8 12v2" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>';
+  const snifferName = document.createElement('span');
+  snifferName.className = 'mockkit-toolkit-panel__tool-name';
+  snifferName.textContent = 'Request Sniffer';
+  const snifferHint = document.createElement('span');
+  snifferHint.className = 'mockkit-toolkit-panel__tool-hint';
+  snifferHint.textContent = 'Live XHR/fetch capture → mock';
+  snifferName.appendChild(snifferHint);
+  const snifferSwitch = document.createElement('button');
+  snifferSwitch.type = 'button';
+  snifferSwitch.className = 'mockkit-toolkit-panel__tool-switch';
+  snifferSwitch.title = 'Show/hide the request sniffer panel';
+  snifferSwitch.addEventListener('click', () => {
+    setToolkitSnifferOpen(!toolkitPanelState.snifferOpen);
+  });
+  snifferRow.appendChild(snifferIcon);
+  snifferRow.appendChild(snifferName);
+  snifferRow.appendChild(snifferSwitch);
+  body.appendChild(snifferRow);
+
+  panel.appendChild(body);
+  bindToolkitPanelDrag(panel);
+  toolkitPanelState.panelEl = panel;
+  syncToolkitPanelUi();
+  return panel;
+}
+
+// Reflect Toolkit sub-tool states into the panel DOM (switches + hints).
+function syncToolkitPanelUi() {
+  const panel = toolkitPanelState.panelEl;
+  if (!panel) return;
+  const switches = panel.querySelectorAll('.mockkit-toolkit-panel__tool-switch');
+  if (switches[0]) switches[0].classList.toggle('is-on', toolkitPanelState.rulesOpen);
+  if (switches[1]) switches[1].classList.toggle('is-on', toolkitPanelState.animationOpen);
+  if (switches[2]) switches[2].classList.toggle('is-on', toolkitPanelState.snifferOpen);
+}
+
+// Show/hide the Toolkit master panel. Persists to storage so the workbench's
+// Toolkit switch stays in sync across reloads and iframe re-mounts. When
+// shown, restores each sub-tool's last persisted open state (rules, sniffer).
+// When hidden, hides all sub-panels too — Toolkit is their only entry.
+function setToolkitPanelVisible(visible) {
+  const panel = createToolkitPanel();
+  toolkitPanelState.visible = visible;
+  panel.style.display = visible ? 'flex' : 'none';
+  if (visible) {
+    repositionToolkitPanel();
+    watchWorkbenchForFloatingOverlays();
+    // Restore sub-tool open states from storage. Each sub-tool that was on
+    // when the user last closed Toolkit (or refreshed) re-opens automatically.
+    chrome.storage.local.get([SNIFFER_OPEN_KEY], (result) => {
+      if (result[SNIFFER_OPEN_KEY] === true && !toolkitPanelState.snifferOpen) {
+        setToolkitSnifferOpen(true);
+      }
+    });
+  } else {
+    // Hiding the Toolkit panel hides ALL sub-panels — Toolkit is their only
+    // entry point. Sub-tool open states are persisted so re-opening Toolkit
+    // restores them.
+    if (toolkitPanelState.rulesOpen) {
+      toolkitPanelState.rulesOpen = false;
+      ajaxToolsRuntimeState.floatingRulesEnabled = false;
+      if (chrome.storage?.local) {
+        chrome.storage.local.set({ [FLOATING_ENABLED_KEY]: false });
+      }
+      applyFloatingPanelState();
+    }
+    if (toolkitPanelState.snifferOpen) {
+      setSnifferPanelVisible(false);
+      // Keep snifferOpen flag true so re-opening Toolkit restores it.
+      toolkitPanelState.snifferOpen = true;
+    }
+    if (toolkitPanelState.animationOpen) {
+      setAnimationPanelVisible(false);
+      toolkitPanelState.animationOpen = true;
+    }
+    // Reset collapsed state so re-opening shows the panel expanded.
+    if (toolkitPanelState.collapsed) {
+      toolkitPanelState.collapsed = false;
+      const panel = toolkitPanelState.panelEl;
+      if (panel) panel.classList.remove('mockkit-toolkit-panel--collapsed');
+    }
+    syncToolkitPanelUi();
+  }
+  // Persist so the Global Controls Toolkit switch reflects the right state.
+  if (chrome.storage?.local) {
+    chrome.storage.local.set({ [TOOLKIT_VISIBLE_KEY]: visible });
+  }
+  // Rules panel is independent of Toolkit — no reposition needed here.
+}
+
+// Collapse/expand the Toolkit master panel. Toolkit is the host — it does NOT
+// collapse into a chip (only sub-panels do). When collapsed, it shrinks to a
+// 36px circular dot. Both collapsed and expanded states anchor to the CSS
+// default (right:24px; bottom:24px) — the panel does NOT remember a drag
+// position across collapse/expand, so toggling never lands it off-screen.
+// Drag is allowed in the expanded state only; the collapsed dot is locked to
+// the default anchor so its position is always predictable.
+function setToolkitPanelCollapsed(collapsed) {
+  toolkitPanelState.collapsed = collapsed;
+  const panel = toolkitPanelState.panelEl;
+  if (!panel) return;
+  // Clear ALL inline positioning so the panel falls back to the CSS default
+  // anchor (right:24px; bottom:24px) in both directions. This guarantees a
+  // predictable position regardless of prior drags.
+  panel.style.removeProperty('left');
+  panel.style.removeProperty('top');
+  panel.style.removeProperty('right');
+  panel.style.removeProperty('bottom');
+  // Reset the dragged flag so a future drag starts fresh from the default
+  // anchor (otherwise bindToolkitPanelDrag's mousedown would read the stale
+  // pre-collapse rect).
+  ajaxToolsRuntimeState.toolkitPanelDragged = false;
+  panel.classList.toggle('mockkit-toolkit-panel--collapsed', collapsed);
+}
+
+// Toggle the rules sub-panel. Reuses the existing floating-rules panel DOM:
+// when opened, the rules panel is shown anchored just above the Toolkit panel;
+// when closed, it is hidden. The rules panel keeps its own renderFloatingRules
+// logic intact.
+function setToolkitRulesOpen(open) {
+  toolkitPanelState.rulesOpen = open;
+  // Defer to the existing floating-rules panel machinery. We drive its enabled
+  // state through the same storage key so the workbench switch stays in sync.
+  ajaxToolsRuntimeState.floatingRulesEnabled = open;
+  if (chrome.storage?.local) {
+    chrome.storage.local.set({ [FLOATING_ENABLED_KEY]: open });
+  }
+  applyFloatingPanelState();
+  syncToolkitPanelUi();
+}
+
+// Toggle the animation sub-panel.
+function setToolkitAnimationOpen(open) {
+  toolkitPanelState.animationOpen = open;
+  setAnimationPanelVisible(open);
+  syncToolkitPanelUi();
+}
+
+// The Toolkit panel holds its ground when the workbench opens — it floats
+// above the workbench via z-index instead of dodging left.
+function repositionToolkitPanel() {
+  const panel = toolkitPanelState.panelEl;
+  if (!panel || panel.style.display === 'none') return;
+}
+
+// Listen for the workbench iframe asking to toggle the Toolkit panel.
+window.addEventListener('message', (event) => {
+  const data = event.data;
+  if (!data || data.type !== 'MOCKKIT_TOGGLE_TOOLKIT_PANEL') return;
+  const willShow = !toolkitPanelState.visible;
+  setToolkitPanelVisible(willShow);
+});
+
+
+// A top-right floating popup that drives every page animation through the Web
+// Animations API: pause/resume and scrub playback rate, so keyframes can be
+// inspected at a controlled pace. Session-only state (never persisted) so a
+// forgotten toggle cannot freeze animations on the next visit. Keyboard
+// shortcuts stay active while the master toggle is on, even if the popup is
+// hidden. The popup auto-shifts left when the main workbench slides in so it is
+// never occluded.
+const ANIMATION_SPEED_CYCLE = [1, 2, 4, 0.5];
+const ANIMATION_STYLE_ID = 'mockkit-animation-control-style';
+let animationControlState = {
+  panelEl: null,        // popup root element
+  enabled: false,       // master toggle — when true, animations are coerced
+  paused: false,        // whether animations are force-paused
+  speedIndex: 0,        // index into ANIMATION_SPEED_CYCLE
+  originalStates: null, // WeakMap<Animation, { rate, playState }> for restore
+  pollTimer: null,      // interval id that re-applies control to new animations
+  styleObserver: null,  // MutationObserver on the workbench container (reposition)
+  keyListenerBound: false,
+  collapsed: false,     // when true, only the header bar is visible
+};
+
+function getAnimationSpeed() {
+  return ANIMATION_SPEED_CYCLE[animationControlState.speedIndex];
+}
+
+// Inject the popup stylesheet once. Uses a dedicated <style> element (not the
+// shared injectedStyle helper, which dedupes to a single global style block).
+function injectAnimationStyle() {
+  if (document.getElementById(ANIMATION_STYLE_ID)) return;
+  const style = document.createElement('style');
+  style.id = ANIMATION_STYLE_ID;
+  style.textContent = `
+    .mockkit-animation-control {
+      position: fixed !important;
+      top: 24px !important;
+      right: 24px !important;
+      width: 232px !important;
+      display: none;
+      flex-direction: column;
+      z-index: 2147483647 !important;
+      border: 1px solid rgb(124 58 237 / 22%) !important;
+      border-radius: 16px !important;
+      box-shadow: 0 20px 60px rgb(37 54 46 / 18%), 0 4px 12px rgb(37 54 46 / 8%) !important;
+      background: linear-gradient(160deg, rgb(255 255 255 / 96%), rgb(245 243 255 / 94%)) !important;
+      backdrop-filter: blur(20px);
+      overflow: hidden;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      font-size: 12px;
+      color: #1b2822;
+      transition: right 0.3s ease;
+    }
+    .mockkit-animation-control__header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 11px 14px;
+      border-bottom: 1px solid rgb(124 58 237 / 10%);
+      font-weight: 700;
+      font-size: 13px;
+      background: linear-gradient(135deg, rgb(255 255 255 / 80%), rgb(247 243 255 / 70%));
+      flex-shrink: 0;
+      user-select: none;
+      letter-spacing: 0.02em;
+    }
+    .mockkit-animation-control__title { display: flex; align-items: center; gap: 6px; }
+    .mockkit-animation-control__title::before {
+      content: '';
+      width: 6px; height: 6px; border-radius: 999px;
+      background: #7c3aed; flex-shrink: 0;
+    }
+    .mockkit-animation-control__close {
+      flex-shrink: 0;
+      width: 24px; height: 24px;
+      display: flex; align-items: center; justify-content: center;
+      border: none; border-radius: 8px;
+      background: transparent; cursor: pointer;
+      color: rgb(27 40 34 / 40%); line-height: 1;
+      transition: all 0.15s ease;
+      padding: 0;
+    }
+    .mockkit-animation-control__close svg {
+      width: 14px; height: 14px;
+      display: block;
+    }
+    .mockkit-animation-control__close:hover { background: rgb(124 58 237 / 12%); color: #7c3aed; }
+    .mockkit-animation-control__body { padding: 12px 14px 14px; display: flex; flex-direction: column; gap: 12px; }
+    .mockkit-animation-control__row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+    .mockkit-animation-control__label { font-weight: 600; font-size: 12px; }
+    .mockkit-animation-control__switch {
+      position: relative;
+      width: 38px; height: 22px; border-radius: 999px;
+      border: none; cursor: pointer; padding: 0;
+      background: rgb(27 40 34 / 22%);
+      transition: background 0.2s ease;
+      flex-shrink: 0;
+    }
+    .mockkit-animation-control__switch::after {
+      content: '';
+      position: absolute; top: 2px; left: 2px;
+      width: 18px; height: 18px; border-radius: 50%;
+      background: #fff; box-shadow: 0 1px 3px rgb(0 0 0 / 30%);
+      transition: transform 0.2s ease;
+    }
+    .mockkit-animation-control__switch.is-on { background: #7c3aed; }
+    .mockkit-animation-control__switch.is-on::after { transform: translateX(16px); }
+    .mockkit-animation-control__pause {
+      flex: 1;
+      border: 1px solid rgb(124 58 237 / 30%);
+      border-radius: 8px;
+      padding: 7px 10px;
+      background: #fff;
+      cursor: pointer;
+      font-size: 12px; font-weight: 600;
+      color: #7c3aed;
+      transition: all 0.15s ease;
+    }
+    .mockkit-animation-control__pause:hover { background: rgb(124 58 237 / 10%); }
+    .mockkit-animation-control__pause:disabled { opacity: 0.4; cursor: not-allowed; }
+    .mockkit-animation-control__pause.is-paused { background: #7c3aed; color: #fff; border-color: #7c3aed; }
+    .mockkit-animation-control__speeds { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+    .mockkit-animation-control__speed {
+      border: 1px solid rgb(27 40 34 / 12%);
+      border-radius: 8px;
+      padding: 6px 0;
+      background: #fff;
+      cursor: pointer;
+      font-size: 12px; font-weight: 600;
+      color: rgb(27 40 34 / 65%);
+      transition: all 0.15s ease;
+    }
+    .mockkit-animation-control__speed:hover:not(:disabled) { border-color: rgb(124 58 237 / 45%); color: #7c3aed; }
+    .mockkit-animation-control__speed:disabled { opacity: 0.4; cursor: not-allowed; }
+    .mockkit-animation-control__speed.is-active { background: #7c3aed; color: #fff; border-color: #7c3aed; }
+    .mockkit-animation-control__status {
+      font-size: 11px; font-weight: 600;
+      color: rgb(27 40 34 / 55%);
+      padding: 4px 8px; border-radius: 999px;
+      background: rgb(27 40 34 / 5%);
+      text-align: center;
+    }
+    .mockkit-animation-control__status.is-on { background: rgb(124 58 237 / 12%); color: #7c3aed; }
+    .mockkit-animation-control__hint {
+      font-size: 10.5px; line-height: 1.5;
+      color: rgb(27 40 34 / 45%);
+      border-top: 1px solid rgb(27 40 34 / 6%);
+      padding-top: 10px;
+    }
+    .mockkit-animation-control__hint kbd {
+      font-family: Menlo, Monaco, Consolas, monospace;
+      font-size: 10px;
+      padding: 1px 4px; border-radius: 4px;
+      background: rgb(27 40 34 / 6%);
+      border: 1px solid rgb(27 40 34 / 10%);
+    }
+    /* Collapsed state: hide the body, keep only the header bar. */
+    .mockkit-animation-control--collapsed {
+      width: auto !important;
+    }
+    .mockkit-animation-control--collapsed .mockkit-animation-control__body {
+      display: none !important;
+    }
+  `;
+  document.documentElement.appendChild(style);
+}
+
+// Cache and override every live animation to reflect the current control
+// state. Safe to call repeatedly: each animation's original state is cached
+// only once, so later passes merely re-assert the desired rate/playState.
+function applyAnimationControl() {
+  if (!animationControlState.enabled) return;
+  if (!animationControlState.originalStates) {
+    animationControlState.originalStates = new WeakMap();
+  }
+  const speed = getAnimationSpeed();
+  // document.getAnimations() covers CSS animations, CSS transitions, and
+  // element.animate() instances — everything the page is currently animating.
+  const animations = document.getAnimations();
+  for (const anim of animations) {
+    if (!animationControlState.originalStates.has(anim)) {
+      // Capture the page's original intent before any override, so disable can
+      // restore it verbatim (including a CSS-paused animation staying paused).
+      animationControlState.originalStates.set(anim, {
+        rate: anim.playbackRate,
+        playState: anim.playState,
+      });
+    }
+    const original = animationControlState.originalStates.get(anim);
+    // Effective rate multiplies the original, preserving author intent while
+    // letting the user scrub faster or slower for keyframe inspection.
+    anim.playbackRate = original.rate * speed;
+    if (animationControlState.paused) {
+      anim.pause();
+    } else {
+      // Don't replay animations that were already finished/idle when captured —
+      // calling play() on them would restart from the beginning, which is a
+      // surprising side effect for a debug toggle.
+      if (original.playState !== 'finished' && original.playState !== 'idle') {
+        anim.play();
+      }
+    }
+  }
+}
+
+// Restore every controlled animation to its pre-control state.
+function restoreAnimations() {
+  if (!animationControlState.originalStates) return;
+  const animations = document.getAnimations();
+  for (const anim of animations) {
+    const original = animationControlState.originalStates.get(anim);
+    if (!original) continue;
+    anim.playbackRate = original.rate;
+    // Only touch playState for animations that were actively playing or
+    // explicitly paused. Finished/idle ones are left untouched so we never
+    // accidentally replay them on restore.
+    if (original.playState === 'paused') {
+      anim.pause();
+    } else if (original.playState !== 'finished' && original.playState !== 'idle') {
+      anim.play();
+    }
+  }
+  animationControlState.originalStates = null;
+}
+
+function setAnimationEnabled(next) {
+  animationControlState.enabled = next;
+  if (next) {
+    applyAnimationControl();
+    // Poll for animations created AFTER enable (CSS animations triggered by
+    // later interactions, lazy element.animate calls, etc.). 800ms is cheap
+    // enough not to burden the page while debugging.
+    if (!animationControlState.pollTimer) {
+      animationControlState.pollTimer = setInterval(applyAnimationControl, 800);
+    }
+  } else {
+    if (animationControlState.pollTimer) {
+      clearInterval(animationControlState.pollTimer);
+      animationControlState.pollTimer = null;
+    }
+    restoreAnimations();
+    // Ensure the rAF patch is lifted when control is fully disabled, so the
+    // page's JS animation loops resume even if pause was left on.
+    if (animationControlState.paused) {
+      animationControlState.paused = false;
+    }
+    postMessage({
+      type: 'ajaxTools',
+      to: 'pageScript',
+      key: 'animationPaused',
+      value: false,
+    }, '*');
+  }
+  syncAnimationPanelUi();
+}
+
+function setAnimationPaused(next) {
+  animationControlState.paused = next;
+  applyAnimationControl();
+  // Relay to the page script so JS-driven (rAF) animation loops are also
+  // frozen/resumed. WAAPI only covers CSS animations/transitions; without
+  // this, canvas/WebGL/GSAP/React-rAF animations would keep playing.
+  postMessage({
+    type: 'ajaxTools',
+    to: 'pageScript',
+    key: 'animationPaused',
+    value: next,
+  }, '*');
+  syncAnimationPanelUi();
+}
+
+function cycleAnimationSpeed() {
+  animationControlState.speedIndex = (animationControlState.speedIndex + 1) % ANIMATION_SPEED_CYCLE.length;
+  applyAnimationControl();
+  syncAnimationPanelUi();
+}
+
+function setAnimationSpeedIndex(index) {
+  animationControlState.speedIndex = index;
+  applyAnimationControl();
+  syncAnimationPanelUi();
+}
+
+// Reflect the current state into the popup DOM. Queries by class so it
+// survives panel rebuilds (same pattern as syncInspectorEntryButtons).
+function syncAnimationPanelUi() {
+  const panel = animationControlState.panelEl;
+  if (!panel) return;
+  const body = panel.querySelector('.mockkit-animation-control__body');
+  if (body) body.classList.toggle('is-enabled', animationControlState.enabled);
+
+  const sw = panel.querySelector('.mockkit-animation-control__switch');
+  if (sw) sw.classList.toggle('is-on', animationControlState.enabled);
+
+  const pauseBtn = panel.querySelector('.mockkit-animation-control__pause');
+  if (pauseBtn) {
+    pauseBtn.textContent = animationControlState.paused ? '▶  Resume' : '⏸  Pause';
+    pauseBtn.classList.toggle('is-paused', animationControlState.paused);
+    pauseBtn.disabled = !animationControlState.enabled;
+  }
+
+  const speedBtns = panel.querySelectorAll('.mockkit-animation-control__speed');
+  speedBtns.forEach((btn) => {
+    const val = Number(btn.dataset.speed);
+    btn.classList.toggle('is-active', val === getAnimationSpeed());
+    btn.disabled = !animationControlState.enabled;
+  });
+
+  const status = panel.querySelector('.mockkit-animation-control__status');
+  if (status) {
+    const label = animationControlState.enabled
+      ? (animationControlState.paused ? 'Paused' : `${getAnimationSpeed()}× speed`)
+      : 'Off';
+    status.textContent = label;
+    status.classList.toggle('is-on', animationControlState.enabled);
+  }
+}
+
+// The animation popup stays anchored to the top-right corner regardless of
+// whether the workbench is open — it floats above the workbench via z-index.
+function repositionAnimationPanel() {
+  const panel = animationControlState.panelEl;
+  if (!panel || panel.style.display === 'none') return;
+  panel.style.right = '24px';
+}
+
+// Rules panel positioning is fully independent of every other floating
+// overlay (Toolkit, Sniffer, Animation, workbench). It stays at its default
+// bottom-right anchor (right:24px, bottom:24px from CSS) and only moves when
+// the user drags it (floatingPanelDragged). Repositioning is a no-op here —
+// kept as a hook so callers (resize, workbench observer, panel toggles) do
+// not need to special-case the rules panel.
+function repositionFloatingRulesPanel() {
+  const panel = ajaxToolsRuntimeState.floatingPanel;
+  if (!panel || panel.style.display === 'none') return;
+  if (ajaxToolsRuntimeState.floatingPanelDragged) return;
+  // Reset to the CSS-defined default anchor (clear any inline bottom set by
+  // legacy stacking logic so the !important base style takes over).
+  panel.style.removeProperty('bottom');
+  panel.style.removeProperty('left');
+  panel.style.removeProperty('top');
+  panel.style.removeProperty('right');
+}
+
+// Reposition every floating overlay (e.g. the rules panel stacking above the
+// Toolkit). Overlays no longer dodge the workbench — they float above it via
+// z-index. Called by the workbench style/class observer and on resize.
+function repositionFloatingOverlays() {
+  repositionToolkitPanel();
+  repositionAnimationPanel();
+  repositionFloatingRulesPanel();
+  repositionSnifferPanel();
+}
+
+// Watch the workbench container's inline style (transform toggles on open/close)
+// and reposition the floating overlays in lockstep. Registered once, on first
+// show of either overlay.
+function watchWorkbenchForFloatingOverlays() {
+  if (animationControlState.styleObserver) return;
+  const container = ajaxToolsRuntimeState.panelContainer;
+  if (!container) return;
+  animationControlState.styleObserver = new MutationObserver(repositionFloatingOverlays);
+  animationControlState.styleObserver.observe(container, {
+    attributes: true,
+    attributeFilter: ['style', 'class'],
+  });
+  window.addEventListener('resize', repositionFloatingOverlays);
+}
+
+function setAnimationPanelVisible(visible) {
+  const panel = createAnimationControlPanel();
+  panel.style.display = visible ? 'flex' : 'none';
+  if (visible) {
+    repositionAnimationPanel();
+    watchWorkbenchForFloatingOverlays();
+  }
+  // Keep the Toolkit panel's Animation toggle in sync when the popup is
+  // dismissed via its own close button (×) or the ⌘⇧S/⌘⇧X shortcuts.
+  if (!visible && toolkitPanelState.animationOpen) {
+    toolkitPanelState.animationOpen = false;
+    syncToolkitPanelUi();
+  }
+  // Clear collapsed state when the panel is hidden so no dock chip lingers.
+  if (!visible && animationControlState.collapsed) {
+    animationControlState.collapsed = false;
+    setPanelCollapsedInDock('animation', false);
+  }
+}
+
+// Collapse/expand the animation popup. When collapsed, the panel hides
+// entirely and a chip appears in the shared collapsed dock. Session-only state.
+function setAnimationPanelCollapsed(collapsed) {
+  animationControlState.collapsed = collapsed;
+  const panel = animationControlState.panelEl;
+  if (!panel) return;
+  // Only hide when the panel is currently visible (display !== 'none').
+  if (panel.style.display !== 'none') {
+    panel.style.display = collapsed ? 'none' : 'flex';
+  }
+  setPanelCollapsedInDock('animation', collapsed);
+}
+
+function createAnimationControlPanel() {
+  if (animationControlState.panelEl?.isConnected) {
+    return animationControlState.panelEl;
+  }
+  const existing = document.getElementById('mockkit-animation-control');
+  if (existing) {
+    animationControlState.panelEl = existing;
+    return existing;
+  }
+
+  injectAnimationStyle();
+
+  const panel = document.createElement('div');
+  panel.className = 'mockkit-animation-control';
+  panel.id = 'mockkit-animation-control';
+  panel.style.display = 'none';
+
+  const header = document.createElement('div');
+  header.className = 'mockkit-animation-control__header';
+  const title = document.createElement('span');
+  title.className = 'mockkit-animation-control__title';
+  title.textContent = 'Animation Control';
+  const closeBtn = document.createElement('button');
+  closeBtn.type = 'button';
+  closeBtn.className = 'mockkit-animation-control__close';
+  closeBtn.innerHTML = '<svg viewBox="0 0 16 16" fill="none"><path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>';
+  closeBtn.title = 'Hide popup (animation state is kept)';
+  closeBtn.addEventListener('click', () => setAnimationPanelVisible(false));
+  const collapseBtn = document.createElement('button');
+  collapseBtn.type = 'button';
+  collapseBtn.className = 'mockkit-animation-control__close';
+  collapseBtn.innerHTML = '<svg viewBox="0 0 16 16" fill="none"><path d="M3 8h10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>';
+  collapseBtn.title = 'Collapse';
+  collapseBtn.addEventListener('click', () => setAnimationPanelCollapsed(!animationControlState.collapsed));
+  header.appendChild(title);
+  const headerActions = document.createElement('div');
+  headerActions.style.display = 'flex';
+  headerActions.style.gap = '2px';
+  headerActions.appendChild(collapseBtn);
+  headerActions.appendChild(closeBtn);
+  header.appendChild(headerActions);
+  panel.appendChild(header);
+
+  const body = document.createElement('div');
+  body.className = 'mockkit-animation-control__body';
+
+  // Enable row: master toggle. While off, all other controls are disabled.
+  const enableRow = document.createElement('div');
+  enableRow.className = 'mockkit-animation-control__row';
+  const enableLabel = document.createElement('span');
+  enableLabel.className = 'mockkit-animation-control__label';
+  enableLabel.textContent = 'Enable Control';
+  const enableSwitch = document.createElement('button');
+  enableSwitch.type = 'button';
+  enableSwitch.className = 'mockkit-animation-control__switch';
+  enableSwitch.title = 'Take over page animations';
+  enableSwitch.addEventListener('click', () => setAnimationEnabled(!animationControlState.enabled));
+  enableRow.appendChild(enableLabel);
+  enableRow.appendChild(enableSwitch);
+  body.appendChild(enableRow);
+
+  // Pause row: freeze/resume all animations at once.
+  const pauseRow = document.createElement('div');
+  pauseRow.className = 'mockkit-animation-control__row';
+  const pauseBtn = document.createElement('button');
+  pauseBtn.type = 'button';
+  pauseBtn.className = 'mockkit-animation-control__pause';
+  pauseBtn.textContent = '⏸  Pause';
+  pauseBtn.addEventListener('click', () => setAnimationPaused(!animationControlState.paused));
+  pauseRow.appendChild(pauseBtn);
+  body.appendChild(pauseRow);
+
+  // Speed row: direct selection of a fixed gear.
+  const speedRow = document.createElement('div');
+  speedRow.className = 'mockkit-animation-control__row';
+  const speedLabel = document.createElement('span');
+  speedLabel.className = 'mockkit-animation-control__label';
+  speedLabel.textContent = 'Speed';
+  speedRow.appendChild(speedLabel);
+  body.appendChild(speedRow);
+  const speeds = document.createElement('div');
+  speeds.className = 'mockkit-animation-control__speeds';
+  ANIMATION_SPEED_CYCLE.forEach((value, index) => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'mockkit-animation-control__speed';
+    btn.dataset.speed = String(value);
+    btn.textContent = `${value}×`;
+    btn.addEventListener('click', () => setAnimationSpeedIndex(index));
+    speeds.appendChild(btn);
+  });
+  body.appendChild(speeds);
+
+  // Status pill: at-a-glance current state.
+  const status = document.createElement('div');
+  status.className = 'mockkit-animation-control__status';
+  status.textContent = 'Off';
+  body.appendChild(status);
+
+  // Shortcut hint.
+  const hint = document.createElement('div');
+  hint.className = 'mockkit-animation-control__hint';
+  hint.innerHTML = `<kbd>⌘⇧S</kbd> pause/resume &nbsp; <kbd>⌘⇧X</kbd> cycle speed`;
+  body.appendChild(hint);
+
+  panel.appendChild(body);
+  animationControlState.panelEl = panel;
+  syncAnimationPanelUi();
+  return panel;
+}
+
+// Global keyboard shortcuts. Self-gate on the master toggle so they are inert
+// when control is off. Registered once (top frame only).
+function onAnimationControlKeydown(event) {
+  if (!animationControlState.enabled) return;
+  const target = event.target;
+  // Don't hijack shortcuts while the user is typing in a form field.
+  if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) {
+    return;
+  }
+  if (!(event.metaKey && event.shiftKey)) return;
+  const key = event.key;
+  // ⌘⇧S → toggle pause/resume
+  if (key === 'S' || key === 's') {
+    event.preventDefault();
+    setAnimationPaused(!animationControlState.paused);
+    return;
+  }
+  // ⌘⇧X → cycle playback speed through the fixed gears
+  if (key === 'X' || key === 'x') {
+    event.preventDefault();
+    cycleAnimationSpeed();
+    return;
+  }
+}
+
+if (window.self === window.top && !animationControlState.keyListenerBound) {
+  animationControlState.keyListenerBound = true;
+  document.addEventListener('keydown', onAnimationControlKeydown, true);
+}
+
 function mountPanelContainer() {
   if (window.self !== window.top) {
     return true;
@@ -4046,14 +6092,52 @@ function mountPanelContainer() {
     mountTarget.appendChild(container);
   }
 
-  // Mount the floating rules panel independently of the main side panel —
-  // its visibility is gated only by the master toggle (stored in
-  // ajaxToolsFloatingRulesEnabled) and its own collapse state.
+  // Mount the Animation Control popup (Toolkit sub-tool). Hidden by default;
+  // shown on demand from the Toolkit panel's Animation toggle. Mounted in the
+  // top frame only (mountPanelContainer early-returns in subframes).
+  const animationPanel = createAnimationControlPanel();
+  if (!animationPanel.isConnected) {
+    mountTarget.appendChild(animationPanel);
+  }
+
+  // Mount the Toolkit master panel (consolidates Floating Rules / DOM Inspect /
+  // Animation Control / Request Sniffer into one draggable bottom-right panel).
+  // Hidden by default; shown on demand from the OperationsRail "Toolkit" switch.
+  const toolkitPanel = createToolkitPanel();
+  if (!toolkitPanel.isConnected) {
+    mountTarget.appendChild(toolkitPanel);
+  }
+  // Hydrate Toolkit visibility from storage so the panel re-appears after a
+  // page reload if the user left it on.
+  chrome.storage.local.get([TOOLKIT_VISIBLE_KEY], (result) => {
+    if (result[TOOLKIT_VISIBLE_KEY] === true) {
+      setToolkitPanelVisible(true);
+    }
+  });
+
+  // Mount the Request Sniffer panel (Toolkit sub-tool). Hidden by default;
+  // shown on demand from the Toolkit panel's Sniffer toggle.
+  const snifferPanel = createSnifferPanel();
+  if (!snifferPanel.isConnected) {
+    mountTarget.appendChild(snifferPanel);
+  }
+
+  // Mount the floating rules panel LAST so it stacks above all other
+  // bottom-right overlays (Toolkit/Sniffer) at the same z-index. Its
+  // positioning is fully independent — default bottom-right anchor, only
+  // moves when the user drags it.
   const floatingPanel = createFloatingRulesPanel();
   if (!floatingPanel.isConnected) {
     mountTarget.appendChild(floatingPanel);
   }
   loadFloatingRulesState(() => renderFloatingRules());
+
+  // Watch the workbench's open/close transitions + window resize so floating
+  // overlays can reposition themselves (e.g. the rules panel stacking above
+  // the Toolkit). Overlays no longer dodge the workbench — they float above
+  // it via z-index — but the hook is kept for stacking/resize repositioning.
+  watchWorkbenchForFloatingOverlays();
+  repositionFloatingOverlays();
 
   if (ajaxToolsRuntimeState.panelMountObserver) {
     ajaxToolsRuntimeState.panelMountObserver.disconnect();
@@ -4107,13 +6191,14 @@ chrome.storage.onChanged.addListener(function (changes, namespace) {
         to: 'pageScript',
         key,
         value: newValue,
-      });
+      }, '*');
     }
     // Global interceptor switch: forward to the page script and mirror it
     // locally so the floating rules panel can hide when interception pauses.
     if (key === 'ajaxToolsSwitchOn') {
       ajaxToolsRuntimeState.ajaxToolsSwitchOn = newValue !== false;
       applyFloatingPanelState();
+      syncSnifferInterceptSwitch();
     }
     // Domain whitelist: forward to the page script so the mock layer can
     // gate XHR/fetch override, and update the floating panel visibility.
@@ -4126,7 +6211,7 @@ chrome.storage.onChanged.addListener(function (changes, namespace) {
         to: 'pageScript',
         key: 'domainWhitelist',
         value: next,
-      });
+      }, '*');
     }
     // Re-render the floating rules panel when rule data or the selected
     // group changes so it stays in sync with the React workbench.
@@ -4138,11 +6223,30 @@ chrome.storage.onChanged.addListener(function (changes, namespace) {
     if (key === FLOATING_ENABLED_KEY) {
       ajaxToolsRuntimeState.floatingRulesEnabled = newValue !== false;
       applyFloatingPanelState();
+      // Mirror into the Toolkit panel's rules sub-toggle so the switch stays
+      // in sync when the state is changed from elsewhere (e.g. the workbench's
+      // legacy Floating Rules switch, if still wired).
+      toolkitPanelState.rulesOpen = newValue !== false;
+      syncToolkitPanelUi();
     }
-    // Collapse state can be driven from elsewhere; keep the DOM in sync.
+    // Collapse state can be driven from elsewhere; keep the DOM + dock in sync.
     if (key === FLOATING_COLLAPSED_KEY) {
       ajaxToolsRuntimeState.floatingRulesCollapsed = newValue === true;
       applyFloatingPanelState();
+      setPanelCollapsedInDock('rules', newValue === true);
+    }
+    // Toolkit master panel visibility — driven by the Global Controls Toolkit
+    // switch in the workbench. Show/hide the Toolkit panel accordingly.
+    if (key === TOOLKIT_VISIBLE_KEY) {
+      setToolkitPanelVisible(newValue === true);
+    }
+    // Sniffer sub-toggle persistence — only meaningful when Toolkit is on.
+    // If Toolkit is visible, reflect the state into the sniffer panel.
+    if (key === SNIFFER_OPEN_KEY && toolkitPanelState.visible) {
+      const open = newValue === true;
+      if (open !== toolkitPanelState.snifferOpen) {
+        setToolkitSnifferOpen(open);
+      }
     }
   }
 });
