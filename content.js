@@ -3532,6 +3532,15 @@ function bindFloatingPanelDrag(panel) {
       document.addEventListener('mouseup', onUp);
       event.preventDefault();
     });
+
+    // Double-click the header (away from buttons) to snap the panel back to
+    // its default top-right anchor without a page refresh. Position is in-memory
+    // only, so without this the only reset path was reloading the tab.
+    handle.addEventListener('dblclick', (event) => {
+      if (event.target.closest('button')) return;
+      ajaxToolsRuntimeState.floatingPanelDragged = false;
+      repositionFloatingRulesPanel();
+    });
   });
 }
 

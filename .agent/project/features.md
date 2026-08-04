@@ -126,6 +126,13 @@ minimize/collapse state — the minimize-to-mock-grid module has been removed.
 repositionable. Drag position is in-memory only (resets to the default
 top-right anchor on refresh).
 
+**Double-click to reset position:** double-clicking the header (away from
+buttons) snaps the panel back to its default top-right anchor without a page
+refresh — clears the `floatingPanelDragged` flag and delegates to
+`repositionFloatingRulesPanel` so the `!important` CSS default takes over.
+Useful because the drag position is in-memory only; without this the only
+reset path was reloading the tab.
+
 **Positioning (top-right default):** the rules panel defaults to the top-right
 anchor (`right:24px; top:24px`), separate from the Toolkit master panel which
 stays bottom-right — the two never overlap. It only moves when the user drags
