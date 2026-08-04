@@ -496,41 +496,107 @@ function currentHostWhitelisted() {
   return isHostnameWhitelisted(window.location.hostname, ajax_tools_space.domainWhitelist);
 }
 
-// --- Animation pause: requestAnimationFrame neutralization ------------------
+// --- Animation pause: rAF + setTimeout + setInterval neutralization ----------
 // The Web Animations API (used by content.js) can pause CSS animations and
-// transitions, but it CANNOT reach animations driven by JS rAF loops
-// (canvas, WebGL, GSAP, React rAF loops, hand-rolled frame loops). To make
-// "pause all animations" actually freeze the page, we override
-// requestAnimationFrame in the PAGE context to a drop-only stub while paused.
-// Callbacks are dropped (not queued) so unpausing doesn't fire a burst of
-// stale frames. cancelAnimationFrame becomes a no-op on the fake IDs.
-const originalRequestAnimationFrame = window.requestAnimationFrame
-  ? window.requestAnimationFrame.bind(window)
-  : null;
-const originalCancelAnimationFrame = window.cancelAnimationFrame
-  ? window.cancelAnimationFrame.bind(window)
-  : null;
-let rafFakeIdCounter = 1;
-let rafPatched = false;
+// transitions, but it CANNOT reach animations driven by JS loops:
+//  - requestAnimationFrame loops (canvas, WebGL, hand-rolled frame loops)
+//  - setTimeout / setInterval loops (carousels, GSAP tickers, React state
+//    polling, banner rotators — the most common "轮播" driver)
+//
+// Naively replacing `window.setTimeout` only catches callers who go through
+// `window.setTimeout` at call time. Many libraries CACHE the reference at
+// init (`const t = window.setTimeout`) and call the cached fn afterwards,
+// bypassing any later replacement. To cover both cases we install WRAPPERS
+// via `Object.defineProperty` at the very top of the page script (before any
+// library has a chance to cache). The wrapper checks a `timerPaused` flag on
+// every call: when paused, it queues the callback (rAF/setTimeout) or
+// registers the interval (setInterval) instead of scheduling; when resumed,
+// queued callbacks are replayed via the real native timers.
+const nativeRAF = window.requestAnimationFrame ? window.requestAnimationFrame.bind(window) : null;
+const nativeCAF = window.cancelAnimationFrame ? window.cancelAnimationFrame.bind(window) : null;
+const nativeST = window.setTimeout ? window.setTimeout.bind(window) : null;
+const nativeCT = window.clearTimeout ? window.clearTimeout.bind(window) : null;
+const nativeSI = window.setInterval ? window.setInterval.bind(window) : null;
+const nativeCI = window.clearInterval ? window.clearInterval.bind(window) : null;
 
-function patchedRequestAnimationFrame() {
-  // Return a fake ID so callers can pass it to cancelAnimationFrame without
-  // throwing. The callback is intentionally never invoked.
-  return rafFakeIdCounter++;
+let timerPaused = false;
+let timerFakeIdCounter = 1;
+// Pending one-shot callbacks queued during pause (rAF + setTimeout). Keyed by
+// fake ID. On resume, replayed via the real native timers.
+const pendingOneShots = new Map();
+// Pending intervals queued during pause. Keyed by fake ID. On resume,
+// re-installed via native setInterval.
+const pendingIntervals = new Map();
+
+function wrappedRAF(cb) {
+  if (!timerPaused) return nativeRAF ? nativeRAF(cb) : 0;
+  const id = timerFakeIdCounter++;
+  pendingOneShots.set(id, { kind: 'raf', cb, args: [] });
+  return id;
 }
-function patchedCancelAnimationFrame() {
-  // No-op: there is nothing to cancel because we never scheduled anything.
+function wrappedCAF(id) {
+  pendingOneShots.delete(id);
+  if (nativeCAF) nativeCAF(id);
+}
+function wrappedST(cb, delay, ...args) {
+  if (!timerPaused) return nativeST ? nativeST(cb, delay, ...args) : 0;
+  const id = timerFakeIdCounter++;
+  pendingOneShots.set(id, { kind: 'timeout', cb, args, delay: Math.max(0, delay || 0) });
+  return id;
+}
+function wrappedCT(id) {
+  pendingOneShots.delete(id);
+  if (nativeCT) nativeCT(id);
+}
+function wrappedSI(cb, delay, ...args) {
+  if (!timerPaused) return nativeSI ? nativeSI(cb, delay, ...args) : 0;
+  const id = timerFakeIdCounter++;
+  pendingIntervals.set(id, { cb, args, delay: Math.max(0, delay || 0) });
+  return id;
+}
+function wrappedCI(id) {
+  pendingIntervals.delete(id);
+  if (nativeCI) nativeCI(id);
 }
 
-function applyRafPatch(paused) {
-  if (paused && !rafPatched) {
-    window.requestAnimationFrame = patchedRequestAnimationFrame;
-    window.cancelAnimationFrame = patchedCancelAnimationFrame;
-    rafPatched = true;
-  } else if (!paused && rafPatched) {
-    if (originalRequestAnimationFrame) window.requestAnimationFrame = originalRequestAnimationFrame;
-    if (originalCancelAnimationFrame) window.cancelAnimationFrame = originalCancelAnimationFrame;
-    rafPatched = false;
+// Install wrappers as writable properties so libraries that cache
+// `window.setTimeout` get our wrapper (not the native fn). The wrapper
+// checks `timerPaused` on every call, so even a cached reference respects
+// the pause. This is installed at page-script load (document_start, before
+// most page JS) so the wrappers are in place before any library caches them.
+function installTimerWrappers() {
+  try {
+    window.requestAnimationFrame = wrappedRAF;
+    window.cancelAnimationFrame = wrappedCAF;
+    window.setTimeout = wrappedST;
+    window.clearTimeout = wrappedCT;
+    window.setInterval = wrappedSI;
+    window.clearInterval = wrappedCI;
+  } catch (e) {
+    // Some embedders lock these properties; fall back silently — the pause
+    // will only cover rAF loops in that case.
+  }
+}
+installTimerWrappers();
+
+function applyTimerPatch(paused) {
+  timerPaused = paused;
+  if (!paused) {
+    // Resume: replay queued one-shots via the real native timers, and
+    // re-install queued intervals. Wrappers are already in place, but since
+    // timerPaused is now false they'll pass through to native scheduling.
+    for (const [id, entry] of pendingOneShots) {
+      if (entry.kind === 'raf') {
+        if (nativeRAF) nativeRAF(entry.cb);
+      } else {
+        if (nativeST) nativeST(entry.cb, entry.delay, ...entry.args);
+      }
+    }
+    pendingOneShots.clear();
+    for (const [id, entry] of pendingIntervals) {
+      if (nativeSI) nativeSI(entry.cb, entry.delay, ...entry.args);
+    }
+    pendingIntervals.clear();
   }
 }
 
@@ -564,10 +630,12 @@ window.addEventListener("message", function (event) {
     // logDev('【pageScripts/index.js】', data);
     ajax_tools_space[data.key] = data.value;
     // Animation pause toggle from content.js's Animation Control module.
-    // WAAPI handles CSS animations/transitions; the rAF patch below covers
-    // JS driven animation loops so pause truly freezes the whole page.
+    // WAAPI handles CSS animations/transitions; the timer patch below covers
+    // JS driven animation loops (rAF + setTimeout + setInterval, e.g.
+    // carousels/轮播, GSAP tickers, canvas loops) so pause truly freezes the
+    // whole page.
     if (data.key === 'animationPaused') {
-      applyRafPatch(data.value === true);
+      applyTimerPatch(data.value === true);
     }
     // Re-evaluate hook installation on every state change.
     syncHooks();

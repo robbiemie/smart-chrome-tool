@@ -459,11 +459,17 @@ panel mounted in top frame by `mountPanelContainer`. Inside the Toolkit panel:
   in a WeakMap, then sets `playbackRate = original * speed` and `pause()`/`play()`.
   An 800ms `setInterval` re-applies to catch animations created after enable.
   Pause also relays `animationPaused` to the page script, which swaps
-  `window.requestAnimationFrame` for a drop-only stub so JS animation loops
-  freeze too; disabling control restores the original rAF. Keyboard shortcuts
-  (registered once, top frame, capture phase) self-gate on the master toggle:
-  `⌘⇧S` toggles pause, `⌘⇧X` cycles speed through `[1, 2, 4, 0.5]`. Shortcuts
-  are ignored while focus is in an input/textarea/contenteditable.
+  `window.requestAnimationFrame` / `setTimeout` / `setInterval` (and their
+  cancel counterparts) for queueing stubs so JS animation loops of ALL kinds
+  freeze — rAF loops (canvas/WebGL), setTimeout chains, and setInterval
+  drivers (carousels/轮播, GSAP tickers, banner rotators). Callbacks
+  scheduled during the pause are QUEUED (not dropped) so resuming replays
+  them without losing frames; `applyTimerPatch(false)` restores the originals
+  and re-schedules queued callbacks via the real timers. Disabling control
+  restores the originals too. Keyboard shortcuts (registered once, top frame,
+  capture phase) self-gate on the master toggle: `⌘⇧K` toggles pause, `⌘⇧X`
+  cycles speed through `[1, 2, 4, 0.5]`. Shortcuts are ignored while focus is
+  in an input/textarea/contenteditable.
 
 **Anti-occlusion:** Floating overlays anchor to four distinct corners so they
 never overlap: Toolkit (bottom-right), Floating Rules (top-right), Animation
@@ -524,8 +530,44 @@ Sub-panels still restore to their prior open state (driven by the show path).
 This keeps the viewport clean on first paint after a refresh.
 
 **Limitations:** Speed control (playbackRate) applies only to WAAPI-reachable
-animations (CSS); JS/rAF-driven animation speed cannot be scrubbed. Pause covers
-both via WAAPI + rAF patch. setTimeout-based animation loops are not paused.
+animations (CSS); JS-driven animation speed cannot be scrubbed (only paused).
+Pause covers CSS animations via WAAPI AND all JS timer loops (rAF +
+setTimeout + setInterval) via the page-script timer patch. Animations driven
+by already-scheduled native timers that were queued BEFORE the pause may fire
+one last time before the patch takes effect (one-frame latency).
+
+---
+
+## 15. Tooltip suppression (merged into animation pause)
+
+**Summary:** Tooltip freezing is part of the animation pause action — when the
+user pauses animations (⌘⇧K or the Pause button), tooltips are frozen too, so
+a paused page is fully frozen with no tooltips occluding the inspected node.
+No separate toggle; resuming animations also resumes tooltips.
+
+**Mechanism:**
+- Capture-phase listeners on `document` call `stopPropagation` (NOT
+  `preventDefault`) on `mouseover`, `mouseenter`, `mouseout`, `mouseleave`,
+  `focus`, `focusin` — so tooltip libraries (Ant Design / MUI / hover
+  libraries) never see the hover/focus events that trigger their show logic.
+  Default actions (focus, etc.) still fire so the page keeps working.
+- `mousemove` is intentionally NOT blocked (the DOM Inspector needs it).
+- Native `title` attributes are temporarily moved to `data-mockkit-title`
+  (original value preserved) so the browser's built-in tooltip doesn't show
+  either. Restored on resume. New elements added during suppression are NOT
+  covered (acceptable — native titles are rare in modern app UIs).
+- A transient on-screen badge confirms the combined freeze/resume state.
+
+**Lives in:** `content.js` — `tooltipSuppressed`, `tooltipBlankedElements`
+(Set), `tooltipEventHandler`, `setTooltipSuppressed`, `showTooltipSuppressBadge`.
+Triggered from `setAnimationPaused` (freeze together) and `setAnimationEnabled(false)` (restore on disable).
+
+**Wiring:**
+- ⌘⇧K / Pause button → `setAnimationPaused(next)` → `setTooltipSuppressed(next)`
+  → adds/removes capture-phase event listeners + blanks/restores `title` attrs
+  → `showTooltipSuppressBadge(state)` for visual feedback.
+- Disable Animation Control → `setAnimationEnabled(false)` → `setTooltipSuppressed(false)`
+  so the page fully restores.
 
 ---
 

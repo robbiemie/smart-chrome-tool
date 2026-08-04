@@ -5427,7 +5427,7 @@ function createToolkitPanel() {
   animName.textContent = 'Animation Control';
   const animHint = document.createElement('span');
   animHint.className = 'mockkit-toolkit-panel__tool-hint';
-  animHint.textContent = 'Pause / speed (⌘⇧S / ⌘⇧X)';
+  animHint.textContent = 'Pause / speed (⌘⇧K / ⌘⇧X)';
   animName.appendChild(animHint);
   const animSwitch = document.createElement('button');
   animSwitch.type = 'button';
@@ -5624,6 +5624,113 @@ window.addEventListener('message', (event) => {
   const willShow = !toolkitPanelState.visible;
   setToolkitPanelVisible(willShow);
 });
+
+
+// Tooltip suppression: a session-only toggle that freezes both JS-driven
+// tooltips (Ant Design / MUI / hover libraries that listen on mouseover /
+// mouseenter / focus / focusin) AND native title tooltips. Useful while
+// inspecting a dense UI where tooltips keep occluding the target node.
+//
+// Mechanism:
+//  - Capture-phase listeners on `document` stop propagation of mouseover,
+//    mouseenter, mouseout, mouseleave, focus, focusin — so tooltip libraries
+//    never see the hover/focus events that trigger their show logic.
+//  - `mousemove` is intentionally NOT blocked (the DOM Inspector needs it).
+//  - Native `title` attributes are temporarily blanked (original stored in a
+//    WeakMap) so the browser's built-in tooltip doesn't show either.
+//
+// Toggle via the animation pause action (⌘⇧K or the Pause button) — freezing
+// animations also freezes tooltips so a paused page is fully frozen. No
+// separate toggle; resuming animations also resumes tooltips.
+let tooltipSuppressed = false;
+// Elements whose `title` we blanked (so we can restore on disable without a
+// full-document query). Using a Set instead of WeakMap because we need
+// iteration on restore.
+const tooltipBlankedElements = new Set();
+
+function tooltipEventHandler(event) {
+  // Stop the event from reaching tooltip libraries, but do NOT preventDefault
+  // — default actions (focus, etc.) are still allowed so the page keeps
+  // working; only the tooltip-triggering listeners are skipped.
+  event.stopPropagation();
+}
+
+const TOOLTIP_BLOCKED_EVENTS = ['mouseover', 'mouseenter', 'mouseout', 'mouseleave', 'focus', 'focusin'];
+
+function setTooltipSuppressed(suppress) {
+  if (suppress === tooltipSuppressed) return;
+  tooltipSuppressed = suppress;
+  if (suppress) {
+    // Block hover/focus events at capture phase so tooltip libraries never
+    // receive them.
+    TOOLTIP_BLOCKED_EVENTS.forEach((type) => {
+      document.addEventListener(type, tooltipEventHandler, true);
+    });
+    // Blank existing native titles so the browser tooltip doesn't fire.
+    // New elements added during suppression are NOT covered (acceptable —
+    // native titles are rare in modern app UIs).
+    const titled = document.querySelectorAll('[title]');
+    titled.forEach((el) => {
+      const original = el.getAttribute('title');
+      if (original != null) {
+        el.setAttribute('data-mockkit-title', original);
+        el.removeAttribute('title');
+        tooltipBlankedElements.add(el);
+      }
+    });
+  } else {
+    TOOLTIP_BLOCKED_EVENTS.forEach((type) => {
+      document.removeEventListener(type, tooltipEventHandler, true);
+    });
+    // Restore native titles — only the elements we blanked.
+    tooltipBlankedElements.forEach((el) => {
+      if (el.isConnected) {
+        const original = el.getAttribute('data-mockkit-title');
+        if (original != null) {
+          el.setAttribute('title', original);
+          el.removeAttribute('data-mockkit-title');
+        }
+      }
+    });
+    tooltipBlankedElements.clear();
+  }
+  // Visual feedback via a transient badge so the user knows the state.
+  showTooltipSuppressBadge(tooltipSuppressed);
+  // Sync the Animation Control panel so the pause button reflects the new
+  // state (tooltip suppression is tied to the pause action).
+  syncAnimationPanelUi();
+}
+
+// Transient on-screen badge confirming the toggle state (auto-dismisses).
+// Shown when pause is toggled (animations + tooltips freeze together).
+function showTooltipSuppressBadge(suppressed) {
+  const id = 'mockkit-tooltip-badge';
+  let badge = document.getElementById(id);
+  if (badge) badge.remove();
+  badge = document.createElement('div');
+  badge.id = id;
+  badge.textContent = suppressed ? 'Paused (⌘⇧K to resume)' : 'Resumed';
+  badge.style.cssText = [
+    'position:fixed',
+    'left:50%',
+    'top:24px',
+    'transform:translateX(-50%)',
+    'z-index:2147483647',
+    'padding:6px 14px',
+    'border-radius:8px',
+    'font:600 12px/1.4 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif',
+    'color:#fff',
+    'background:#374151',
+    'box-shadow:0 4px 16px rgb(0 0 0 / 25%)',
+    'pointer-events:none',
+    'transition:opacity 0.3s ease',
+  ].join(';');
+  (document.documentElement || document.body).appendChild(badge);
+  setTimeout(() => {
+    badge.style.opacity = '0';
+    setTimeout(() => badge.remove(), 300);
+  }, 1200);
+}
 
 
 // A top-right floating popup that drives every page animation through the Web
@@ -5876,6 +5983,9 @@ function setAnimationEnabled(next) {
       key: 'animationPaused',
       value: false,
     }, '*');
+    // Lift tooltip suppression too so disabling control fully restores the
+    // page to its original interactive state.
+    setTooltipSuppressed(false);
   }
   syncAnimationPanelUi();
 }
@@ -5892,6 +6002,9 @@ function setAnimationPaused(next) {
     key: 'animationPaused',
     value: next,
   }, '*');
+  // Freeze/resume tooltips together with animations so a paused page is
+  // fully frozen — no animated tooltips occluding the inspected node.
+  setTooltipSuppressed(next);
   syncAnimationPanelUi();
 }
 
@@ -5920,7 +6033,7 @@ function syncAnimationPanelUi() {
 
   const pauseBtn = panel.querySelector('.mockkit-animation-control__pause');
   if (pauseBtn) {
-    pauseBtn.textContent = animationControlState.paused ? '▶  Resume' : '⏸  Pause';
+    pauseBtn.textContent = animationControlState.paused ? 'Resume' : 'Pause';
     pauseBtn.classList.toggle('is-paused', animationControlState.paused);
     pauseBtn.disabled = !animationControlState.enabled;
   }
@@ -5935,7 +6048,7 @@ function syncAnimationPanelUi() {
   const status = panel.querySelector('.mockkit-animation-control__status');
   if (status) {
     const label = animationControlState.enabled
-      ? (animationControlState.paused ? 'Paused' : `${getAnimationSpeed()}× speed`)
+      ? (animationControlState.paused ? 'Paused' : `${getAnimationSpeed()}×`)
       : 'Off';
     status.textContent = label;
     status.classList.toggle('is-on', animationControlState.enabled);
@@ -6000,7 +6113,7 @@ function setAnimationPanelVisible(visible) {
     watchWorkbenchForFloatingOverlays();
   }
   // Keep the Toolkit panel's Animation toggle in sync when the popup is
-  // dismissed via its own close button (×) or the ⌘⇧S/⌘⇧X shortcuts.
+  // dismissed via its own close button (×) or the ⌘⇧K/⌘⇧X shortcuts.
   if (!visible && toolkitPanelState.animationOpen) {
     toolkitPanelState.animationOpen = false;
     syncToolkitPanelUi();
@@ -6092,7 +6205,7 @@ function createAnimationControlPanel() {
   const pauseBtn = document.createElement('button');
   pauseBtn.type = 'button';
   pauseBtn.className = 'mockkit-animation-control__pause';
-  pauseBtn.textContent = '⏸  Pause';
+  pauseBtn.textContent = 'Pause';
   pauseBtn.addEventListener('click', () => setAnimationPaused(!animationControlState.paused));
   pauseRow.appendChild(pauseBtn);
   body.appendChild(pauseRow);
@@ -6127,7 +6240,7 @@ function createAnimationControlPanel() {
   // Shortcut hint.
   const hint = document.createElement('div');
   hint.className = 'mockkit-animation-control__hint';
-  hint.innerHTML = `<kbd>⌘⇧S</kbd> pause/resume &nbsp; <kbd>⌘⇧X</kbd> cycle speed`;
+  hint.innerHTML = `<kbd>⌘⇧K</kbd> pause/resume &nbsp; <kbd>⌘⇧X</kbd> cycle speed`;
   body.appendChild(hint);
 
   panel.appendChild(body);
@@ -6147,8 +6260,8 @@ function onAnimationControlKeydown(event) {
   }
   if (!(event.metaKey && event.shiftKey)) return;
   const key = event.key;
-  // ⌘⇧S → toggle pause/resume
-  if (key === 'S' || key === 's') {
+  // ⌘⇧K → toggle pause/resume
+  if (key === 'K' || key === 'k') {
     event.preventDefault();
     setAnimationPaused(!animationControlState.paused);
     return;
