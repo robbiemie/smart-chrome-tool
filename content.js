@@ -22,7 +22,6 @@ const ajaxToolsRuntimeState = window[AJAX_TOOLS_RUNTIME_STATE_KEY] || (window[AJ
   floatingPanel: null,
   floatingPanelBound: false,
   floatingRulesEnabled: true,
-  floatingRulesCollapsed: false,
   // Tracks whether the user has manually dragged the floating rules panel.
   // Once true, the auto-reposition logic (which shifts the panel out of the
   // workbench's footprint) stays hands-off so it never fights the user's
@@ -346,7 +345,7 @@ injectedStyle(`
     background: rgb(26 155 127 / 40%);
     color: #1a9b7f;
   }
-  .mockkit-floating-rules__collapse-btn {
+  .mockkit-floating-rules__close-btn {
     flex-shrink: 0;
     width: 24px;
     height: 24px;
@@ -361,12 +360,12 @@ injectedStyle(`
     transition: all 0.15s ease;
     padding: 0;
   }
-  .mockkit-floating-rules__collapse-btn svg {
+  .mockkit-floating-rules__close-btn svg {
     width: 14px;
     height: 14px;
     display: block;
   }
-  .mockkit-floating-rules__collapse-btn:hover {
+  .mockkit-floating-rules__close-btn:hover {
     background: rgb(27 40 34 / 6%);
     color: rgb(27 40 34 / 70%);
   }
@@ -563,63 +562,6 @@ injectedStyle(`
     color: rgb(27 40 34 / 35%);
     font-size: 12px;
     line-height: 1.6;
-  }
-  /* Collapsed state: shrink to a compact mock grid widget. */
-  .mockkit-floating-rules--collapsed {
-    width: auto !important;
-    max-height: none !important;
-    padding: 10px !important;
-    border-radius: 14px !important;
-  }
-  .mockkit-floating-rules--collapsed .mockkit-floating-rules__header,
-  .mockkit-floating-rules--collapsed .mockkit-floating-rules__list {
-    display: none !important;
-  }
-  .mockkit-floating-rules__mock {
-    display: none;
-    cursor: grab;
-    flex-direction: column;
-    align-items: center;
-    gap: 6px;
-    padding: 2px;
-    transition: transform 0.15s ease;
-  }
-  .mockkit-floating-rules__mock:active {
-    cursor: grabbing;
-  }
-  .mockkit-floating-rules__mock:hover {
-    transform: scale(1.05);
-  }
-  .mockkit-floating-rules--collapsed .mockkit-floating-rules__mock {
-    display: flex;
-  }
-  .mockkit-floating-rules__mock-grid {
-    display: grid;
-    grid-template-columns: repeat(3, 9px);
-    grid-auto-rows: 9px;
-    gap: 3px;
-  }
-  .mockkit-floating-rules__mock-cell {
-    width: 9px;
-    height: 9px;
-    border-radius: 3px;
-    background: rgb(27 40 34 / 8%);
-    transition: background 0.2s ease;
-  }
-  .mockkit-floating-rules__mock-cell--on {
-    background: #1a9b7f;
-    box-shadow: 0 0 4px rgb(26 155 127 / 40%);
-  }
-  .mockkit-floating-rules__mock-cell--off {
-    background: rgb(27 40 34 / 20%);
-  }
-  .mockkit-floating-rules__mock-count {
-    font-size: 10px;
-    font-weight: 700;
-    color: #1b2822;
-    line-height: 1;
-    font-variant-numeric: tabular-nums;
-    letter-spacing: 0.02em;
   }
 
   /* DOM Inspector overlay: highlight ring shown while picking a node. */
@@ -3439,7 +3381,6 @@ function actionBar (container) {
 // collapse state. Synchronizes data via the same chrome.storage keys.
 const FLOATING_SELECTED_GROUP_KEY = 'ajaxToolsSelectedGroupIndex';
 const FLOATING_ENABLED_KEY = 'ajaxToolsFloatingRulesEnabled';
-const FLOATING_COLLAPSED_KEY = 'ajaxToolsFloatingRulesCollapsed';
 
 // Receive rule-hit notifications from the page script (pageScripts/index.js)
 // and mark the corresponding floating-panel row with a green dot. The hit
@@ -3508,10 +3449,6 @@ function applyFloatingPanelState() {
   }
 
   panel.style.display = 'flex';
-  panel.classList.toggle(
-    'mockkit-floating-rules--collapsed',
-    ajaxToolsRuntimeState.floatingRulesCollapsed
-  );
   // Shift out of the workbench's footprint whenever the panel (re)appears,
   // so it is never hidden behind the open side panel.
   repositionFloatingRulesPanel();
@@ -3524,34 +3461,26 @@ function applyFloatingPanelState() {
 }
 
 function loadFloatingRulesState(callback) {
-  chrome.storage.local.get([FLOATING_ENABLED_KEY, FLOATING_COLLAPSED_KEY], (result) => {
+  chrome.storage.local.get([FLOATING_ENABLED_KEY], (result) => {
     ajaxToolsRuntimeState.floatingRulesEnabled = result[FLOATING_ENABLED_KEY] !== false;
-    ajaxToolsRuntimeState.floatingRulesCollapsed = result[FLOATING_COLLAPSED_KEY] === true;
     applyFloatingPanelState();
-    // Reflect the persisted collapsed state into the shared dock so a chip
-    // shows on reload if the rules panel was left collapsed.
-    setPanelCollapsedInDock('rules', ajaxToolsRuntimeState.floatingRulesCollapsed);
     if (typeof callback === 'function') callback();
   });
 }
 
-function toggleFloatingRulesCollapsed() {
-  const next = !ajaxToolsRuntimeState.floatingRulesCollapsed;
-  ajaxToolsRuntimeState.floatingRulesCollapsed = next;
-  applyFloatingPanelState();
-  // When collapsed, hide the panel entirely and show a dock chip (consistent
-  // with the other floating panels). When expanded, remove the chip.
-  setPanelCollapsedInDock('rules', next);
-  chrome.storage.local.set({ [FLOATING_COLLAPSED_KEY]: next });
+// One-click close: fully hides the floating rules panel by flipping the
+// master enabled flag. Reuses the Toolkit rules toggle so the Toolkit panel's
+// Floating Rules switch (and the workbench) stays in sync. The panel can be
+// re-opened from the Toolkit panel or the workbench switch.
+function closeFloatingRules() {
+  setToolkitRulesOpen(false);
 }
 
-// Drag the floating panel by its header (expanded) or the mock widget
-// (collapsed). Position is kept in memory only — a page refresh resets it to
-// the default top-right corner.
+// Drag the floating panel by its header. Position is kept in memory only —
+// a page refresh resets it to the default top-right corner.
 function bindFloatingPanelDrag(panel) {
   const header = panel.querySelector('.mockkit-floating-rules__header');
-  const mock = panel.querySelector('.mockkit-floating-rules__mock');
-  const dragHandles = [header, mock].filter(Boolean);
+  const dragHandles = [header].filter(Boolean);
   dragHandles.forEach((handle) => {
     if (handle.dataset.dragBound === '1') return;
     handle.dataset.dragBound = '1';
@@ -3587,7 +3516,7 @@ function bindFloatingPanelDrag(panel) {
     };
 
     handle.addEventListener('mousedown', (event) => {
-      // Ignore drag when clicking on buttons (collapse / csr) inside the header.
+      // Ignore drag when clicking on buttons (close / csr) inside the header.
       if (event.target.closest('button')) return;
       dragging = true;
       // Mark the panel as user-positioned so the auto-reposition logic (which
@@ -3730,33 +3659,6 @@ function renderFloatingRules() {
     const hasMultipleGroups = ajaxDataList.length > 1;
     if (prevBtn) prevBtn.disabled = !hasMultipleGroups;
     if (nextBtn) nextBtn.disabled = !hasMultipleGroups;
-
-    // Render the collapsed mock grid: a 3x3 cell matrix visualizing rule
-    // states (green = enabled, gray = disabled, faint = empty slot) plus an
-    // enabled/total counter. Shown only when the panel is collapsed.
-    const mockGridEl = panel.querySelector('.mockkit-floating-rules__mock-grid');
-    const mockCountEl = panel.querySelector('.mockkit-floating-rules__mock-count');
-    if (mockGridEl) {
-      mockGridEl.innerHTML = '';
-      const enabledCount = interfaceList.filter((r) => r.open !== false).length;
-      for (let i = 0; i < 9; i += 1) {
-        const cell = document.createElement('span');
-        cell.className = 'mockkit-floating-rules__mock-cell';
-        const rule = interfaceList[i];
-        if (rule) {
-          cell.classList.add(
-            rule.open !== false
-              ? 'mockkit-floating-rules__mock-cell--on'
-              : 'mockkit-floating-rules__mock-cell--off'
-          );
-        }
-        mockGridEl.appendChild(cell);
-      }
-    }
-    if (mockCountEl) {
-      const enabledCount = interfaceList.filter((r) => r.open !== false).length;
-      mockCountEl.textContent = `${enabledCount}/${interfaceList.length}`;
-    }
 
     if (!listEl) return;
 
@@ -4103,11 +4005,11 @@ function createFloatingRulesPanel() {
   const inspectBtn = createFloatingInspectButton();
   headerActions.appendChild(inspectBtn);
   const collapseBtn = document.createElement('button');
-  collapseBtn.className = 'mockkit-floating-rules__collapse-btn';
+  collapseBtn.className = 'mockkit-floating-rules__close-btn';
   collapseBtn.type = 'button';
-  collapseBtn.title = 'Collapse';
-  collapseBtn.innerHTML = '<svg viewBox="0 0 16 16" fill="none"><path d="M3 8h10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>';
-  collapseBtn.addEventListener('click', toggleFloatingRulesCollapsed);
+  collapseBtn.title = 'Close';
+  collapseBtn.innerHTML = '<svg viewBox="0 0 16 16" fill="none"><path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>';
+  collapseBtn.addEventListener('click', closeFloatingRules);
   headerActions.appendChild(collapseBtn);
   header.appendChild(headerActions);
   panel.appendChild(header);
@@ -4118,21 +4020,6 @@ function createFloatingRulesPanel() {
   const list = document.createElement('div');
   list.className = 'mockkit-floating-rules__list';
   panel.appendChild(list);
-
-  // Mock grid widget — shown only in collapsed state. Clicking it expands
-  // the panel back to the full list view.
-  const mock = document.createElement('div');
-  mock.className = 'mockkit-floating-rules__mock';
-  mock.title = 'Expand rules panel';
-  const mockGrid = document.createElement('div');
-  mockGrid.className = 'mockkit-floating-rules__mock-grid';
-  const mockCount = document.createElement('span');
-  mockCount.className = 'mockkit-floating-rules__mock-count';
-  mockCount.textContent = '0/0';
-  mock.appendChild(mockGrid);
-  mock.appendChild(mockCount);
-  mock.addEventListener('click', toggleFloatingRulesCollapsed);
-  panel.appendChild(mock);
 
   ajaxToolsRuntimeState.floatingPanel = panel;
   return panel;
@@ -4878,7 +4765,6 @@ function repositionSnifferPanel() {
 const collapsedPanelRegistry = {
   animation: { label: 'Animation', icon: '✨', expand: () => setAnimationPanelCollapsed(false) },
   sniffer: { label: 'Sniffer', icon: '📡', expand: () => setSnifferPanelCollapsed(false) },
-  rules: { label: 'Rules', icon: '📋', expand: () => toggleFloatingRulesCollapsed() },
 };
 let collapsedPanelState = {
   // Set of panel keys currently shown as chips in the Toolkit section.
@@ -6234,12 +6120,6 @@ chrome.storage.onChanged.addListener(function (changes, namespace) {
       // legacy Floating Rules switch, if still wired).
       toolkitPanelState.rulesOpen = newValue !== false;
       syncToolkitPanelUi();
-    }
-    // Collapse state can be driven from elsewhere; keep the DOM + dock in sync.
-    if (key === FLOATING_COLLAPSED_KEY) {
-      ajaxToolsRuntimeState.floatingRulesCollapsed = newValue === true;
-      applyFloatingPanelState();
-      setPanelCollapsedInDock('rules', newValue === true);
     }
     // Toolkit master panel visibility — driven by the Global Controls Toolkit
     // switch in the workbench. Show/hide the Toolkit panel accordingly.

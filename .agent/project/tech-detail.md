@@ -113,8 +113,7 @@ All in `chrome.storage.local`. Prefixes: `ajaxTools*` (legacy/interceptor),
 | `ajaxToolsUpdateLastCheckAt` | `number` | SW | Last update-check timestamp |
 | `ajaxToolsUpdateAvailable` | `object\|null` | SW | Latest release info / badge source |
 | `ajaxToolsGithubToken` | `string` | SW | Optional PAT to lift API rate limits |
-| `ajaxToolsFloatingRulesEnabled` | `boolean` | content | Floating panel on/off |
-| `ajaxToolsFloatingRulesCollapsed` | `boolean` | content | Floating panel collapse state |
+| `ajaxToolsFloatingRulesEnabled` | `boolean` | content | Floating panel on/off (close button flips this to false) |
 | `ajaxToolsPageHeadersMap` | `object` | (legacy) | Pre-profiles header map; migrated on read |
 
 ## Message types (cross-context)

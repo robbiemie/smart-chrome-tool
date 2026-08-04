@@ -111,14 +111,20 @@ opening the full workbench.
 - `content.js` (`createFloatingRulesPanel`, `renderFloatingRules`,
   `refreshFloatingHitDots`, `bindFloatingPanelDrag`, `createFloatingCsrButton`,
   `createFloatingInspectButton`, `applyFloatingPanelState`,
-  `repositionFloatingRulesPanel`)
-- Storage: `ajaxToolsFloatingRulesEnabled`, `ajaxToolsFloatingRulesCollapsed`
+  `repositionFloatingRulesPanel`, `closeFloatingRules`)
+- Storage: `ajaxToolsFloatingRulesEnabled`
 - Toggle: `html/iframePage/main/hooks/useFloatingRules.ts`
 
-**Drag (expanded + collapsed):** `bindFloatingPanelDrag` binds drag to BOTH
-the header (expanded state) and the `__mock` widget (collapsed state), so the
-panel is draggable in either form. Drag position is in-memory only (resets to
-the default top-right anchor on refresh).
+**Close button:** the panel header has a one-click **close** (×) icon that
+fully hides the panel by flipping `ajaxToolsFloatingRulesEnabled` to false
+(delegates to `setToolkitRulesOpen(false)` so the Toolkit panel's Floating
+Rules switch and the workbench stay in sync). The panel can be re-opened from
+the Toolkit panel or the workbench Floating Rules switch. There is no separate
+minimize/collapse state — the minimize-to-mock-grid module has been removed.
+
+**Drag:** `bindFloatingPanelDrag` binds drag to the header so the panel is
+repositionable. Drag position is in-memory only (resets to the default
+top-right anchor on refresh).
 
 **Positioning (top-right default):** the rules panel defaults to the top-right
 anchor (`right:24px; top:24px`), separate from the Toolkit master panel which
