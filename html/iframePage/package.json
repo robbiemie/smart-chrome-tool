@@ -1,7 +1,7 @@
 {
   "name": "iframepage",
   "private": true,
-  "version": "0.0.43",
+  "version": "0.0.44",
   "scripts": {
     "start": "vite --port 4001",
     "build": "vite build",
