@@ -139,7 +139,7 @@ stays bottom-right — the two never overlap. It only moves when the user drags
 it (`floatingPanelDragged` flag); `repositionFloatingRulesPanel` clears any
 inline overrides so the CSS default takes over. The panel is appended LAST in
 `mountPanelContainer` so at the shared `z-index: 2147483647` it stacks above
-other top-right overlays (Sniffer/Animation).
+other top-right overlays (Animation).
 
 **Independence from interceptor switch:** the panel stays visible even when
 the global `ajaxToolsSwitchOn` interceptor switch is off — users can toggle
@@ -298,6 +298,12 @@ the page script for immediate effect — does not rely solely on
 build, on storage changes, and on init from `storage.local.get`). CSS class
 `mockkit-sniffer-panel__intercept*`.
 
+**Positioning (bottom-left default):** the sniffer panel defaults to the
+bottom-left anchor (`left:24px; bottom:24px`) so it never overlaps Floating
+Rules (top-right), DOM Inspector (top-left), or Toolkit (bottom-right). It
+only moves when the user drags it (`snifferPanelDragged` flag);
+`repositionSnifferPanel` clears inline overrides so the CSS default takes over.
+
 ---
 
 ## 10. Import / Export
@@ -445,16 +451,17 @@ panel mounted in top frame by `mountPanelContainer`. Inside the Toolkit panel:
   `⌘⇧S` toggles pause, `⌘⇧X` cycles speed through `[1, 2, 4, 0.5]`. Shortcuts
   are ignored while focus is in an input/textarea/contenteditable.
 
-**Anti-occlusion:** Floating overlays anchor to two zones — Toolkit
-(bottom-right) and Rules/Sniffer/Animation (top-right) — so sub-panels never
-overlap the Toolkit master panel. When the workbench opens, each overlay
-floats **above** it via z-index (`2147483647`, same as the workbench, and
-appended after it in the DOM so it stacks on top) rather than dodging left.
-A single `MutationObserver` on the workbench container's `style`/`class`
-(plus a `resize` listener) drives `repositionFloatingOverlays`, which resets
-each non-dragged panel to its CSS default anchor. Each overlay's
-auto-repositioning is skipped once the user drags it (`*PanelDragged` flags)
-so auto-reposition never fights an explicit placement.
+**Anti-occlusion:** Floating overlays anchor to four distinct corners so they
+never overlap: Toolkit (bottom-right), Floating Rules (top-right), Animation
+(top-right, stacks below Rules), DOM Inspector (top-left), and Request Sniffer
+(bottom-left). When the workbench opens, each overlay floats **above** it via
+z-index (`2147483647`, same as the workbench, and appended after it in the DOM
+so it stacks on top) rather than dodging left. A single `MutationObserver` on
+the workbench container's `style`/`class` (plus a `resize` listener) drives
+`repositionFloatingOverlays`, which resets each non-dragged panel to its CSS
+default anchor. Each overlay's auto-repositioning is skipped once the user
+drags it (`*PanelDragged` flags) so auto-reposition never fights an explicit
+placement.
 
 **Lifecycle:** The Toolkit master panel has no close (×) button — its
 visibility is controlled solely by the workbench Toolkit switch

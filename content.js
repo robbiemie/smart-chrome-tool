@@ -4148,8 +4148,8 @@ function injectSnifferStyle() {
   style.textContent = `
     .mockkit-sniffer-panel {
       position: fixed !important;
-      right: 24px !important;
-      top: 24px !important;
+      left: 24px !important;
+      bottom: 24px !important;
       width: 380px !important;
       max-height: calc(100vh - 48px) !important;
       display: none;
@@ -4164,7 +4164,10 @@ function injectSnifferStyle() {
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
       font-size: 12px;
       color: #1b2822;
-      transition: box-shadow 0.2s ease, right 0.3s ease, bottom 0.3s ease;
+      /* Anchored bottom-left so it never overlaps Floating Rules (top-right),
+         DOM Inspector (top-left), or Toolkit (bottom-right). Once the user
+         drags it, repositionSnifferPanel leaves it alone. */
+      transition: box-shadow 0.2s ease, left 0.3s ease, bottom 0.3s ease;
     }
     .mockkit-sniffer-panel__header {
       display: flex;
@@ -4752,18 +4755,19 @@ function setToolkitSnifferOpen(open) {
   }, '*');
 }
 
-// The sniffer panel defaults to the top-right anchor (same as Rules and
-// Animation). Once the user drags it, auto-reposition leaves it alone.
+// The sniffer panel defaults to the bottom-left anchor so it never overlaps
+// Floating Rules (top-right), DOM Inspector (top-left), or Toolkit
+// (bottom-right). Once the user drags it, auto-reposition leaves it alone.
 function repositionSnifferPanel() {
   const panel = snifferState.panelEl;
   if (!panel || panel.style.display === 'none') return;
   if (ajaxToolsRuntimeState.snifferPanelDragged) return;
   // Reset to the CSS-defined default anchor (clear any inline positioning
   // so the !important base style takes over).
-  panel.style.removeProperty('bottom');
-  panel.style.removeProperty('left');
   panel.style.removeProperty('top');
   panel.style.removeProperty('right');
+  panel.style.removeProperty('bottom');
+  panel.style.removeProperty('left');
 }
 
 // --- Collapsed panels → Toolkit section ------------------------------------
