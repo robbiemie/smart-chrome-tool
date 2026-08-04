@@ -589,6 +589,54 @@ injectedStyle(`
     border-radius: 2px;
     display: none;
   }
+  /* Persistent box-model overlay for a picked node. Renders the full margin /
+     border / padding / content stack on the page with value badges at each
+     edge so the user can see spacing extents + numbers at a glance. Appended
+     to <html> (never <body>) so page stacking contexts can't trap it. */
+  .mockkit-box-model-overlay {
+    position: fixed;
+    z-index: 2147483647;
+    pointer-events: none;
+    box-sizing: border-box;
+  }
+  .mockkit-box-model-overlay__margin {
+    position: absolute;
+    inset: 0;
+    border: 1px dashed #f59e0b;
+    background: rgb(245 158 11 / 8%);
+    border-radius: 3px;
+  }
+  .mockkit-box-model-overlay__border {
+    position: absolute;
+    border: 1px solid #374151;
+    background: rgb(55 65 81 / 35%);
+    box-sizing: border-box;
+  }
+  .mockkit-box-model-overlay__padding {
+    position: absolute;
+    border: 1px dashed #10b981;
+    background: rgb(16 185 129 / 15%);
+    box-sizing: border-box;
+  }
+  .mockkit-box-model-overlay__content {
+    position: absolute;
+    border: 1px dotted #3b82f6;
+    background: rgb(59 130 246 / 45%);
+    box-sizing: border-box;
+  }
+  .mockkit-box-model-overlay__label {
+    position: absolute;
+    transform: translate(-50%, -50%);
+    padding: 1px 5px;
+    border-radius: 4px;
+    font: 600 11px/1.4 -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    color: #fff;
+    white-space: nowrap;
+    box-shadow: 0 1px 4px rgb(0 0 0 / 45%);
+  }
+  .mockkit-box-model-overlay__label--margin { background: #f59e0b; }
+  .mockkit-box-model-overlay__label--padding { background: #10b981; }
+  .mockkit-box-model-overlay__label--zero { opacity: 0.4; }
   /* Measure mode overrides the hover-overlay color to orange so the hovered
      element B is visually distinct from: the green inspect-mode hover, the
      blue anchor A, and the red measurement guides. Toggled by
@@ -1386,6 +1434,7 @@ let domInspectorState = {
   mode: 'inspect',
   overlay: null,
   overlayLabel: null,
+  boxModelOverlay: null,
   measurements: null,
   // Anchor layer: persistent blue highlight for the locked baseline element A.
   // Stays visible while the user hovers other elements to measure distance.
@@ -1418,16 +1467,138 @@ let domInspectorState = {
   markPreviewClassName: '',
   markDropdown: null,
   markClassList: [],
-  // ----- Picked-node margin overlay -----
-  // Persistent margin highlight for the node picked in inspect mode. Created
+  // ----- Picked-node box-model overlay -----
+  // Persistent box-model highlight for the node picked in inspect mode. Created
   // in showDomInspectorPanel (when a node is chosen) and removed when the
-  // panel closes. Distinct from the transient hover marginOverlay in
+  // panel closes. Distinct from the transient hover boxModelOverlay in
   // createDomInspectorOverlay (which only shows while hovering).
   pickedMarginOverlay: null,
   pickedNode: null,
   pickedRepositionFrame: null,
   pickedListenersBound: false,
 };
+
+// Create an empty box-model overlay element with the full layer structure:
+// margin layer (fills container) + border/padding/content layers + 8 value
+// labels (margin T/R/B/L blue, padding T/R/B/L green). Children are nested
+// absolutely inside the container (= margin box). Returns the container with
+// a _boxModel handle attached for updateBoxModelOverlay to mutate in place
+// (zero DOM creation/deletion per frame).
+function createBoxModelOverlay() {
+  const overlay = document.createElement('div');
+  overlay.className = 'mockkit-box-model-overlay';
+  const marginLayer = document.createElement('div');
+  marginLayer.className = 'mockkit-box-model-overlay__margin';
+  overlay.appendChild(marginLayer);
+  const borderLayer = document.createElement('div');
+  borderLayer.className = 'mockkit-box-model-overlay__border';
+  overlay.appendChild(borderLayer);
+  const paddingLayer = document.createElement('div');
+  paddingLayer.className = 'mockkit-box-model-overlay__padding';
+  overlay.appendChild(paddingLayer);
+  const contentLayer = document.createElement('div');
+  contentLayer.className = 'mockkit-box-model-overlay__content';
+  overlay.appendChild(contentLayer);
+  const labels = {};
+  const keys = [
+    ['mt', 'margin'], ['mr', 'margin'], ['mb', 'margin'], ['ml', 'margin'],
+    ['pt', 'padding'], ['pr', 'padding'], ['pb', 'padding'], ['pl', 'padding'],
+  ];
+  keys.forEach(([k, kind]) => {
+    const el = document.createElement('div');
+    el.className = `mockkit-box-model-overlay__label mockkit-box-model-overlay__label--${kind}`;
+    overlay.appendChild(el);
+    labels[k] = el;
+  });
+  overlay._boxModel = { marginLayer, borderLayer, paddingLayer, contentLayer, labels };
+  return overlay;
+}
+
+// Update an existing box-model overlay (built by createBoxModelOverlay) to
+// reflect a target element's current box. Only mutates style + textContent —
+// no DOM creation/deletion — so it is cheap to call every frame in renderFrame.
+// Appending to <html> is the caller's responsibility (avoids <body> stacking
+// contexts). Margins of 0 still render (label dimmed) so the user can confirm
+// "this side is 0" rather than wondering if a label is missing.
+function updateBoxModelOverlay(overlay, target) {
+  const bm = overlay._boxModel;
+  if (!bm || !target || !target.isConnected) return false;
+  const cs = window.getComputedStyle(target);
+  const num = (v) => parseFloat(v) || 0;
+  const m = { t: num(cs.marginTop), r: num(cs.marginRight), b: num(cs.marginBottom), l: num(cs.marginLeft) };
+  const bd = { t: num(cs.borderTopWidth), r: num(cs.borderRightWidth), b: num(cs.borderBottomWidth), l: num(cs.borderLeftWidth) };
+  const p = { t: num(cs.paddingTop), r: num(cs.paddingRight), b: num(cs.paddingBottom), l: num(cs.paddingLeft) };
+  const rect = target.getBoundingClientRect(); // border box
+  if (rect.width <= 0 && rect.height <= 0) return false;
+  // Container = margin box.
+  overlay.style.left = `${rect.left - m.l}px`;
+  overlay.style.top = `${rect.top - m.t}px`;
+  overlay.style.width = `${rect.width + m.l + m.r}px`;
+  overlay.style.height = `${rect.height + m.t + m.b}px`;
+  // Border layer = border box, inset by margins.
+  bm.borderLayer.style.left = `${m.l}px`;
+  bm.borderLayer.style.top = `${m.t}px`;
+  bm.borderLayer.style.width = `${rect.width}px`;
+  bm.borderLayer.style.height = `${rect.height}px`;
+  // Padding layer = padding box, inset by borders.
+  const padW = Math.max(0, rect.width - bd.l - bd.r);
+  const padH = Math.max(0, rect.height - bd.t - bd.b);
+  bm.paddingLayer.style.left = `${m.l + bd.l}px`;
+  bm.paddingLayer.style.top = `${m.t + bd.t}px`;
+  bm.paddingLayer.style.width = `${padW}px`;
+  bm.paddingLayer.style.height = `${padH}px`;
+  // Content layer = content box, inset by padding.
+  const contW = Math.max(0, padW - p.l - p.r);
+  const contH = Math.max(0, padH - p.t - p.b);
+  bm.contentLayer.style.left = `${m.l + bd.l + p.l}px`;
+  bm.contentLayer.style.top = `${m.t + bd.t + p.t}px`;
+  bm.contentLayer.style.width = `${contW}px`;
+  bm.contentLayer.style.height = `${contH}px`;
+  // Value labels. Positioned OUTSIDE the overlay's outer (margin) edge so
+  // they never overlap any color region (margin/border/padding/content).
+  // Each badge sits 4px beyond the margin box, anchored to its edge midpoint
+  // via translate(-50%,-50%). Color (blue=margin, green=padding) tells the
+  // user which region the value belongs to. Margin badges use the outer edge
+  // midpoint; padding badges use the border-box edge midpoint projected
+  // outward — visually "pointing" at the padding ring without entering it.
+  const setLabel = (el, val, x, y) => {
+    el.textContent = `${val}`;
+    el.style.left = `${x}px`;
+    el.style.top = `${y}px`;
+    el.classList.toggle('mockkit-box-model-overlay__label--zero', val === 0);
+  };
+  // Badge half-size budget. Badges are ~18px tall / ~22px wide with padding;
+  // translate(-50%,-50%) centers them on (x,y), so the badge extends ~9px in
+  // each direction from that anchor. To keep the badge fully outside the
+  // margin box (no overlap with any color region), the anchor must sit at
+  // least half the badge size beyond the margin edge. 12px gives margin.
+  const BADGE_GAP = 12;
+  // Outer box (margin box) rect — badges live outside this.
+  const mLeft = 0;
+  const mTop = 0;
+  const mRight = rect.width + m.l + m.r;
+  const mBottom = rect.height + m.t + m.b;
+  // Border-box rect (inside margin box), used as the projection origin for
+  // padding badges so they visually associate with the padding ring.
+  const bLeft = m.l;
+  const bTop = m.t;
+  const bRight = m.l + rect.width;
+  const bBottom = m.t + rect.height;
+  // Margin badges: outer edge midpoints, pushed outside the margin box.
+  setLabel(bm.labels.mt, m.t, mRight / 2, mTop - BADGE_GAP);
+  setLabel(bm.labels.mr, m.r, mRight + BADGE_GAP, mBottom / 2);
+  setLabel(bm.labels.mb, m.b, mRight / 2, mBottom + BADGE_GAP);
+  setLabel(bm.labels.ml, m.l, mLeft - BADGE_GAP, mBottom / 2);
+  // Padding badges: border-box edge midpoints, pushed outside the margin box
+  // along the same axis. Horizontally aligned with the border edge (so the
+  // badge visually points at the padding ring), vertically on the border
+  // midpoint row, but shifted out beyond the margin box.
+  setLabel(bm.labels.pt, p.t, bLeft + rect.width / 2, mTop - BADGE_GAP);
+  setLabel(bm.labels.pr, p.r, mRight + BADGE_GAP, bTop + rect.height / 2);
+  setLabel(bm.labels.pb, p.b, bLeft + rect.width / 2, mBottom + BADGE_GAP);
+  setLabel(bm.labels.pl, p.l, mLeft - BADGE_GAP, bTop + rect.height / 2);
+  return true;
+}
 
 function createDomInspectorOverlay() {
   if (domInspectorState.overlay) return domInspectorState.overlay;
@@ -1436,13 +1607,14 @@ function createDomInspectorOverlay() {
   document.body.appendChild(overlay);
   domInspectorState.overlay = overlay;
 
-  // Margin highlight: a blue dashed outline marking the element's margin box
-  // while inspecting, so margins are visible on the page (not just in the
-  // Box Model diagram). Inspect-mode only — hidden in measure mode.
-  const marginOverlay = document.createElement('div');
-  marginOverlay.className = 'mockkit-dom-inspector-margin-overlay';
-  document.body.appendChild(marginOverlay);
-  domInspectorState.marginOverlay = marginOverlay;
+  // Box-model overlay: full margin/border/padding/content stack with value
+  // badges, shown while hovering in inspect mode (and locked as the picked
+  // overlay on click). Built once here and updated in place by renderFrame
+  // via updateBoxModelOverlay (zero DOM churn per frame). Appended to <html>
+  // so page stacking contexts on <body> can't trap it.
+  const boxModelOverlay = createBoxModelOverlay();
+  (document.documentElement || document.body).appendChild(boxModelOverlay);
+  domInspectorState.boxModelOverlay = boxModelOverlay;
 
   // Info label that floats next to the highlight box, showing the element's
   // selector + size — mirrors the Chrome DevTools inspect behavior.
@@ -1474,9 +1646,9 @@ function destroyDomInspectorOverlay() {
     domInspectorState.overlay.remove();
     domInspectorState.overlay = null;
   }
-  if (domInspectorState.marginOverlay) {
-    domInspectorState.marginOverlay.remove();
-    domInspectorState.marginOverlay = null;
+  if (domInspectorState.boxModelOverlay) {
+    domInspectorState.boxModelOverlay.remove();
+    domInspectorState.boxModelOverlay = null;
   }
   if (domInspectorState.overlayLabel) {
     domInspectorState.overlayLabel.remove();
@@ -1737,29 +1909,17 @@ function startDomInspector(opts) {
       label.style.display = 'block';
     }
 
-    // Margin highlight (inspect mode only): draw a dashed blue box enclosing
-    // the element's margin box so the user can see margin extents on the
-    // page. Hidden when all margins are zero (no margin to show) and in
-    // measure mode (which has its own overlay semantics).
-    const marginOverlay = domInspectorState.marginOverlay;
-    if (marginOverlay) {
+    // Box-model overlay (inspect mode only): update the full margin/border/
+    // padding/content stack + 8 value badges for the hovered target. Hidden
+    // in measure mode (which has its own overlay semantics). Built once in
+    // createDomInspectorOverlay; updated in place here — zero DOM churn.
+    const boxModelOverlay = domInspectorState.boxModelOverlay;
+    if (boxModelOverlay) {
       if (domInspectorState.mode === 'inspect') {
-        const cs = window.getComputedStyle(target);
-        const mt = parseFloat(cs.marginTop) || 0;
-        const mr = parseFloat(cs.marginRight) || 0;
-        const mb = parseFloat(cs.marginBottom) || 0;
-        const ml = parseFloat(cs.marginLeft) || 0;
-        if (mt || mr || mb || ml) {
-          marginOverlay.style.left = `${rect.left - ml}px`;
-          marginOverlay.style.top = `${rect.top - mt}px`;
-          marginOverlay.style.width = `${rect.width + ml + mr}px`;
-          marginOverlay.style.height = `${rect.height + mt + mb}px`;
-          marginOverlay.style.display = 'block';
-        } else {
-          marginOverlay.style.display = 'none';
-        }
+        const shown = updateBoxModelOverlay(boxModelOverlay, target);
+        boxModelOverlay.style.display = shown ? 'block' : 'none';
       } else {
-        marginOverlay.style.display = 'none';
+        boxModelOverlay.style.display = 'none';
       }
     }
 
@@ -3007,6 +3167,14 @@ function showDomInspectorPanel(node, hint) {
 // Create/refresh the persistent margin overlay for a picked node. Sits on
 // the page until the DOM Inspector panel closes. Re-evaluated on scroll/
 // resize via the rAF-throttled reposition handler.
+// Build a box-model overlay for the picked node: renders margin / border /
+// padding / content rectangles on the page with value badges at each edge.
+// Reuses createBoxModelOverlay + updateBoxModelOverlay so the picked overlay
+// is identical to the hover overlay. Appended to <html> (never <body>) so
+// page stacking contexts on <body> (transform/filter/opacity) can't trap the
+// fixed-position overlay. Stays on the page until the DOM Inspector panel
+// closes; repositioned on scroll/resize by repositionPickedMarginOverlay
+// (which calls updateBoxModelOverlay in place — zero DOM churn).
 function showPickedMarginOverlay(node) {
   clearPickedMarginOverlay();
   if (!node || !node.isConnected) return;
@@ -3016,21 +3184,12 @@ function showPickedMarginOverlay(node) {
     window.addEventListener('scroll', repositionPickedMarginOverlay, true);
     window.addEventListener('resize', repositionPickedMarginOverlay);
   }
-  const cs = window.getComputedStyle(node);
-  const mt = parseFloat(cs.marginTop) || 0;
-  const mr = parseFloat(cs.marginRight) || 0;
-  const mb = parseFloat(cs.marginBottom) || 0;
-  const ml = parseFloat(cs.marginLeft) || 0;
-  if (!mt && !mr && !mb && !ml) return;
-  const rect = node.getBoundingClientRect();
-  const overlay = document.createElement('div');
-  overlay.className = 'mockkit-dom-inspector-margin-overlay mockkit-dom-inspector-margin-overlay--picked';
-  overlay.style.left = `${rect.left - ml}px`;
-  overlay.style.top = `${rect.top - mt}px`;
-  overlay.style.width = `${rect.width + ml + mr}px`;
-  overlay.style.height = `${rect.height + mt + mb}px`;
-  overlay.style.display = 'block';
-  document.body.appendChild(overlay);
+  const overlay = createBoxModelOverlay();
+  if (!updateBoxModelOverlay(overlay, node)) {
+    overlay.remove();
+    return;
+  }
+  (document.documentElement || document.body).appendChild(overlay);
   domInspectorState.pickedMarginOverlay = overlay;
   domInspectorState.pickedNode = node;
 }
@@ -3043,8 +3202,10 @@ function clearPickedMarginOverlay() {
   domInspectorState.pickedNode = null;
 }
 
-// Reposition the picked-node margin overlay on scroll/resize so it tracks
-// the element. rAF-throttled to coalesce bursts.
+// Reposition the picked-node box-model overlay on scroll/resize so it tracks
+// the element. rAF-throttled to coalesce bursts. Updates the overlay in place
+// via updateBoxModelOverlay (zero DOM churn) so all layers + labels move
+// together without rebuilding.
 function repositionPickedMarginOverlay() {
   if (domInspectorState.pickedRepositionFrame) return;
   domInspectorState.pickedRepositionFrame = requestAnimationFrame(() => {
@@ -3055,16 +3216,7 @@ function repositionPickedMarginOverlay() {
       clearPickedMarginOverlay();
       return;
     }
-    const cs = window.getComputedStyle(node);
-    const mt = parseFloat(cs.marginTop) || 0;
-    const mr = parseFloat(cs.marginRight) || 0;
-    const mb = parseFloat(cs.marginBottom) || 0;
-    const ml = parseFloat(cs.marginLeft) || 0;
-    const rect = node.getBoundingClientRect();
-    overlay.style.left = `${rect.left - ml}px`;
-    overlay.style.top = `${rect.top - mt}px`;
-    overlay.style.width = `${rect.width + ml + mr}px`;
-    overlay.style.height = `${rect.height + mt + mb}px`;
+    updateBoxModelOverlay(overlay, node);
   });
 }
 

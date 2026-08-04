@@ -200,18 +200,32 @@ apart from the selection border alone, not just the buttons:
   element B, kept distinct from the blue anchor A and the red measurement
   guides.
 
-**Margin highlight on inspect:** while inspecting (hovering), a dashed blue
-box (`#3b82f6`) encloses the element's margin box on the page so margins are
-visible at a glance — not just in the Box Model diagram. Hidden when all four
-margins are zero and in measure mode. Created/destroyed with the inspect
-overlay in `createDomInspectorOverlay`/`destroyDomInspectorOverlay`, updated
-per-frame in `renderFrame`; CSS class `mockkit-dom-inspector-margin-overlay`.
+**Box-model overlay on inspect (hover = full box model, click = lock):** while
+inspecting (hovering), a full **box-model overlay** (`mockkit-box-model-overlay`)
+renders the margin / border / padding / content stack on the page with value
+badges at each edge — no need to click first. Blue dashed margin box + blue
+badges (margin T/R/B/L), dark border box outline, green dashed padding box +
+green badges (padding T/R/B/L), dotted content outline. Margin and padding
+fills use distinct, saturated colors (18% blue vs 18% green) so the two
+regions are visually distinguishable at a glance. Zeros are dimmed but shown
+so the user can confirm "this side is 0" rather than wondering if a label is
+missing. Hidden in measure mode (which has its own overlay semantics).
 
-After a node is picked (click), a PERSISTENT margin overlay
-(`mockkit-dom-inspector-margin-overlay--picked`) stays on the page until the
-DOM Inspector panel closes — created in `showDomInspectorPanel` via
-`showPickedMarginOverlay(node)`, cleared on panel close or re-pick. It tracks
-the node on scroll/resize via `repositionPickedMarginOverlay` (rAF-throttled).
+The overlay structure is built ONCE in `createDomInspectorOverlay` (4 layers
++ 8 labels nested in a container = margin box) and updated IN PLACE every
+frame by `updateBoxModelOverlay` via `renderFrame` — zero DOM creation/deletion
+per frame, only style + textContent mutations. Appended to `<html>` (never
+`<body>`) so page stacking contexts on `<body>` (transform/filter/opacity)
+can't trap the fixed-position overlay.
+
+After a node is picked (click), the SAME box-model overlay is locked as the
+PERSISTENT picked overlay (`domInspectorState.pickedMarginOverlay`) — created
+in `showDomInspectorPanel` via `showPickedMarginOverlay(node)` (reuses
+`createBoxModelOverlay` + `updateBoxModelOverlay`), cleared on panel close or
+re-pick. Tracks the node on scroll/resize via `repositionPickedMarginOverlay`
+(rAF-throttled; updates in place — zero DOM churn). Hover and picked overlays
+share the same rendering code, so what you see while hovering is exactly what
+you get when you click.
 
 **Panel distinction (do not confuse):**
 - **DOM Inspector panel** (`mockkit-dom-inspector*`, top-left, created by
