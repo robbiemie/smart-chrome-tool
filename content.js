@@ -176,15 +176,16 @@ injectedStyle(`
   .mockkit-floating-rules {
     position: fixed !important;
     right: 24px !important;
-    bottom: 24px !important;
+    top: 24px !important;
     width: 340px !important;
-    max-height: 440px !important;
+    max-height: calc(100vh - 48px) !important;
     display: none;
     flex-direction: column;
     z-index: 2147483647 !important;
-    /* Rules shares the bottom-right anchor with Toolkit/Sniffer. The panel
-       is appended LAST in mountPanelContainer so at this z-index it stacks
-       above them. Positioning is independent — see repositionFloatingRulesPanel. */
+    /* Rules defaults to the top-right anchor. Toolkit stays bottom-right, so
+       the two never overlap. Appended LAST in mountPanelContainer so at this
+       z-index it stacks above other top-right overlays. Positioning is
+       independent — see repositionFloatingRulesPanel. */
     border: 1px solid rgb(27 40 34 / 8%) !important;
     border-radius: 16px !important;
     box-shadow: 0 20px 60px rgb(37 54 46 / 18%), 0 4px 12px rgb(37 54 46 / 8%) !important;
@@ -727,7 +728,7 @@ injectedStyle(`
   }
 
   /* DOM Inspector result panel: top-left so it never overlaps the rules
-     floating panel anchored bottom-right. */
+     floating panel anchored top-right. */
   .mockkit-dom-inspector {
     position: fixed;
     z-index: 2147483647;
@@ -3546,7 +3547,7 @@ function toggleFloatingRulesCollapsed() {
 
 // Drag the floating panel by its header (expanded) or the mock widget
 // (collapsed). Position is kept in memory only — a page refresh resets it to
-// the default bottom-right corner.
+// the default top-right corner.
 function bindFloatingPanelDrag(panel) {
   const header = panel.querySelector('.mockkit-floating-rules__header');
   const mock = panel.querySelector('.mockkit-floating-rules__mock');
@@ -4252,9 +4253,9 @@ function injectSnifferStyle() {
     .mockkit-sniffer-panel {
       position: fixed !important;
       right: 24px !important;
-      bottom: 24px !important;
+      top: 24px !important;
       width: 380px !important;
-      max-height: 480px !important;
+      max-height: calc(100vh - 48px) !important;
       display: none;
       flex-direction: column;
       z-index: 2147483647 !important;
@@ -4852,12 +4853,18 @@ function setToolkitSnifferOpen(open) {
   }, '*');
 }
 
-// The sniffer panel holds its ground when the workbench opens — it floats
-// above the workbench via z-index instead of dodging left. Kept as a
-// repositioning hook (e.g. for future stacking logic).
+// The sniffer panel defaults to the top-right anchor (same as Rules and
+// Animation). Once the user drags it, auto-reposition leaves it alone.
 function repositionSnifferPanel() {
   const panel = snifferState.panelEl;
   if (!panel || panel.style.display === 'none') return;
+  if (ajaxToolsRuntimeState.snifferPanelDragged) return;
+  // Reset to the CSS-defined default anchor (clear any inline positioning
+  // so the !important base style takes over).
+  panel.style.removeProperty('bottom');
+  panel.style.removeProperty('left');
+  panel.style.removeProperty('top');
+  panel.style.removeProperty('right');
 }
 
 // --- Collapsed panels → Toolkit section ------------------------------------
@@ -5860,10 +5867,9 @@ function repositionAnimationPanel() {
 
 // Rules panel positioning is fully independent of every other floating
 // overlay (Toolkit, Sniffer, Animation, workbench). It stays at its default
-// bottom-right anchor (right:24px, bottom:24px from CSS) and only moves when
-// the user drags it (floatingPanelDragged). Repositioning is a no-op here —
-// kept as a hook so callers (resize, workbench observer, panel toggles) do
-// not need to special-case the rules panel.
+// top-right anchor (right:24px, top:24px from CSS) and only moves when the
+// user drags it (floatingPanelDragged). Repositioning clears any inline
+// overrides so the !important base style takes over.
 function repositionFloatingRulesPanel() {
   const panel = ajaxToolsRuntimeState.floatingPanel;
   if (!panel || panel.style.display === 'none') return;
@@ -5876,9 +5882,9 @@ function repositionFloatingRulesPanel() {
   panel.style.removeProperty('right');
 }
 
-// Reposition every floating overlay (e.g. the rules panel stacking above the
-// Toolkit). Overlays no longer dodge the workbench — they float above it via
-// z-index. Called by the workbench style/class observer and on resize.
+// Reposition every floating overlay (Rules, Sniffer, Animation, Toolkit).
+// Overlays no longer dodge the workbench — they float above it via z-index.
+// Called by the workbench style/class observer and on resize.
 function repositionFloatingOverlays() {
   repositionToolkitPanel();
   repositionAnimationPanel();
@@ -6123,8 +6129,8 @@ function mountPanelContainer() {
   }
 
   // Mount the floating rules panel LAST so it stacks above all other
-  // bottom-right overlays (Toolkit/Sniffer) at the same z-index. Its
-  // positioning is fully independent — default bottom-right anchor, only
+  // top-right overlays (Sniffer/Animation) at the same z-index. Its
+  // positioning is fully independent — default top-right anchor, only
   // moves when the user drags it.
   const floatingPanel = createFloatingRulesPanel();
   if (!floatingPanel.isConnected) {
@@ -6133,9 +6139,9 @@ function mountPanelContainer() {
   loadFloatingRulesState(() => renderFloatingRules());
 
   // Watch the workbench's open/close transitions + window resize so floating
-  // overlays can reposition themselves (e.g. the rules panel stacking above
-  // the Toolkit). Overlays no longer dodge the workbench — they float above
-  // it via z-index — but the hook is kept for stacking/resize repositioning.
+  // overlays can reposition themselves (reset to default anchor unless
+  // dragged). Overlays no longer dodge the workbench — they float above it
+  // via z-index — but the hook is kept for resize repositioning.
   watchWorkbenchForFloatingOverlays();
   repositionFloatingOverlays();
 
