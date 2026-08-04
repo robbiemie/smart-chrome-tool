@@ -1,5 +1,16 @@
 # Build Changelog
 
+## v0.0.47
+
+- Built At: 2026-08-04T08:00:57.103Z
+- Previous Version: v0.0.46
+- Git Branch: master
+- Git Commit: ddbb70e9
+
+### Changed Files
+- manifest.json
+
+
 ## v0.0.46
 
 - Built At: 2026-08-04T07:44:25.115Z
