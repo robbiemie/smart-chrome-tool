@@ -1,5 +1,24 @@
 # Build Changelog
 
+## v0.0.56
+
+- Built At: 2026-08-06T12:43:44.229Z
+- Previous Version: v0.0.55
+- Git Branch: master
+- Git Commit: 5250d78c
+
+### Changed Files
+- .agent/project/features.md
+- content.js
+- html/iframePage/main/App.css
+- html/iframePage/main/App.tsx
+- html/iframePage/main/components/OperationsRail/index.tsx
+- html/iframePage/stats.html
+- html/iframePage/main/components/ToolsTab/index.css
+- html/iframePage/main/components/ToolsTab/index.tsx
+- html/iframePage/main/hooks/usePageRenderMode.ts
+
+
 ## v0.0.55
 
 - Built At: 2026-08-06T11:46:35.283Z

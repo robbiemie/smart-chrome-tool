@@ -11,12 +11,23 @@ import { usePageHeaders } from './hooks/usePageHeaders';
 import PageHeadersModal from './components/PageHeadersModal';
 import OperationsRail from './components/OperationsRail';
 import GroupWorkbench from './components/GroupWorkbench';
+import ToolsTab from './components/ToolsTab';
 import { AjaxGroup, CapturedRequest, ModifyDataModalOpenProps } from './types/registry';
 import { useModuleCollapseState } from './hooks/useModuleCollapseState';
 import { logger } from './utils/logger';
 import { useToolkitPanel } from './hooks/useToolkitPanel';
 
 const SELECTED_GROUP_INDEX_STORAGE_KEY = 'ajaxToolsSelectedGroupIndex';
+
+// Workbench tab registry. The tab bar is rendered from this list so adding a
+// future tab (e.g. Settings, Sniffer) is one entry here plus a branch in the
+// main content switch — no layout edits required.
+const WORKBENCH_TABS = [
+  { key: 'rules', label: 'Rules' },
+  { key: 'tools', label: 'Tools' },
+] as const;
+
+type WorkbenchTabKey = typeof WORKBENCH_TABS[number]['key'];
 
 function App() {
   // When opened as a top-level window via window.open() for the update flow,
@@ -31,6 +42,7 @@ function App() {
   const [selectedGroupIndex, setSelectedGroupIndex] = useState(0);
   const [selectedRuleIndexMap, setSelectedRuleIndexMap] = useState<Record<number, number>>({});
   const [importExportVisible, setImportExportVisible] = useState(false);
+  const [activeTab, setActiveTab] = useState<WorkbenchTabKey>('rules');
   const [updateModal, setUpdateModal] = useState<{
     open: boolean;
     downloadUrl: string;
@@ -70,6 +82,8 @@ function App() {
   const {
     visible: pageHeadersVisible,
     enabled: pageHeadersEnabled,
+    quickEnabled: pageHeadersQuickEnabled,
+    quickToggling: pageHeadersToggling,
     pageOrigin,
     headerPairs,
     setVisible: setPageHeadersVisible,
@@ -79,13 +93,14 @@ function App() {
     updateHeaderPair,
     openModal: openPageHeadersModal,
     save: savePageHeaders,
+    toggleQuickEnabled: togglePageHeadersQuick,
   } = usePageHeaders();
   const {
     toolkitEnabled,
     setToolkitEnabled,
   } = useToolkitPanel();
 
-  const { moduleCollapseState, updateModuleCollapseState, toggleCollapseAll } = useModuleCollapseState();
+  const { moduleCollapseState, updateModuleCollapseState } = useModuleCollapseState();
 
   useEffect(() => {
     if (!chrome.storage || !chrome.runtime || isRegistry) return;
@@ -154,6 +169,13 @@ function App() {
     updateAjaxToolsSwitchOn(value);
     chrome.storage.local.set({ ajaxToolsSwitchOn: value });
   };
+
+  // Total rule count across every group — shown on the Import/Export card so
+  // the user knows how much workspace data is in flight before backing up.
+  const totalRuleCount = ajaxDataList.reduce(
+    (sum, group) => sum + (group.interfaceList?.length || 0),
+    0
+  );
 
   const handleOpenModifyModal = (payload: ModifyDataModalOpenProps) => {
     modifyDataModalRef.current?.openModal(payload);
@@ -258,31 +280,6 @@ function App() {
     // re-bind on every change so the listener sees fresh values.
   });
 
-  // Toolkit panel config rows trigger workbench actions via postMessage.
-  // These listeners let the content.js Toolkit panel open modals and toggle
-  // collapse state without duplicating React UI in imperative DOM.
-  useEffect(() => {
-    const handleMessage = (event: MessageEvent) => {
-      const data = event.data;
-      if (!data) return;
-      switch (data.type) {
-        case 'MOCKKIT_OPEN_IMPORT_EXPORT':
-          setImportExportVisible(true);
-          break;
-        case 'MOCKKIT_OPEN_PAGE_HEADERS':
-          openPageHeadersModal();
-          break;
-        case 'MOCKKIT_TOGGLE_COLLAPSE_ALL':
-          toggleCollapseAll();
-          break;
-        default:
-          break;
-      }
-    };
-    window.addEventListener('message', handleMessage);
-    return () => window.removeEventListener('message', handleMessage);
-  });
-
   const handleGroupOpenChange = (groupIndex: number, open: boolean) => {
     const nextGroupIndex = onGroupOpenChange(groupIndex, open);
 
@@ -377,37 +374,69 @@ function App() {
           />
 
           <main className="workbench-main" style={{ opacity: ajaxToolsSwitchOn ? 1 : 0.65 }}>
+            {/* Tab bar — registry-driven. Add a tab by extending WORKBENCH_TABS
+                above plus a branch in the content switch below. The OperationsRail
+                (master Interceptor + Toolkit switches) stays always-visible to the
+                left regardless of the active tab. */}
+            <nav className="workbench-tabs" role="tablist">
+              {WORKBENCH_TABS.map((tab) => (
+                <button
+                  key={tab.key}
+                  type="button"
+                  role="tab"
+                  aria-selected={activeTab === tab.key}
+                  className={`workbench-tabs__btn${activeTab === tab.key ? ' workbench-tabs__btn--active' : ''}`}
+                  onClick={() => setActiveTab(tab.key)}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </nav>
+
             <div className="workbench-content-grid">
-              <GroupWorkbench
-                ajaxDataList={ajaxDataList as AjaxGroup[]}
-                selectedGroupIndex={selectedGroupIndex}
-                group={selectedGroup}
-                groupIndex={selectedGroupIndex}
-                selectedRuleIndex={selectedRuleIndex}
-                ajaxToolsExpandAll={ajaxToolsExpandAll}
-                collapsed={moduleCollapseState.groupWorkbench}
-                onSelectGroup={setSelectedGroupIndex}
-                onGroupAdd={handleGroupAdd}
-                onSelectRule={(ruleIndex) => {
-                  setSelectedRuleIndexMap((previous) => ({
-                    ...previous,
-                    [selectedGroupIndex]: ruleIndex,
-                  }));
-                }}
-                onGroupSummaryTextChange={onGroupSummaryTextChange}
-                onGroupMove={onGroupMove}
-                onGroupDelete={onGroupDelete}
-                onGroupOpenChange={handleGroupOpenChange}
-                onCollapseChange={onCollapseChange}
-                onInterfaceListAdd={onInterfaceListAdd}
-                onInterfaceListDelete={handleInterfaceListDelete}
-                onInterfaceMove={handleInterfaceMove}
-                onInterfaceListChange={handleInterfaceListChange}
-                onOpenModifyModal={handleOpenModifyModal}
-                onToggleCollapse={() => {
-                  updateModuleCollapseState('groupWorkbench', !moduleCollapseState.groupWorkbench);
-                }}
-              />
+              {activeTab === 'rules' ? (
+                <GroupWorkbench
+                  ajaxDataList={ajaxDataList as AjaxGroup[]}
+                  selectedGroupIndex={selectedGroupIndex}
+                  group={selectedGroup}
+                  groupIndex={selectedGroupIndex}
+                  selectedRuleIndex={selectedRuleIndex}
+                  ajaxToolsExpandAll={ajaxToolsExpandAll}
+                  collapsed={moduleCollapseState.groupWorkbench}
+                  onSelectGroup={setSelectedGroupIndex}
+                  onGroupAdd={handleGroupAdd}
+                  onSelectRule={(ruleIndex) => {
+                    setSelectedRuleIndexMap((previous) => ({
+                      ...previous,
+                      [selectedGroupIndex]: ruleIndex,
+                    }));
+                  }}
+                  onGroupSummaryTextChange={onGroupSummaryTextChange}
+                  onGroupMove={onGroupMove}
+                  onGroupDelete={onGroupDelete}
+                  onGroupOpenChange={handleGroupOpenChange}
+                  onCollapseChange={onCollapseChange}
+                  onInterfaceListAdd={onInterfaceListAdd}
+                  onInterfaceListDelete={handleInterfaceListDelete}
+                  onInterfaceMove={onInterfaceMove}
+                  onInterfaceListChange={handleInterfaceListChange}
+                  onOpenModifyModal={handleOpenModifyModal}
+                  onToggleCollapse={() => {
+                    updateModuleCollapseState('groupWorkbench', !moduleCollapseState.groupWorkbench);
+                  }}
+                />
+              ) : (
+                <ToolsTab
+                  pageOrigin={pageOrigin}
+                  pageHeadersQuickEnabled={pageHeadersQuickEnabled}
+                  pageHeadersToggling={pageHeadersToggling}
+                  onOpenPageHeaders={openPageHeadersModal}
+                  onTogglePageHeadersQuick={togglePageHeadersQuick}
+                  onOpenImportExport={() => setImportExportVisible(true)}
+                  groupCount={ajaxDataList.length}
+                  ruleCount={totalRuleCount}
+                />
+              )}
             </div>
           </main>
         </div>

@@ -11,10 +11,6 @@ const defaultModuleCollapseState: ModuleCollapseState = {
   groupWorkbench: false,
 };
 
-// Keys toggled by the "collapse all" shortcut. globalControls is excluded so
-// the rail with the shortcut button itself stays usable.
-const COLLAPSE_ALL_KEYS: ModuleCollapseKey[] = ['groupWorkbench'];
-
 export const useModuleCollapseState = () => {
   const [moduleCollapseState, setModuleCollapseState] = useState<ModuleCollapseState>(defaultModuleCollapseState);
 
@@ -48,29 +44,8 @@ export const useModuleCollapseState = () => {
     }
   };
 
-  // Collapse/expand the rule modules together.
-  const setAllModulesCollapsed = (collapsed: boolean) => {
-    const nextState = { ...moduleCollapseState };
-    COLLAPSE_ALL_KEYS.forEach((key) => {
-      nextState[key] = collapsed;
-    });
-
-    setModuleCollapseState(nextState);
-
-    if (chrome.storage) {
-      chrome.storage.local.set({
-        [MODULE_COLLAPSE_STORAGE_KEY]: nextState,
-      });
-    }
-  };
-
-  const allModulesCollapsed = COLLAPSE_ALL_KEYS.every((key) => moduleCollapseState[key]);
-
-  const toggleCollapseAll = () => setAllModulesCollapsed(!allModulesCollapsed);
-
   return {
     moduleCollapseState,
     updateModuleCollapseState,
-    toggleCollapseAll,
   };
 };

@@ -7,9 +7,10 @@ interface OperationsRailProps {
   ajaxToolsSwitchOn: boolean;
   globalControlsCollapsed: boolean;
   // Toolkit master panel visibility — driven by this switch in Global Controls.
-  // The Toolkit panel consolidates Floating Rules / DOM Inspect / Animation
-  // Control / CSR Mode / Domain Whitelist / Headers / Import-Export /
-  // Collapse-All as sub-tools and config rows toggled inside it.
+  // The Toolkit panel consolidates the runtime debug sub-tools — Floating
+  // Rules, DOM Inspect, Animation Control, Request Sniffer — plus the Domain
+  // Whitelist config section. CSR Mode, Page Headers, Import/Export, and
+  // Collapse All live in the workbench's "Tools" tab (see ToolsTab).
   toolkitEnabled: boolean;
   onToggleToolkit: (value: boolean) => void;
   onToggleAjaxToolsSwitch: (value: boolean) => void;
@@ -50,8 +51,10 @@ const OperationsRail = ({
           <span className="rail-extras__label">Extras</span>
           <div className="rail-extras__list">
             {/* Toolkit switch controls the floating Toolkit panel visibility.
-                All other controls (CSR, Whitelist, Headers, Import-Export,
-                Collapse-All) now live inside the Toolkit panel. */}
+                The Toolkit panel hosts the runtime debug sub-tools (Floating
+                Rules / DOM Inspect / Animation / Sniffer) + Domain Whitelist.
+                CSR / Headers / Import-Export / Collapse-All live in the
+                workbench "Tools" tab instead. */}
             <div className="rail-switch-item">
               <Switch
                 checked={toolkitEnabled}

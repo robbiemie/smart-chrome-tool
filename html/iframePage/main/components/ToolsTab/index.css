@@ -1,0 +1,121 @@
+.tools-tab {
+  display: flex;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 18px;
+  padding: 4px;
+}
+
+.tools-tab__header {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 4px 4px 0;
+}
+
+.tools-tab__title {
+  margin: 0;
+  font-size: 22px;
+  font-family: 'Avenir Next', 'Trebuchet MS', sans-serif;
+  color: #1b2822;
+}
+
+.tools-tab__subtitle {
+  margin: 0;
+  color: rgb(27 40 34 / 60%);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.tools-tab__subtitle code {
+  padding: 1px 6px;
+  border-radius: 6px;
+  background: rgb(27 40 34 / 6%);
+  font-size: 12px;
+}
+
+/* Responsive card grid. Cards stretch to fill the row; the grid auto-fits
+   between 280px and 1fr so the layout works from narrow panels to wide
+   DevTools panels without bespoke breakpoints. */
+.tools-tab__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 16px;
+  align-items: stretch;
+}
+
+.tools-tab__card {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 16px;
+  border: 1px solid rgb(27 40 34 / 8%);
+  border-radius: 20px;
+  padding: 18px;
+  background: linear-gradient(135deg, rgb(255 255 255 / 96%), rgb(249 244 235 / 92%));
+  box-shadow: 0 12px 30px rgb(37 54 46 / 8%);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.tools-tab__card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 14px 30px rgb(37 54 46 / 12%);
+}
+
+.tools-tab__card-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.tools-tab__card-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  flex: 0 0 36px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, rgb(26 155 127 / 18%), rgb(26 155 127 / 6%));
+  color: #1a9b7f;
+  font-size: 18px;
+}
+
+.tools-tab__card-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.tools-tab__card-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: #1b2822;
+}
+
+.tools-tab__card-hint {
+  margin: 0;
+  color: rgb(27 40 34 / 55%);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.tools-tab__card-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.tools-tab__row-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
