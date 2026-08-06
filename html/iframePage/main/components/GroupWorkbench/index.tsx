@@ -4,8 +4,6 @@ import {
   DeleteOutlined,
   PlusOutlined,
   EditOutlined,
-  CodeOutlined,
-  SendOutlined,
   EyeOutlined,
   DownOutlined,
   RightOutlined,
@@ -236,16 +234,15 @@ const GroupWorkbench = ({
             onCollapseChange(groupIndex, nextActiveKeys);
           };
 
-          // When the card is collapsed, clicking the status tag toggles the
-          // rule's open state instead of expanding the card — so users can
-          // flip rules on/off from the collapsed row without expanding it.
-          const handleStatusTagClick = (event: React.MouseEvent<HTMLElement>) => {
-            event.stopPropagation();
-            onSelectRule(interfaceIndex);
-            if (!isRuleExpanded) {
-              onInterfaceListChange(groupIndex, interfaceIndex, 'open', !rule.open);
-            }
-          };
+                  // Clicking the status tag always toggles the rule's open
+                  // state, regardless of whether the card is expanded or
+                  // collapsed — consistent behavior so the tag is a reliable
+                  // on/off affordance from any row state.
+                  const handleStatusTagClick = (event: React.MouseEvent<HTMLElement>) => {
+                    event.stopPropagation();
+                    onSelectRule(interfaceIndex);
+                    onInterfaceListChange(groupIndex, interfaceIndex, 'open', !rule.open);
+                  };
 
           return (
             <article
@@ -309,6 +306,12 @@ const GroupWorkbench = ({
                   <div className="rule-card__meta">
                     <Tag color="blue">{rule.matchType || 'regex'}</Tag>
                     {rule.matchMethod ? <Tag>{rule.matchMethod}</Tag> : null}
+                    {/* Surface non-default status codes so error/redirect mocks
+                        are discoverable without opening the editor. 200 is the
+                        default and intentionally omitted to avoid noise. */}
+                    {rule.replacementStatusCode && rule.replacementStatusCode !== '200' ? (
+                      <Tag color="orange">{rule.replacementStatusCode}</Tag>
+                    ) : null}
                   </div>
                   <div className="rule-card__grid">
                     <label className="field-block">
@@ -380,49 +383,7 @@ const GroupWorkbench = ({
                         });
                       }}
                     >
-                      Response
-                    </Button>
-                    <Button
-                      icon={<SendOutlined />}
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        onOpenModifyModal({
-                          groupIndex,
-                          interfaceIndex,
-                          activeTab: 'Request',
-                          request: rule.request,
-                          replacementMethod: rule.replacementMethod,
-                          replacementUrl: rule.replacementUrl,
-                          replacementStatusCode: rule.replacementStatusCode,
-                          headersText: rule.headers,
-                          requestPayloadText: rule.requestPayloadText,
-                          responseLanguage: rule.language,
-                          responseText: rule.responseText,
-                        });
-                      }}
-                    >
-                      Request
-                    </Button>
-                    <Button
-                      icon={<CodeOutlined />}
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        onOpenModifyModal({
-                          groupIndex,
-                          interfaceIndex,
-                          activeTab: 'RequestPayload',
-                          request: rule.request,
-                          replacementMethod: rule.replacementMethod,
-                          replacementUrl: rule.replacementUrl,
-                          replacementStatusCode: rule.replacementStatusCode,
-                          headersText: rule.headers,
-                          requestPayloadText: rule.requestPayloadText,
-                          responseLanguage: rule.language,
-                          responseText: rule.responseText,
-                        });
-                      }}
-                    >
-                      Payload
+                      Edit
                     </Button>
                   </div>
 

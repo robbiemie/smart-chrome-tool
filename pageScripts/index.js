@@ -600,13 +600,13 @@ function applyTimerPatch(paused) {
   }
 }
 
-// Install/restore XHR/fetch hooks based on the current Interceptor + Sniffer
-// state. Called on initial load AND on every state-change message so the
-// hooks track the live flags. When BOTH are off, restore the originals so the
-// page runs unhooked. modifyResponse honors ajaxToolsSwitchOn so mock is
-// skipped when only the sniffer is on.
+// Install/restore XHR/fetch hooks based on the Interceptor master switch.
+// Called on initial load AND on every state-change message. The Interceptor is
+// the single chokepoint: when it is off, hooks are removed so the page runs
+// unhooked (no mock, no capture). The Sniffer is subordinate to the Interceptor
+// and cannot keep hooks alive on its own.
 function syncHooks() {
-  if ((ajax_tools_space.ajaxToolsSwitchOn || ajax_tools_space.snifferEnabled) && currentHostWhitelisted()) {
+  if (ajax_tools_space.ajaxToolsSwitchOn && currentHostWhitelisted()) {
     // https://github.com/PengChen96/ajax-tools/pull/14
     for (const k in ajax_tools_space.originalXHR) {
       ajax_tools_space.myXHR[k] = ajax_tools_space.originalXHR[k];

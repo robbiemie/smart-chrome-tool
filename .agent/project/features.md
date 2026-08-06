@@ -7,6 +7,11 @@
 > Format per entry: name, one-line summary, where it lives, how it's wired.
 > Keep entries concise; link to source files with `path:line`.
 
+> **Master-switch model:** the Interceptor (`ajaxToolsSwitchOn`) is the single
+> master switch. Turning it OFF force-disables every mock sub-feature — Sniffer,
+> Floating Rules, Page Headers (DNR) — and they do NOT auto-resume when it is
+> turned back on; each must be re-enabled manually.
+
 ---
 
 ## 1. Response interception & rewriting
@@ -56,7 +61,10 @@ params before sending, to dynamically transform the payload.
 **Summary:** Set/remove request headers per origin using MV3
 `declarativeNetRequest` dynamic rules. Compiled from header profiles in the SW;
 applies even when the page script can't (e.g. cross-origin). One-click enable
-per profile.
+per profile. **Subordinate to the Interceptor master switch** — turning the
+Interceptor off flips every header rule's `enabled` flag to false and removes
+all DNR dynamic rules; rules do NOT auto-resume when the Interceptor is
+re-enabled and must be toggled back on per origin.
 
 **Lives in:**
 - Rule compilation: `service_worker.js` (`compileDynamicRules`,
@@ -141,11 +149,10 @@ inline overrides so the CSS default takes over. The panel is appended LAST in
 `mountPanelContainer` so at the shared `z-index: 2147483647` it stacks above
 other top-right overlays (Animation).
 
-**Independence from interceptor switch:** the panel stays visible even when
-the global `ajaxToolsSwitchOn` interceptor switch is off — users can toggle
-rules while interception is paused (rules apply once interception resumes).
-`applyFloatingPanelState` no longer hides the panel based on
-`ajaxToolsSwitchOn`.
+**Subordinate to the Interceptor master switch:** turning the Interceptor off
+force-hides the panel (persists `ajaxToolsFloatingRulesEnabled = false`). The
+panel stays hidden after the Interceptor is re-enabled and must be toggled
+back on manually.
 
 ---
 
@@ -276,16 +283,18 @@ classes `mockkit-dom-inspector__mark-*`.
 status/response; each row can be promoted to a mock rule in the selected group
 with one click. Static assets filtered out. Now lives as a Toolkit sub-tool:
 a draggable floating panel on the host page (content.js DOM), toggled by the
-"Request Sniffer" switch inside the Toolkit master panel. **Decoupled from the
-Interceptor master switch** — the sniffer installs XHR/fetch hooks via a
-separate `snifferEnabled` flag so live capture works even when no mocking is
-active; `modifyResponse` honors `ajaxToolsSwitchOn` so mock is skipped when
-only the sniffer is on.
+"Request Sniffer" switch inside the Toolkit master panel. **Subordinate to the
+Interceptor master switch** — XHR/fetch hooks are installed only while
+`ajaxToolsSwitchOn` is on, so live capture requires the Interceptor to be
+active. Turning the Interceptor off force-closes the sniffer panel (persists
+`ajaxToolsSnifferPanelOpen = false`); it stays closed after the Interceptor is
+re-enabled and must be toggled back on manually.
 
 **Lives in:**
 - Emission: `pageScripts/index.js` (`emitCapturedRequest`)
 - Hook install gate: `pageScripts/index.js` —
-  `if ((ajaxToolsSwitchOn || snifferEnabled) && currentHostWhitelisted())`
+  `if (ajaxToolsSwitchOn && currentHostWhitelisted())` (Interceptor is the
+  sole master; Sniffer cannot keep hooks alive on its own)
 - Capture + UI: `content.js` (`createSnifferPanel`, `pushSnifferCapture`,
   `renderSnifferList`, `setSnifferPanelVisible`, `setToolkitSnifferOpen`,
   `repositionSnifferPanel`, `bindSnifferPanelDrag`)
@@ -302,15 +311,11 @@ only the sniffer is on.
 `components/RequestSniffer/` + OperationsRail ModuleSection are no longer used
 for the sniffer UI (the hook is kept for the `CapturedRequest` type only).
 
-**Intercept toggle in panel:** the sniffer panel hosts an "拦截请求" switch
-that toggles the global `ajaxToolsSwitchOn` interceptor master switch in-place
-(writes `chrome.storage.local.ajaxToolsSwitchOn` AND postMessages directly to
-the page script for immediate effect — does not rely solely on
-`storage.onChanged`, which may not fire when the value is unchanged). The
-`storage.onChanged` listener relays to the page script + floating panel, and
-`syncSnifferInterceptSwitch` keeps the switch UI in sync (called on panel
-build, on storage changes, and on init from `storage.local.get`). CSS class
-`mockkit-sniffer-panel__intercept*`.
+**Interceptor is the sole master switch:** the sniffer panel no longer hosts
+an in-panel intercept toggle. The Interceptor switch in the workbench's Global
+Controls is the only way to turn the master switch on/off — turning it off
+force-closes the sniffer panel (see master-switch model at the top of this
+file), so an in-panel toggle would be a self-destruct button and was removed.
 
 **Positioning (bottom-left default):** the sniffer panel defaults to the
 bottom-left anchor (`left:24px; bottom:24px`) so it never overlaps Floating

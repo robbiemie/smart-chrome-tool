@@ -131,7 +131,7 @@ const ModifyDataModal = (
   return <>
     <Modal
       centered
-      title={<span style={{ fontSize: 12 }}>Matched URL：{request}</span>}
+      title={<span style={{ fontSize: 14, fontWeight: 600, wordBreak: 'break-all' }}>Matched URL：{request}</span>}
       width={'98%'}
       open={visible}
       onOk={handleOk}

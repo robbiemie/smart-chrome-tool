@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Button, Input, Switch, Tag } from 'antd';
-import { PlusOutlined, SwapOutlined, SettingOutlined, CompressOutlined, ExpandOutlined, CloseOutlined } from '@ant-design/icons';
+import { PlusOutlined, SwapOutlined, SettingOutlined, CompressOutlined, ExpandOutlined, CloseOutlined, DownOutlined, RightOutlined } from '@ant-design/icons';
 import { withErrorBoundary } from '../../common/withErrorBoundary';
 import ModuleSection from '../ModuleSection';
 
@@ -49,6 +49,10 @@ const OperationsRail = ({
   onGlobalControlsCollapseToggle,
 }: OperationsRailProps) => {
   const [domainInput, setDomainInput] = useState('');
+  // Domain Whitelist is a low-frequency config; collapse it by default so it
+  // does not crowd the rail. The current-host status tag stays visible in the
+  // header so whitelist coverage is still obvious at a glance.
+  const [domainWhitelistCollapsed, setDomainWhitelistCollapsed] = useState(true);
 
   // The add-affordance is gated by EXPLICIT membership rather than pattern
   // match: a wildcard '*' matches every host, but the user still wants to pin
@@ -86,24 +90,32 @@ const OperationsRail = ({
         onToggleCollapse={onGlobalControlsCollapseToggle}
       >
         <div className="rail-switch-list">
-          <div className="rail-switch-item">
+          <div className="rail-switch-item rail-switch-item--master">
+            <span className="rail-switch-item__badge">MASTER</span>
             <Switch checked={ajaxToolsSwitchOn} onChange={onToggleAjaxToolsSwitch} />
             <strong>Interceptor</strong>
+            <p>Master switch. Off disables all mock sub-features.</p>
           </div>
-          <div className="rail-switch-item">
-            <Switch
-              loading={csrModeLoading || csrModeToggling}
-              checked={csrModeEnabled}
-              onChange={onToggleCsrMode}
-            />
-            <strong>CSR Mode</strong>
-          </div>
-          <div className="rail-switch-item">
-            <Switch
-              checked={toolkitEnabled}
-              onChange={onToggleToolkit}
-            />
-            <strong>Toolkit</strong>
+        </div>
+
+        <div className="rail-extras">
+          <span className="rail-extras__label">Extras</span>
+          <div className="rail-extras__list">
+            <div className="rail-switch-item">
+              <Switch
+                loading={csrModeLoading || csrModeToggling}
+                checked={csrModeEnabled}
+                onChange={onToggleCsrMode}
+              />
+              <strong>CSR Mode</strong>
+            </div>
+            <div className="rail-switch-item">
+              <Switch
+                checked={toolkitEnabled}
+                onChange={onToggleToolkit}
+              />
+              <strong>Toolkit</strong>
+            </div>
           </div>
         </div>
 
@@ -121,8 +133,16 @@ const OperationsRail = ({
         </div>
 
         <div className="domain-whitelist">
-          <div className="domain-whitelist__header">
-            <strong>Domain Whitelist</strong>
+          <div
+            className="domain-whitelist__header domain-whitelist__header--toggle"
+            onClick={() => setDomainWhitelistCollapsed((prev) => !prev)}
+            role="button"
+            tabIndex={0}
+          >
+            <span className="domain-whitelist__header-left">
+              {domainWhitelistCollapsed ? <RightOutlined /> : <DownOutlined />}
+              <strong>Domain Whitelist</strong>
+            </span>
             {currentHostname && (
               currentHostAdded ? (
                 <Tag color="green" className="domain-whitelist__status-tag">
@@ -132,37 +152,44 @@ const OperationsRail = ({
                 <Tag
                   color="red"
                   className="domain-whitelist__status-tag domain-whitelist__status-tag--clickable"
-                  onClick={() => onAddDomain(currentHostname)}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onAddDomain(currentHostname);
+                  }}
                 >
                   + {currentHostname}
                 </Tag>
               )
             )}
           </div>
-          <div className="domain-whitelist__tags">
-            {domainWhitelist.map((pattern) => (
-              <Tag
-                key={pattern}
-                className="domain-whitelist__tag"
-                closable
-                closeIcon={<CloseOutlined />}
-                onClose={(e) => {
-                  e.preventDefault();
-                  onRemoveDomain(pattern);
-                }}
-              >
-                {pattern}
-              </Tag>
-            ))}
-          </div>
-          <Input.Search
-            size="small"
-            placeholder="Add pattern, e.g. *.foo.com"
-            value={domainInput}
-            onChange={(e) => setDomainInput(e.target.value)}
-            onSearch={handleAddDomain}
-            enterButton={<PlusOutlined />}
-          />
+          {!domainWhitelistCollapsed && (
+            <>
+              <div className="domain-whitelist__tags">
+                {domainWhitelist.map((pattern) => (
+                  <Tag
+                    key={pattern}
+                    className="domain-whitelist__tag"
+                    closable
+                    closeIcon={<CloseOutlined />}
+                    onClose={(e) => {
+                      e.preventDefault();
+                      onRemoveDomain(pattern);
+                    }}
+                  >
+                    {pattern}
+                  </Tag>
+                ))}
+              </div>
+              <Input.Search
+                size="small"
+                placeholder="Add pattern, e.g. *.foo.com"
+                value={domainInput}
+                onChange={(e) => setDomainInput(e.target.value)}
+                onSearch={handleAddDomain}
+                enterButton={<PlusOutlined />}
+              />
+            </>
+          )}
         </div>
       </ModuleSection>
     </aside>

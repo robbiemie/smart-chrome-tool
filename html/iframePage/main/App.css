@@ -286,6 +286,29 @@
   gap: 2px;
 }
 
+/* Toggle variant — header becomes a clickable row that collapses/expands the
+   whitelist body. Layout switches to row so the chevron + title sit inline
+   with the current-host status tag on the right. */
+.domain-whitelist__header--toggle {
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+  user-select: none;
+}
+
+.domain-whitelist__header-left {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+}
+
+.domain-whitelist__header-left svg {
+  font-size: 10px;
+  color: rgb(27 40 34 / 45%);
+}
+
 .domain-whitelist__header strong {
   font-size: 13px;
 }
@@ -357,6 +380,54 @@
   color: rgb(27 40 34 / 60%);
   font-size: 13px;
   line-height: 1.6;
+}
+
+/* MASTER switch — the Interceptor is the single chokepoint for every mock
+   sub-feature, so it gets a visually distinct card with a badge and stronger
+   background to signal its authority over the other switches. */
+.rail-switch-item--master {
+  background: linear-gradient(180deg, rgb(26 155 127 / 14%), rgb(26 155 127 / 6%));
+  border: 1px solid rgb(26 155 127 / 30%);
+  box-shadow: 0 2px 8px rgb(26 155 127 / 12%);
+}
+
+.rail-switch-item__badge {
+  display: inline-block;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: #1a9b7f;
+  background: rgb(255 255 255 / 70%);
+  border-radius: 999px;
+  padding: 1px 8px;
+  margin-bottom: 2px;
+}
+
+/* Extras group — secondary switches (CSR Mode, Toolkit) that are NOT master
+   chokepoints. Visually de-emphasized so the MASTER card stays the focal point. */
+.rail-extras {
+  margin-top: 14px;
+}
+
+.rail-extras__label {
+  display: block;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: rgb(27 40 34 / 40%);
+  margin-bottom: 6px;
+}
+
+.rail-extras__list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.rail-extras__list .rail-switch-item {
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
 .group-switcher {

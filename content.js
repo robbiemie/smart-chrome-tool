@@ -3296,15 +3296,12 @@ if (pageScripts) {
       // applyFloatingPanelState() can hide the floating panel when paused.
       ajaxToolsRuntimeState.ajaxToolsSwitchOn = ajaxToolsSwitchOn;
       applyFloatingPanelState();
-      // Sync the sniffer panel's intercept switch with the real storage value
-      // (the runtime default is true, but storage may hold false).
-      syncSnifferInterceptSwitch();
       postMessage({type: 'ajaxTools', to: 'pageScript', key: 'ajaxDataList', value: ajaxDataList}, '*');
       postMessage({type: 'ajaxTools', to: 'pageScript', key: 'ajaxToolsSwitchOn', value: ajaxToolsSwitchOn}, '*');
       postMessage({type: 'ajaxTools', to: 'pageScript', key: 'ajaxToolsSwitchOnNot200', value: ajaxToolsSwitchOnNot200}, '*');
       postMessage({type: 'ajaxTools', to: 'pageScript', key: 'domainWhitelist', value: domainWhitelist}, '*');
-      // Relay sniffer state so the page script installs XHR/fetch hooks for
-      // live capture even when the Interceptor master switch is off.
+      // Mirror sniffer state to the page script. Hook installation is gated by
+      // the Interceptor master switch, so capture only runs while it is on.
       postMessage({type: 'ajaxTools', to: 'pageScript', key: 'snifferEnabled', value: snifferOpen}, '*');
     });
   });
@@ -4662,35 +4659,6 @@ function createSnifferPanel() {
   header.appendChild(headerActions);
   panel.appendChild(header);
 
-  // Intercept toggle: controls the global XHR/fetch interceptor switch
-  // (ajaxToolsSwitchOn). Lives in the sniffer panel so users can pause
-  // mocking while still capturing live traffic.
-  const interceptBar = document.createElement('div');
-  interceptBar.className = 'mockkit-sniffer-panel__intercept';
-  const interceptLabel = document.createElement('span');
-  interceptLabel.className = 'mockkit-sniffer-panel__intercept-label';
-  interceptLabel.textContent = '拦截请求';
-  const interceptSwitch = document.createElement('button');
-  interceptSwitch.type = 'button';
-  interceptSwitch.className = 'mockkit-sniffer-panel__intercept-switch';
-  interceptSwitch.title = 'Toggle XHR/fetch interception (mock layer)';
-  interceptSwitch.addEventListener('click', (event) => {
-    event.stopPropagation();
-    const next = !ajaxToolsRuntimeState.ajaxToolsSwitchOn;
-    ajaxToolsRuntimeState.ajaxToolsSwitchOn = next;
-    if (chrome.storage?.local) {
-      chrome.storage.local.set({ ajaxToolsSwitchOn: next });
-    }
-    // Relay directly to the page script so interception pauses/resumes
-    // immediately — do not rely solely on storage.onChanged (which may
-    // not fire if the value is unchanged, and is async).
-    postMessage({ type: 'ajaxTools', to: 'pageScript', key: 'ajaxToolsSwitchOn', value: next }, '*');
-    syncSnifferInterceptSwitch();
-  });
-  interceptBar.appendChild(interceptLabel);
-  interceptBar.appendChild(interceptSwitch);
-  panel.appendChild(interceptBar);
-
   const toolbar = document.createElement('div');
   toolbar.className = 'mockkit-sniffer-panel__toolbar';
   const search = document.createElement('input');
@@ -4721,18 +4689,7 @@ function createSnifferPanel() {
   bindSnifferPanelDrag(panel);
   snifferState.panelEl = panel;
   renderSnifferList();
-  syncSnifferInterceptSwitch();
   return panel;
-}
-
-// Sync the sniffer panel's "拦截请求" switch with the global interceptor
-// state (ajaxToolsSwitchOn). Called on panel build and whenever the state
-// changes via storage.onChanged.
-function syncSnifferInterceptSwitch() {
-  const panel = snifferState.panelEl;
-  if (!panel) return;
-  const sw = panel.querySelector('.mockkit-sniffer-panel__intercept-switch');
-  if (sw) sw.classList.toggle('is-on', ajaxToolsRuntimeState.ajaxToolsSwitchOn !== false);
 }
 
 // Filter the capture list by the current keyword (url or method substring).
@@ -4888,8 +4845,9 @@ function setSnifferPanelCollapsed(collapsed) {
 
 // Toggle the sniffer sub-panel from the Toolkit master panel. Persists the
 // open/closed state so a page refresh restores it (when Toolkit is on). Also
-// relays snifferEnabled to the page script so XHR/fetch hooks stay installed
-// for live capture even when the Interceptor master switch is off.
+// mirrors snifferEnabled to the page script for state tracking. The Sniffer is
+// subordinate to the Interceptor master switch — capture only works while the
+// Interceptor is on (see syncHooks in pageScripts/index.js).
 function setToolkitSnifferOpen(open) {
   toolkitPanelState.snifferOpen = open;
   setSnifferPanelVisible(open);
@@ -4897,14 +4855,25 @@ function setToolkitSnifferOpen(open) {
   if (chrome.storage?.local) {
     chrome.storage.local.set({ [SNIFFER_OPEN_KEY]: open });
   }
-  // Tell the page script to install/keep XHR/fetch hooks for capture,
-  // independent of the Interceptor master switch.
+  // Mirror sniffer state to the page script. Hook installation is gated by
+  // the Interceptor master switch, so capture only runs while it is on.
   postMessage({
     type: 'ajaxTools',
     to: 'pageScript',
     key: 'snifferEnabled',
     value: open,
   }, '*');
+}
+
+// Interceptor master switch OFF cascade: close the Sniffer panel (persisted
+// closed + snifferEnabled mirrored false) and hide Floating Rules (persisted
+// off via its own storage listener). Both stay off until manually re-enabled.
+// Page Headers (DNR) are disabled separately by the service worker.
+function disableSubFeaturesOnInterceptorOff() {
+  setToolkitSnifferOpen(false);
+  if (chrome.storage?.local) {
+    chrome.storage.local.set({ [FLOATING_ENABLED_KEY]: false });
+  }
 }
 
 // The sniffer panel defaults to the bottom-left anchor so it never overlaps
@@ -6401,14 +6370,17 @@ chrome.storage.onChanged.addListener(function (changes, namespace) {
         value: newValue,
       }, '*');
     }
-    // Global interceptor switch: forward to the page script and mirror it
-    // locally. applyFloatingPanelState is called for consistency but the
-    // rules panel is intentionally independent of ajaxToolsSwitchOn (users
-    // can toggle rules while interception is paused) — see applyFloatingPanelState.
+    // Interceptor is the master switch. Forward to the page script and mirror
+    // locally. When it turns OFF, force-disable every mock sub-feature owned by
+    // the content script (Sniffer + Floating Rules); Page Headers (DNR) are
+    // handled by the service worker. Sub-features stay off after the Interceptor
+    // is re-enabled — each must be re-toggled manually.
     if (key === 'ajaxToolsSwitchOn') {
       ajaxToolsRuntimeState.ajaxToolsSwitchOn = newValue !== false;
       applyFloatingPanelState();
-      syncSnifferInterceptSwitch();
+      if (newValue === false) {
+        disableSubFeaturesOnInterceptorOff();
+      }
     }
     // Domain whitelist: forward to the page script so the mock layer can
     // gate XHR/fetch override, and update the floating panel visibility.

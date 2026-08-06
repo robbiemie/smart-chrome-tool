@@ -430,6 +430,25 @@ async function syncHeaderRules() {
   });
 }
 
+// Interceptor master switch OFF → flip every header rule's enabled flag to
+// false and re-sync DNR so all dynamic rules are removed. Rules are persisted
+// disabled so they do NOT auto-resume when the Interceptor is re-enabled; each
+// origin must be toggled back on manually from the Page Headers UI.
+async function disableAllHeaderRules() {
+  const profiles = await ensureHeaderProfilesStorage();
+  const nextProfiles = profiles.map((profile) => ({
+    ...profile,
+    rules: (Array.isArray(profile.rules) ? profile.rules : []).map((rule) => ({
+      ...rule,
+      enabled: false,
+    })),
+  }));
+  await chrome.storage.local.set({ [HEADER_PROFILES_STORAGE_KEY]: nextProfiles });
+  // The storage.onChanged listener also triggers syncHeaderRules, but call it
+  // explicitly to guarantee DNR removal even when profiles were unchanged.
+  await syncHeaderRules();
+}
+
 chrome.action.onClicked.addListener(async (tab) => {
   if (!tab?.id) {
     return;
@@ -451,6 +470,14 @@ chrome.storage.onChanged.addListener((changes) => {
   for (const [key, { newValue }] of Object.entries(changes)) {
     if (key === 'ajaxToolsSwitchOn') {
       setSwitchBadge(newValue);
+      // Master switch OFF → strip all DNR header rules. Profile rules are
+      // persisted disabled so they do NOT auto-resume when the Interceptor is
+      // re-enabled; each origin must be toggled back on manually.
+      if (newValue === false) {
+        disableAllHeaderRules().catch((error) => {
+          console.error('[ajax-tools] disable header rules on interceptor-off failed', error);
+        });
+      }
     }
     if (key === HEADER_PROFILES_STORAGE_KEY || key === LEGACY_PAGE_HEADERS_STORAGE_KEY) {
       syncHeaderRules().catch((error) => {
