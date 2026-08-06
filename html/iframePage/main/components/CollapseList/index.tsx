@@ -108,6 +108,7 @@ export const CollapseList = ({ fold, index, ajaxDataList, interfaceList, modifyD
                     replacementMethod: v.replacementMethod,
                     replacementUrl: v.replacementUrl,
                     replacementStatusCode: v.replacementStatusCode,
+                    delay: v.delay,
                     headersText: v.headers,
                     requestPayloadText: v.requestPayloadText,
                     responseLanguage: v.language,

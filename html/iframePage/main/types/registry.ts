@@ -18,6 +18,7 @@ export interface ModifyDataModalOpenProps {
   replacementMethod: string;
   replacementUrl: string;
   replacementStatusCode: string;
+  delay: string;
   headersText: string;
   requestPayloadText: string;
   responseLanguage: string;

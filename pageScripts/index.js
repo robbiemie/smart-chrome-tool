@@ -108,6 +108,24 @@ const ajax_tools_space = {
     } catch (e) {}
     return stringFunction;
   },
+  // Parse a delay spec into milliseconds. Supports:
+  //   "500"       → fixed 500ms
+  //   "100-500"   → random integer in [100, 500]
+  //   "" / NaN    → 0 (no delay)
+  // Returns 0 for any unparseable input so a bad value never blocks the page.
+  parseDelay: (delaySpec) => {
+    if (!delaySpec) return 0;
+    const s = String(delaySpec).trim();
+    const rangeMatch = s.match(/^(\d+)\s*-\s*(\d+)$/);
+    if (rangeMatch) {
+      const min = parseInt(rangeMatch[1], 10);
+      const max = parseInt(rangeMatch[2], 10);
+      if (max < min) return min;
+      return min + Math.floor(Math.random() * (max - min + 1));
+    }
+    const n = parseInt(s, 10);
+    return isNaN(n) ? 0 : Math.max(0, n);
+  },
   getRequestParams: (requestUrl) => {
     if (!requestUrl) {
       return null;
@@ -206,6 +224,27 @@ const ajax_tools_space = {
         xhr.onreadystatechange = (...args) => {
           // 下载成功
           if (this.readyState === this.DONE) {
+            // Simulate response latency. When a matched rule specifies a
+            // delay, defer BOTH the response modification and the page's
+            // onreadystatechange callback so the page perceives a slower
+            // round-trip (useful for testing loading states, retries, and
+            // timeout handling). The Sniffer capture is also deferred so
+            // its timeline matches what the page actually received.
+            const delayMs = ajax_tools_space.parseDelay(this._matchedInterface && this._matchedInterface.delay);
+            if (delayMs > 0) {
+              setTimeout(() => {
+                modifyResponse();
+                ajax_tools_space.emitCapturedRequest({
+                  source: 'xhr',
+                  method: this._openArgs && this._openArgs[0],
+                  url: this._openArgs && this._openArgs[1],
+                  status: this.status,
+                  responseText: this.responseText,
+                });
+                this.onreadystatechange && this.onreadystatechange.apply(this, args);
+              }, delayMs);
+              return;
+            }
             // 开启拦截
             modifyResponse();
             // Emit captured request/response to the sniffer. Use the override
@@ -423,16 +462,23 @@ const ajax_tools_space = {
           originalResponseText = '';
         }
       }
-      // Emit captured fetch traffic to the sniffer. Prefer the override text
-      // so the panel shows what the page actually received.
-      ajax_tools_space.emitCapturedRequest({
-        source: 'fetch',
-        method: data && data.method,
-        url: requestUrl,
-        status: response.status,
-        responseText: overrideText !== undefined ? overrideText : originalResponseText,
-      });
       if (overrideText !== undefined) {
+        // Simulate response latency for mocked fetch responses. The delay
+        // applies after the override text is computed but before the Response
+        // is returned to the page, so callers' await resolves later — exactly
+        // like a slow network. The Sniffer capture is emitted after the delay
+        // so its timeline matches what the page perceived.
+        const delayMs = ajax_tools_space.parseDelay(matchedInterface && matchedInterface.delay);
+        if (delayMs > 0) {
+          await new Promise((r) => setTimeout(r, delayMs));
+        }
+        ajax_tools_space.emitCapturedRequest({
+          source: 'fetch',
+          method: data && data.method,
+          url: requestUrl,
+          status: response.status,
+          responseText: overrideText,
+        });
         const stream = new ReadableStream({
           start(controller) {
             controller.enqueue(new TextEncoder().encode(overrideText));
@@ -465,6 +511,14 @@ const ajax_tools_space = {
         }
         return responseProxy;
       }
+      // Non-matched fetch: emit the passthrough capture immediately (no delay).
+      ajax_tools_space.emitCapturedRequest({
+        source: 'fetch',
+        method: data && data.method,
+        url: requestUrl,
+        status: response.status,
+        responseText: originalResponseText,
+      });
       return response;
     })
   }

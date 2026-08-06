@@ -158,6 +158,7 @@ const PanelItem =    ({ fold, index, groupOpen, summaryText, headerClass, interf
                               replacementMethod: v.replacementMethod,
                               replacementUrl: v.replacementUrl,
                               replacementStatusCode: v.replacementStatusCode,
+                              delay: v.delay,
                               headersText: v.headers,
                               requestPayloadText: v.requestPayloadText,
                               responseLanguage: v.language,

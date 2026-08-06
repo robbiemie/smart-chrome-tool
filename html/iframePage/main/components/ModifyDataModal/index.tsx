@@ -1,7 +1,7 @@
-import { Modal, Tabs, Input, Card, Space, Select } from 'antd';
+import { Modal, Tabs, Input, Card, Space, Select, Button, Tooltip } from 'antd';
 import React, { ForwardedRef, useImperativeHandle, useRef, useState } from 'react';
 import MonacoEditor from '../../../common/MonacoEditor';
-import { HEADERS_EXAMPLES, REQUEST_PAYLOAD_EXAMPLES, RESPONSE_EXAMPLES, HTTP_METHOD_MAP } from '../../../common/value';
+import { HEADERS_EXAMPLES, REQUEST_PAYLOAD_EXAMPLES, RESPONSE_EXAMPLES, HTTP_METHOD_MAP, DELAY_PRESETS } from '../../../common/value';
 import { logger } from '../../utils/logger';
 
 import './index.css';
@@ -12,6 +12,7 @@ export interface ModifyDataModalOnSaveProps {
   replacementMethod: string,
   replacementUrl: string,
   replacementStatusCode: string,
+  delay: string,
   headersEditorValue: string,
   requestPayloadEditorValue: string,
   responseEditorValue:string,
@@ -19,7 +20,7 @@ export interface ModifyDataModalOnSaveProps {
 }
 interface ModifyDataModalProps {
   onSave: (
-    { groupIndex, interfaceIndex, replacementMethod, replacementUrl, headersEditorValue,
+    { groupIndex, interfaceIndex, replacementMethod, replacementUrl, delay, headersEditorValue,
       requestPayloadEditorValue, responseEditorValue, language } : ModifyDataModalOnSaveProps
   ) => void;
 }
@@ -31,6 +32,7 @@ export interface OpenModalProps {
   replacementMethod: string;
   replacementUrl: string;
   replacementStatusCode: string;
+  delay: string;
   headersText: string;
   requestPayloadText: string;
   responseLanguage: string;
@@ -60,6 +62,7 @@ const ModifyDataModal = (
   const [replacementMethod, setReplacementMethod] = useState('');
   const [replacementUrl, setReplacementUrl] = useState('');
   const [replacementStatusCode, setReplacementStatusCode] = useState('200');
+  const [delay, setDelay] = useState('');
   const [headersText, setHeadersText] = useState('');
   const [requestPayloadText, setRequestPayloadText] = useState('');
   const [responseLanguage, setResponseLanguage] = useState('json');
@@ -70,7 +73,7 @@ const ModifyDataModal = (
   }));
 
   const openModal = (
-    { groupIndex, interfaceIndex, activeTab, request, replacementMethod, replacementUrl, replacementStatusCode,
+    { groupIndex, interfaceIndex, activeTab, request, replacementMethod, replacementUrl, replacementStatusCode, delay,
       headersText, requestPayloadText, responseLanguage, responseText } : OpenModalProps
   ) => {
     setGroupIndex(groupIndex);
@@ -81,6 +84,7 @@ const ModifyDataModal = (
     setReplacementMethod(replacementMethod);
     setReplacementUrl(replacementUrl);
     setReplacementStatusCode(replacementStatusCode);
+    setDelay(delay ?? '');
     setHeadersText(headersText);
     setRequestPayloadText(requestPayloadText);
     setResponseLanguage(responseLanguage);
@@ -123,7 +127,7 @@ const ModifyDataModal = (
     const requestPayloadEditorValue = safeGetValue(monacoEditorRequestPayloadRef.current);
     const responseEditorValue = safeGetValue(monacoEditorResponseRef.current);
     const language = safeGetLanguage(monacoEditorResponseRef.current);
-    onSave({ groupIndex, interfaceIndex, replacementMethod, replacementUrl, replacementStatusCode,
+    onSave({ groupIndex, interfaceIndex, replacementMethod, replacementUrl, replacementStatusCode, delay,
       headersEditorValue, requestPayloadEditorValue, responseEditorValue, language });
     setVisible(false);
   };
@@ -152,14 +156,43 @@ const ModifyDataModal = (
             label: `Response`,
             key: 'Response',
             children: <Wrapper>
-              <div style={{ display: 'flex', alignItems: 'center', marginBottom: 8 }}>
-                <div style={{ width: 100 }}>Status Code</div>
-                <Input
-                  value={replacementStatusCode}
-                  maxLength={3}
-                  placeholder="Please enter the Status Code you want to replace with."
-                  onChange={(e) => setReplacementStatusCode(e.target.value)}
-                />
+              <div style={{ display: 'flex', alignItems: 'center', marginBottom: 8, gap: 16 }}>
+                <div style={{ display: 'flex', alignItems: 'center', flex: '0 0 auto' }}>
+                  <div style={{ width: 100 }}>Status Code</div>
+                  <Input
+                    value={replacementStatusCode}
+                    maxLength={3}
+                    placeholder="e.g. 200"
+                    onChange={(e) => setReplacementStatusCode(e.target.value)}
+                    style={{ width: 90 }}
+                  />
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', flex: '1 1 auto' }}>
+                  <div style={{ width: 60 }}>Delay</div>
+                  <Tooltip title='Response latency in ms. Supports a fixed value (e.g. "500") or a random range (e.g. "100-500"). Leave empty for no delay.'>
+                    <Input
+                      value={delay}
+                      placeholder='e.g. 500 or 100-500'
+                      onChange={(e) => setDelay(e.target.value)}
+                      style={{ width: 160 }}
+                    />
+                  </Tooltip>
+                  <Space size={4} style={{ marginLeft: 8 }}>
+                    {DELAY_PRESETS.map((preset) => (
+                      <Button
+                        key={preset.value}
+                        size="small"
+                        type={delay === preset.value ? 'primary' : 'default'}
+                        onClick={() => setDelay(preset.value)}
+                      >
+                        {preset.label}
+                      </Button>
+                    ))}
+                    {delay ? (
+                      <Button size="small" type="text" onClick={() => setDelay('')}>clear</Button>
+                    ) : null}
+                  </Space>
+                </div>
               </div>
               <MonacoEditor
                 ref={monacoEditorResponseRef}

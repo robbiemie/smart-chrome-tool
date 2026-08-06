@@ -312,6 +312,11 @@ const GroupWorkbench = ({
                     {rule.replacementStatusCode && rule.replacementStatusCode !== '200' ? (
                       <Tag color="orange">{rule.replacementStatusCode}</Tag>
                     ) : null}
+                    {/* Surface configured latency so delayed mocks are visible at
+                        a glance — useful when debugging "why is this slow?". */}
+                    {rule.delay ? (
+                      <Tag color="purple">⏱ {rule.delay}{!rule.delay.includes('-') && !/s$/.test(rule.delay) ? 'ms' : ''}</Tag>
+                    ) : null}
                   </div>
                   <div className="rule-card__grid">
                     <label className="field-block">
@@ -376,6 +381,7 @@ const GroupWorkbench = ({
                           replacementMethod: rule.replacementMethod,
                           replacementUrl: rule.replacementUrl,
                           replacementStatusCode: rule.replacementStatusCode,
+                          delay: rule.delay,
                           headersText: rule.headers,
                           requestPayloadText: rule.requestPayloadText,
                           responseLanguage: rule.language,
@@ -396,6 +402,10 @@ const GroupWorkbench = ({
                       <div className="rule-card__expanded-item">
                         <span className="rule-card__expanded-label">Status Code</span>
                         <code>{rule.replacementStatusCode || '200'}</code>
+                      </div>
+                      <div className="rule-card__expanded-item">
+                        <span className="rule-card__expanded-label">Delay</span>
+                        <code>{rule.delay ? `${rule.delay}${!rule.delay.includes('-') && !/s$/.test(rule.delay) ? 'ms' : ''}` : 'No delay'}</code>
                       </div>
                       <div className="rule-card__expanded-item">
                         <span className="rule-card__expanded-label">Headers</span>

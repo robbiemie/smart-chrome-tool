@@ -17,6 +17,7 @@ export interface DefaultInterfaceObject {
   replacementMethod: string,
   replacementUrl: string,
   replacementStatusCode: string,
+  delay: string, // response latency in ms; supports "100" or "100-500" random range; empty = no delay
   headers: string,
   requestPayloadText: string,
   responseText: string,
@@ -36,6 +37,7 @@ export const defaultInterface: DefaultInterfaceObject = {
   replacementMethod: '',
   replacementUrl: '',
   replacementStatusCode: '200',
+  delay: '',
   headers: '',
   requestPayloadText: '',
   responseText: '',
@@ -71,6 +73,16 @@ export const HEADERS_EXAMPLES = [{
 }
 `
 }];
+
+// Quick-preset delay values (milliseconds) shown as buttons in the modal.
+// "random" expands to a 100-1000ms range so users see the range syntax.
+export const DELAY_PRESETS = [
+  { label: '100ms', value: '100' },
+  { label: '500ms', value: '500' },
+  { label: '1s', value: '1000' },
+  { label: '3s', value: '3000' },
+  { label: 'random', value: '100-1000' },
+];
 export const REQUEST_PAYLOAD_EXAMPLES = [
   {
     egTitle: 'e.g. GET',

@@ -241,12 +241,13 @@ export const useRegistry = () => {
   };
 
   const onInterfaceListSave = (
-    { groupIndex, interfaceIndex, replacementMethod, replacementUrl, replacementStatusCode, headersEditorValue,
+    { groupIndex, interfaceIndex, replacementMethod, replacementUrl, replacementStatusCode, delay, headersEditorValue,
       requestPayloadEditorValue, responseEditorValue, language } : ModifyDataModalOnSaveProps
   ) => {
     if (replacementMethod !== undefined) onInterfaceListChange(groupIndex, interfaceIndex, 'replacementMethod', replacementMethod);
     if (replacementUrl !== undefined) onInterfaceListChange(groupIndex, interfaceIndex, 'replacementUrl', replacementUrl);
     if (replacementStatusCode !== undefined) onInterfaceListChange(groupIndex, interfaceIndex, 'replacementStatusCode', replacementStatusCode);
+    if (delay !== undefined) onInterfaceListChange(groupIndex, interfaceIndex, 'delay', delay);
     if (headersEditorValue !== undefined) onInterfaceListChange(groupIndex, interfaceIndex, 'headers', headersEditorValue);
     if (requestPayloadEditorValue !== undefined) onInterfaceListChange(groupIndex, interfaceIndex, 'requestPayloadText', requestPayloadEditorValue);
     if (responseEditorValue !== undefined) onInterfaceListChange(groupIndex, interfaceIndex, 'responseText', responseEditorValue);

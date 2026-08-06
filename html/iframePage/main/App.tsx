@@ -222,6 +222,7 @@ function App() {
         replacementMethod: targetRule.replacementMethod,
         replacementUrl: targetRule.replacementUrl,
         replacementStatusCode: targetRule.replacementStatusCode,
+        delay: targetRule.delay,
         headersText: targetRule.headers,
         requestPayloadText: targetRule.requestPayloadText,
         responseLanguage: targetRule.language,

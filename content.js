@@ -180,11 +180,13 @@ injectedStyle(`
     max-height: calc(100vh - 48px) !important;
     display: none;
     flex-direction: column;
-    z-index: 2147483647 !important;
-    /* Rules defaults to the top-right anchor. Toolkit stays bottom-right, so
-       the two never overlap. Appended LAST in mountPanelContainer so at this
-       z-index it stacks above other top-right overlays. Positioning is
-       independent — see repositionFloatingRulesPanel. */
+    z-index: 2147483646 !important;
+    /* One tier BELOW the workbench (.mockkit-interceptor-container stays at
+       2147483647) so the main plugin panel is never obscured by this floating
+       box. All four floating overlays (Rules/Sniffer/Toolkit/Animation) share
+       this tier, so DOM order decides stacking among them: Rules is appended
+       LAST in mountPanelContainer, so it still sits above other top-right
+       overlays. Positioning is independent — see repositionFloatingRulesPanel. */
     border: 1px solid rgb(27 40 34 / 8%) !important;
     border-radius: 16px !important;
     box-shadow: 0 20px 60px rgb(37 54 46 / 18%), 0 4px 12px rgb(37 54 46 / 8%) !important;
@@ -4303,7 +4305,7 @@ function injectSnifferStyle() {
       max-height: calc(100vh - 48px) !important;
       display: none;
       flex-direction: column;
-      z-index: 2147483647 !important;
+      z-index: 2147483646 !important;
       border: 1px solid rgb(27 40 34 / 8%) !important;
       border-radius: 16px !important;
       box-shadow: 0 20px 60px rgb(37 54 46 / 18%), 0 4px 12px rgb(37 54 46 / 8%) !important;
@@ -4986,7 +4988,7 @@ function injectToolkitStyle() {
       width: 280px !important;
       display: none;
       flex-direction: column;
-      z-index: 2147483647 !important;
+      z-index: 2147483646 !important;
       border: 1px solid rgb(27 40 34 / 8%) !important;
       border-radius: 16px !important;
       box-shadow: 0 20px 60px rgb(37 54 46 / 18%), 0 4px 12px rgb(37 54 46 / 8%) !important;
@@ -5707,8 +5709,9 @@ function showTooltipSuppressBadge(suppressed) {
 // inspected at a controlled pace. Session-only state (never persisted) so a
 // forgotten toggle cannot freeze animations on the next visit. Keyboard
 // shortcuts stay active while the master toggle is on, even if the popup is
-// hidden. The popup auto-shifts left when the main workbench slides in so it is
-// never occluded.
+// hidden. The popup sits one z-index tier below the main workbench, so when the
+// workbench slides open it covers the popup's top-right anchor; drag the popup
+// or close the workbench to interact with it again.
 const ANIMATION_SPEED_CYCLE = [1, 2, 4, 0.5];
 const ANIMATION_STYLE_ID = 'mockkit-animation-control-style';
 let animationControlState = {
@@ -5741,7 +5744,7 @@ function injectAnimationStyle() {
       width: 232px !important;
       display: none;
       flex-direction: column;
-      z-index: 2147483647 !important;
+      z-index: 2147483646 !important;
       border: 1px solid rgb(124 58 237 / 22%) !important;
       border-radius: 16px !important;
       box-shadow: 0 20px 60px rgb(37 54 46 / 18%), 0 4px 12px rgb(37 54 46 / 8%) !important;
@@ -6025,7 +6028,9 @@ function syncAnimationPanelUi() {
 }
 
 // The animation popup stays anchored to the top-right corner regardless of
-// whether the workbench is open — it floats above the workbench via z-index.
+// whether the workbench is open. It sits one z-index tier below the workbench,
+// so the workbench covers it when both are visible — drag the popup or close
+// the workbench to reach it.
 function repositionAnimationPanel() {
   const panel = animationControlState.panelEl;
   if (!panel || panel.style.display === 'none') return;
@@ -6050,8 +6055,9 @@ function repositionFloatingRulesPanel() {
 }
 
 // Reposition every floating overlay (Rules, Sniffer, Animation, Toolkit).
-// Overlays no longer dodge the workbench — they float above it via z-index.
-// Called by the workbench style/class observer and on resize.
+// Overlays sit one z-index tier BELOW the workbench so the main plugin panel
+// is never obscured; where an overlay does not overlap the workbench it stays
+// visible. Called by the workbench style/class observer and on resize.
 function repositionFloatingOverlays() {
   repositionToolkitPanel();
   repositionAnimationPanel();
@@ -6311,8 +6317,8 @@ function mountPanelContainer() {
 
   // Watch the workbench's open/close transitions + window resize so floating
   // overlays can reposition themselves (reset to default anchor unless
-  // dragged). Overlays no longer dodge the workbench — they float above it
-  // via z-index — but the hook is kept for resize repositioning.
+  // dragged). Overlays sit one z-index tier below the workbench, so the panel
+  // is never obscured; the hook is kept for resize repositioning.
   watchWorkbenchForFloatingOverlays();
   repositionFloatingOverlays();
 
