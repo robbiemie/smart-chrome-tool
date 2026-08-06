@@ -163,7 +163,7 @@ const ModifyDataModal = (
                     value={replacementStatusCode}
                     maxLength={3}
                     placeholder="e.g. 200"
-                    onChange={(e) => setReplacementStatusCode(e.target.value)}
+                    onChange={(e) => setReplacementStatusCode(e.target.value.replace(/\D/g, ''))}
                     style={{ width: 90 }}
                   />
                 </div>

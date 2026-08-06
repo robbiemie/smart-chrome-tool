@@ -3589,10 +3589,11 @@ function applyFloatingPanelState() {
     return;
   }
 
-  // The floating rules panel is independent of the global interceptor
-  // switch — users can toggle rules even when interception is paused
-  // (the rules simply won't apply until interception resumes). Do NOT
-  // hide the panel based on ajaxToolsSwitchOn.
+  // The floating rules panel visibility is driven by the floatingRulesEnabled
+  // flag (persisted in ajaxToolsFloatingRulesEnabled). When the Interceptor
+  // master switch turns off, disableSubFeaturesOnInterceptorOff sets that flag
+  // to false, which cascades here to hide the panel. The panel does not
+  // independently check ajaxToolsSwitchOn — the cascade handles it.
 
   if (!ajaxToolsRuntimeState.floatingRulesEnabled) {
     panel.style.display = 'none';
@@ -3696,7 +3697,24 @@ function bindFloatingPanelDrag(panel) {
 }
 
 // CSR/SSR toggle: delegates to the service worker which rewrites the tab URL.
-// Local state is mirrored on the button so the user gets immediate feedback.
+// Toggle CSR/SSR render mode via the service worker. Fetches the current
+// state, flips it, and invokes the callback with the new value so each caller
+// can update its own UI optimistically (the page will reload shortly after).
+// Returns false (and skips the SW call) when chrome.runtime is unavailable.
+function toggleCsrMode(onChange) {
+  if (!chrome.runtime?.sendMessage) return;
+  chrome.runtime.sendMessage({ type: 'GET_PAGE_RENDER_MODE' }, (response) => {
+    if (!response?.ok) return;
+    const nextCsr = !response.csrEnabled;
+    chrome.runtime.sendMessage({ type: 'SET_PAGE_RENDER_MODE', csrEnabled: nextCsr }, (setResponse) => {
+      if (!setResponse?.ok) return;
+      if (typeof onChange === 'function') onChange(nextCsr);
+    });
+  });
+}
+
+// Fetch the current CSR state and pass it to the callback. Used to sync button
+// UI on mount. Local state is mirrored on the button so the user gets feedback.
 function syncFloatingCsrBtnState(btn) {
   if (!chrome.runtime?.sendMessage) return;
   chrome.runtime.sendMessage({ type: 'GET_PAGE_RENDER_MODE' }, (response) => {
@@ -3715,16 +3733,10 @@ function createFloatingCsrButton() {
   btn.textContent = 'SSR';
   btn.title = 'Toggle CSR/SSR render mode';
   btn.addEventListener('click', () => {
-    if (!chrome.runtime?.sendMessage) return;
-    chrome.runtime.sendMessage({ type: 'GET_PAGE_RENDER_MODE' }, (response) => {
-      if (!response?.ok) return;
-      const nextCsr = !response.csrEnabled;
-      chrome.runtime.sendMessage({ type: 'SET_PAGE_RENDER_MODE', csrEnabled: nextCsr }, (setResponse) => {
-        if (!setResponse?.ok) return;
-        // Optimistic UI update — the page will reload shortly.
-        btn.textContent = nextCsr ? 'CSR' : 'SSR';
-        btn.classList.toggle('mockkit-floating-rules__csr-btn--on', nextCsr);
-      });
+    toggleCsrMode((nextCsr) => {
+      // Optimistic UI update — the page will reload shortly.
+      btn.textContent = nextCsr ? 'CSR' : 'SSR';
+      btn.classList.toggle('mockkit-floating-rules__csr-btn--on', nextCsr);
     });
   });
   syncFloatingCsrBtnState(btn);
@@ -4867,15 +4879,39 @@ function setToolkitSnifferOpen(open) {
   }, '*');
 }
 
-// Interceptor master switch OFF cascade: close the Sniffer panel (persisted
-// closed + snifferEnabled mirrored false) and hide Floating Rules (persisted
-// off via its own storage listener). Both stay off until manually re-enabled.
+// Interceptor master switch OFF cascade: close every sub-feature owned by
+// the content script so the page returns to its un-instrumented state.
+//   - Sniffer panel: persisted closed + snifferEnabled mirrored false
+//   - Floating Rules: persisted off via its own storage listener
+//   - Toolkit master panel: hidden (persisted false so the workbench switch
+//     stays in sync); all sub-panels are closed as a side effect
+//   - DOM Inspector: stopped if an inspect/measure session is active
+//   - Animation Control: panel closed + control disabled (animations restored)
 // Page Headers (DNR) are disabled separately by the service worker.
+// Sub-features stay off after the Interceptor is re-enabled — each must be
+// re-toggled manually.
 function disableSubFeaturesOnInterceptorOff() {
   setToolkitSnifferOpen(false);
   if (chrome.storage?.local) {
     chrome.storage.local.set({ [FLOATING_ENABLED_KEY]: false });
   }
+  // Stop the DOM Inspector if an inspect/measure session is mid-flight so
+  // the page is fully restored to its original interaction state.
+  if (domInspectorState.active) {
+    stopDomInspector();
+  }
+  // Close the Animation Control panel and fully disable control so CSS/WAAPI
+  // animations resume at their original speed.
+  if (toolkitPanelState.animationOpen) {
+    setToolkitAnimationOpen(false);
+  }
+  if (animationControlState.enabled) {
+    setAnimationEnabled(false);
+  }
+  // Hide the Toolkit master panel. This persists ajaxToolsToolkitPanelVisible
+  // = false so the workbench's Toolkit switch turns off too. The workbench
+  // sidebar stays visible so the user can re-enable the Interceptor.
+  setToolkitPanelVisible(false);
 }
 
 // The sniffer panel defaults to the bottom-left anchor so it never overlaps
@@ -5213,6 +5249,112 @@ function injectToolkitStyle() {
     .mockkit-toolkit-panel__rules-section.is-open {
       display: block;
     }
+    /* Divider between tool groups (sub-tools vs. config rows). */
+    .mockkit-toolkit-panel__divider {
+      height: 1px;
+      background: rgb(27 40 34 / 6%);
+      margin: 4px 8px;
+      flex-shrink: 0;
+    }
+    /* Collapsible section for Domain Whitelist management. */
+    .mockkit-toolkit-panel__section {
+      border-top: 1px solid rgb(27 40 34 / 6%);
+      padding: 8px 12px 10px;
+    }
+    .mockkit-toolkit-panel__section-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      cursor: pointer;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: rgb(27 40 34 / 50%);
+      user-select: none;
+      padding: 4px 0;
+    }
+    .mockkit-toolkit-panel__section-header:hover {
+      color: rgb(27 40 34 / 75%);
+    }
+    .mockkit-toolkit-panel__section-body {
+      display: none;
+      padding-top: 6px;
+    }
+    .mockkit-toolkit-panel__section.is-open .mockkit-toolkit-panel__section-body {
+      display: block;
+    }
+    .mockkit-toolkit-panel__section-toggle {
+      width: 14px; height: 14px;
+      display: flex; align-items: center; justify-content: center;
+      transition: transform 0.2s ease;
+      color: rgb(27 40 34 / 40%);
+    }
+    .mockkit-toolkit-panel__section.is-open .mockkit-toolkit-panel__section-toggle {
+      transform: rotate(90deg);
+    }
+    .mockkit-toolkit-panel__domain-tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+      margin-bottom: 6px;
+    }
+    .mockkit-toolkit-panel__domain-tag {
+      display: inline-flex;
+      align-items: center;
+      gap: 3px;
+      padding: 2px 6px;
+      border-radius: 999px;
+      background: rgb(26 155 127 / 8%);
+      color: #1a9b7f;
+      font-size: 10px;
+      font-weight: 600;
+      max-width: 100%;
+    }
+    .mockkit-toolkit-panel__domain-tag-close {
+      border: none;
+      background: none;
+      cursor: pointer;
+      color: rgb(27 40 34 / 30%);
+      font-size: 12px;
+      line-height: 1;
+      padding: 0;
+      display: flex;
+    }
+    .mockkit-toolkit-panel__domain-tag-close:hover {
+      color: rgb(27 40 34 / 70%);
+    }
+    .mockkit-toolkit-panel__domain-input {
+      width: 100% !important;
+      border: 1px solid rgb(27 40 34 / 12%) !important;
+      border-radius: 6px !important;
+      padding: 4px 8px !important;
+      font-size: 11px !important;
+      font-family: inherit !important;
+      background: #fff !important;
+      color: #1b2822 !important;
+      box-sizing: border-box !important;
+    }
+    .mockkit-toolkit-panel__domain-input:focus {
+      outline: none !important;
+      border-color: rgb(26 155 127 / 50%) !important;
+    }
+    .mockkit-toolkit-panel__domain-add-btn {
+      margin-top: 4px;
+      width: 100%;
+      border: 1px solid rgb(26 155 127 / 30%);
+      border-radius: 6px;
+      padding: 4px;
+      background: rgb(26 155 127 / 6%);
+      cursor: pointer;
+      color: #1a9b7f;
+      font-size: 10px;
+      font-weight: 600;
+      font-family: inherit;
+    }
+    .mockkit-toolkit-panel__domain-add-btn:hover {
+      background: rgb(26 155 127 / 14%);
+    }
   `;
   document.documentElement.appendChild(style);
 }
@@ -5276,6 +5418,17 @@ function bindToolkitPanelDrag(panel) {
     document.addEventListener('mouseup', onUp);
     event.preventDefault();
   });
+}
+
+// Send a postMessage to the React workbench iframe (if present). Used by
+// Toolkit panel config rows (Headers / Import-Export / Collapse-All) to
+// trigger actions that live in the React workbench without duplicating
+// their UI in content.js. Silently no-ops when the iframe is not mounted.
+function postMessageToIframe(message) {
+  const iframe = document.querySelector('.mockkit-interceptor-iframe');
+  if (iframe && iframe.contentWindow) {
+    iframe.contentWindow.postMessage(message, '*');
+  }
 }
 
 function createToolkitPanel() {
@@ -5440,6 +5593,242 @@ function createToolkitPanel() {
   snifferRow.appendChild(snifferName);
   snifferRow.appendChild(snifferSwitch);
   body.appendChild(snifferRow);
+
+  // ---- Config tools (moved here from the React OperationsRail) ----
+  // A divider separates the four interactive sub-tools above from the
+  // configuration rows below, so the panel reads as two groups.
+
+  const divider = document.createElement('div');
+  divider.className = 'mockkit-toolkit-panel__divider';
+  body.appendChild(divider);
+
+  // Config 1: CSR Mode — toggle rewrites the URL to add/remove ?__csr=1.
+  // Shares the toggleCsrMode helper with the floating-rules CSR button so the
+  // two entry points never diverge.
+  const csrRow = document.createElement('div');
+  csrRow.className = 'mockkit-toolkit-panel__tool';
+  const csrIcon = document.createElement('span');
+  csrIcon.className = 'mockkit-toolkit-panel__tool-icon';
+  csrIcon.innerHTML = '<svg viewBox="0 0 16 16" fill="none"><rect x="1.5" y="3" width="13" height="10" rx="1.5" stroke="currentColor" stroke-width="1.4" fill="none"/><path d="M5 6l-2 2 2 2M11 6l2 2-2 2" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+  const csrName = document.createElement('span');
+  csrName.className = 'mockkit-toolkit-panel__tool-name';
+  csrName.textContent = 'CSR Mode';
+  const csrHint = document.createElement('span');
+  csrHint.className = 'mockkit-toolkit-panel__tool-hint';
+  csrHint.textContent = 'Client-side render (?__csr=1)';
+  csrName.appendChild(csrHint);
+  const csrSwitch = document.createElement('button');
+  csrSwitch.type = 'button';
+  csrSwitch.className = 'mockkit-toolkit-panel__tool-switch';
+  csrSwitch.title = 'Toggle CSR/SSR render mode';
+  csrSwitch.addEventListener('click', () => {
+    toggleCsrMode((nextCsr) => {
+      // Optimistic UI — the page will reload shortly.
+      csrSwitch.classList.toggle('is-on', nextCsr);
+    });
+  });
+  // Sync initial CSR state from the SW.
+  if (chrome.runtime?.sendMessage) {
+    chrome.runtime.sendMessage({ type: 'GET_PAGE_RENDER_MODE' }, (response) => {
+      if (response?.ok) csrSwitch.classList.toggle('is-on', Boolean(response.csrEnabled));
+    });
+  }
+  csrRow.appendChild(csrIcon);
+  csrRow.appendChild(csrName);
+  csrRow.appendChild(csrSwitch);
+  body.appendChild(csrRow);
+
+  // Config 2: Page Headers — button opens the DNR header-rule editor in the
+  // React workbench via postMessage.
+  const headersRow = document.createElement('div');
+  headersRow.className = 'mockkit-toolkit-panel__tool';
+  const headersIcon = document.createElement('span');
+  headersIcon.className = 'mockkit-toolkit-panel__tool-icon';
+  headersIcon.innerHTML = '<svg viewBox="0 0 16 16" fill="none"><path d="M2 4h12M2 8h12M2 12h8" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>';
+  const headersName = document.createElement('span');
+  headersName.className = 'mockkit-toolkit-panel__tool-name';
+  headersName.textContent = 'Page Headers';
+  const headersHint = document.createElement('span');
+  headersHint.className = 'mockkit-toolkit-panel__tool-hint';
+  headersHint.textContent = 'DNR header rules';
+  headersName.appendChild(headersHint);
+  const headersBtn = document.createElement('button');
+  headersBtn.type = 'button';
+  headersBtn.className = 'mockkit-toolkit-panel__tool-btn';
+  headersBtn.textContent = 'Open';
+  headersBtn.addEventListener('click', (event) => {
+    event.stopPropagation();
+    postMessageToIframe({ type: 'MOCKKIT_OPEN_PAGE_HEADERS' });
+  });
+  headersRow.appendChild(headersIcon);
+  headersRow.appendChild(headersName);
+  headersRow.appendChild(headersBtn);
+  body.appendChild(headersRow);
+
+  // Config 3: Import / Export — button opens the batch import/export modal
+  // in the React workbench.
+  const importRow = document.createElement('div');
+  importRow.className = 'mockkit-toolkit-panel__tool';
+  const importIcon = document.createElement('span');
+  importIcon.className = 'mockkit-toolkit-panel__tool-icon';
+  importIcon.innerHTML = '<svg viewBox="0 0 16 16" fill="none"><path d="M8 2v8M5 7l3 3 3-3M2 13h12" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+  const importName = document.createElement('span');
+  importName.className = 'mockkit-toolkit-panel__tool-name';
+  importName.textContent = 'Import / Export';
+  const importHint = document.createElement('span');
+  importHint.className = 'mockkit-toolkit-panel__tool-hint';
+  importHint.textContent = 'Backup or restore rules';
+  importName.appendChild(importHint);
+  const importBtn = document.createElement('button');
+  importBtn.type = 'button';
+  importBtn.className = 'mockkit-toolkit-panel__tool-btn';
+  importBtn.textContent = 'Open';
+  importBtn.addEventListener('click', (event) => {
+    event.stopPropagation();
+    postMessageToIframe({ type: 'MOCKKIT_OPEN_IMPORT_EXPORT' });
+  });
+  importRow.appendChild(importIcon);
+  importRow.appendChild(importName);
+  importRow.appendChild(importBtn);
+  body.appendChild(importRow);
+
+  // Config 4: Collapse All — button toggles all rule cards in the React
+  // workbench via postMessage. Pure UI convenience, no persistent state.
+  const collapseRow = document.createElement('div');
+  collapseRow.className = 'mockkit-toolkit-panel__tool';
+  const collapseIcon = document.createElement('span');
+  collapseIcon.className = 'mockkit-toolkit-panel__tool-icon';
+  collapseIcon.innerHTML = '<svg viewBox="0 0 16 16" fill="none"><rect x="2" y="3" width="12" height="3" rx="1" stroke="currentColor" stroke-width="1.4" fill="none"/><rect x="2" y="8" width="12" height="3" rx="1" stroke="currentColor" stroke-width="1.4" fill="none"/><path d="M5 14h6" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>';
+  const collapseName = document.createElement('span');
+  collapseName.className = 'mockkit-toolkit-panel__tool-name';
+  collapseName.textContent = 'Collapse All';
+  const collapseHint = document.createElement('span');
+  collapseHint.className = 'mockkit-toolkit-panel__tool-hint';
+  collapseHint.textContent = 'Toggle rule card expansion';
+  collapseName.appendChild(collapseHint);
+  const collapseActionBtn = document.createElement('button');
+  collapseActionBtn.type = 'button';
+  collapseActionBtn.className = 'mockkit-toolkit-panel__tool-btn';
+  collapseActionBtn.textContent = 'Toggle';
+  collapseActionBtn.addEventListener('click', (event) => {
+    event.stopPropagation();
+    postMessageToIframe({ type: 'MOCKKIT_TOGGLE_COLLAPSE_ALL' });
+  });
+  collapseRow.appendChild(collapseIcon);
+  collapseRow.appendChild(collapseName);
+  collapseRow.appendChild(collapseActionBtn);
+  body.appendChild(collapseRow);
+
+  // Config 5: Domain Whitelist — collapsible section with tag list + add
+  // input. Manages ajaxToolsDomainWhitelist directly (content.js already
+  // holds this state in ajaxToolsRuntimeState.domainWhitelist).
+  const whitelistSection = document.createElement('div');
+  whitelistSection.className = 'mockkit-toolkit-panel__section';
+  const whitelistHeader = document.createElement('div');
+  whitelistHeader.className = 'mockkit-toolkit-panel__section-header';
+  const whitelistLabel = document.createElement('span');
+  whitelistLabel.textContent = 'Domain Whitelist';
+  const whitelistToggle = document.createElement('span');
+  whitelistToggle.className = 'mockkit-toolkit-panel__section-toggle';
+  whitelistToggle.innerHTML = '<svg viewBox="0 0 12 12" fill="none"><path d="M4 2l4 4-4 4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+  whitelistHeader.appendChild(whitelistLabel);
+  whitelistHeader.appendChild(whitelistToggle);
+  const whitelistBody = document.createElement('div');
+  whitelistBody.className = 'mockkit-toolkit-panel__section-body';
+  whitelistHeader.addEventListener('click', () => {
+    whitelistSection.classList.toggle('is-open');
+  });
+  whitelistSection.appendChild(whitelistHeader);
+  whitelistSection.appendChild(whitelistBody);
+  body.appendChild(whitelistSection);
+
+  // Render the whitelist tags + input. Extracted as a function so it can be
+  // re-called when the storage-backed list changes.
+  const renderWhitelistTags = () => {
+    whitelistBody.innerHTML = '';
+    const tags = (ajaxToolsRuntimeState.domainWhitelist || ['*']);
+    const tagContainer = document.createElement('div');
+    tagContainer.className = 'mockkit-toolkit-panel__domain-tags';
+    tags.forEach((pattern) => {
+      const tag = document.createElement('span');
+      tag.className = 'mockkit-toolkit-panel__domain-tag';
+      const tagText = document.createElement('span');
+      tagText.textContent = pattern;
+      tagText.style.overflow = 'hidden';
+      tagText.style.textOverflow = 'ellipsis';
+      tagText.style.whiteSpace = 'nowrap';
+      const closeBtn = document.createElement('button');
+      closeBtn.type = 'button';
+      closeBtn.className = 'mockkit-toolkit-panel__domain-tag-close';
+      closeBtn.innerHTML = '&times;';
+      closeBtn.title = `Remove ${pattern}`;
+      closeBtn.addEventListener('click', (event) => {
+        event.stopPropagation();
+        const next = tags.filter((t) => t !== pattern);
+        persistDomainWhitelist(next.length > 0 ? next : ['*']);
+      });
+      tag.appendChild(tagText);
+      tag.appendChild(closeBtn);
+      tagContainer.appendChild(tag);
+    });
+    whitelistBody.appendChild(tagContainer);
+
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.className = 'mockkit-toolkit-panel__domain-input';
+    input.placeholder = 'e.g. *.foo.com';
+    input.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        addDomainFromInput();
+      }
+    });
+    whitelistBody.appendChild(input);
+
+    const addBtn = document.createElement('button');
+    addBtn.type = 'button';
+    addBtn.className = 'mockkit-toolkit-panel__domain-add-btn';
+    addBtn.textContent = '+ Add Domain';
+    addBtn.addEventListener('click', (event) => {
+      event.stopPropagation();
+      addDomainFromInput();
+    });
+    whitelistBody.appendChild(addBtn);
+
+    function addDomainFromInput() {
+      const trimmed = input.value.trim();
+      if (!trimmed) return;
+      const current = ajaxToolsRuntimeState.domainWhitelist || ['*'];
+      if (current.includes(trimmed)) {
+        input.value = '';
+        return;
+      }
+      // If the only entry is the wildcard '*', adding an explicit domain
+      // replaces it so the whitelist becomes restrictive (matches the
+      // behavior of the React OperationsRail it replaces).
+      const next = current.length === 1 && current[0] === '*'
+        ? [trimmed]
+        : [...current, trimmed];
+      persistDomainWhitelist(next);
+      input.value = '';
+    }
+  };
+
+  // Persist the whitelist to storage and update local state. The storage
+  // listener at content.js:6393 picks up the change and forwards it to the
+  // page script + re-renders the floating panel.
+  function persistDomainWhitelist(next) {
+    ajaxToolsRuntimeState.domainWhitelist = next;
+    if (chrome.storage?.local) {
+      chrome.storage.local.set({ ajaxToolsDomainWhitelist: next });
+    }
+    renderWhitelistTags();
+  }
+
+  renderWhitelistTags();
+  // Re-render tags whenever the storage-backed list changes (e.g. when the
+  // React workbench or another tab modifies the whitelist).
+  toolkitPanelState._rerenderWhitelist = renderWhitelistTags;
 
   panel.appendChild(body);
   bindToolkitPanelDrag(panel);
@@ -6400,6 +6789,11 @@ chrome.storage.onChanged.addListener(function (changes, namespace) {
         key: 'domainWhitelist',
         value: next,
       }, '*');
+      // Re-render the Toolkit panel's whitelist tags so external changes
+      // (from the React workbench or another tab) are reflected immediately.
+      if (toolkitPanelState._rerenderWhitelist) {
+        toolkitPanelState._rerenderWhitelist();
+      }
     }
     // Re-render the floating rules panel when rule data or the selected
     // group changes so it stays in sync with the React workbench.

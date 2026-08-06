@@ -16,6 +16,10 @@ export interface DefaultInterfaceObject {
   // modify ⬇️
   replacementMethod: string,
   replacementUrl: string,
+  // Stored as string for UI/storage consistency with `delay` (text input +
+  // JSON serialization). Coerced to Number at the consumption boundary in
+  // pageScripts/index.js (resolveMockStatus) because XHR.status and
+  // ResponseInit.status require an unsigned short.
   replacementStatusCode: string,
   delay: string, // response latency in ms; supports "100" or "100-500" random range; empty = no delay
   headers: string,

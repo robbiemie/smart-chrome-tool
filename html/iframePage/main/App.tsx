@@ -11,13 +11,10 @@ import { usePageHeaders } from './hooks/usePageHeaders';
 import PageHeadersModal from './components/PageHeadersModal';
 import OperationsRail from './components/OperationsRail';
 import GroupWorkbench from './components/GroupWorkbench';
-import { AjaxGroup, ModifyDataModalOpenProps } from './types/registry';
+import { AjaxGroup, CapturedRequest, ModifyDataModalOpenProps } from './types/registry';
 import { useModuleCollapseState } from './hooks/useModuleCollapseState';
 import { logger } from './utils/logger';
-import { usePageRenderMode } from './hooks/usePageRenderMode';
 import { useToolkitPanel } from './hooks/useToolkitPanel';
-import { useDomainWhitelist } from './hooks/useDomainWhitelist';
-import { CapturedRequest } from './hooks/useRequestSniffer';
 
 const SELECTED_GROUP_INDEX_STORAGE_KEY = 'ajaxToolsSelectedGroupIndex';
 
@@ -84,23 +81,11 @@ function App() {
     save: savePageHeaders,
   } = usePageHeaders();
   const {
-    csrEnabled,
-    loading: csrModeLoading,
-    toggling: csrModeToggling,
-    toggle: toggleCsrMode,
-  } = usePageRenderMode();
-  const {
     toolkitEnabled,
     setToolkitEnabled,
   } = useToolkitPanel();
-  const {
-    domainWhitelist,
-    currentHostname,
-    addDomain,
-    removeDomain,
-  } = useDomainWhitelist();
 
-  const { moduleCollapseState, updateModuleCollapseState, allModulesCollapsed, toggleCollapseAll } = useModuleCollapseState();
+  const { moduleCollapseState, updateModuleCollapseState, toggleCollapseAll } = useModuleCollapseState();
 
   useEffect(() => {
     if (!chrome.storage || !chrome.runtime || isRegistry) return;
@@ -148,25 +133,6 @@ function App() {
       [SELECTED_GROUP_INDEX_STORAGE_KEY]: selectedGroupIndex,
     });
   }, [selectedGroupIndex]);
-
-  const updateAjaxToolsExpandAll = (value: boolean) => {
-    // Keep the persisted collapse keys aligned with the global expand state.
-    for (let index = 0; index < ajaxDataList.length; index += 1) {
-      const item = ajaxDataList[index];
-      const activeKeys = item?.interfaceList?.map((interfaceItem) => interfaceItem.key) || [];
-
-      if (!value) {
-        onCollapseChange(index, []);
-      } else {
-        onCollapseChange(index, activeKeys);
-      }
-    }
-
-    setAjaxToolsExpandAll(value);
-    if (chrome.storage) {
-      chrome.storage.local.set({ ajaxToolsExpandAll: value });
-    }
-  };
 
   const selectedGroup = ajaxDataList[selectedGroupIndex] || null;
   const selectedRuleIndex = selectedRuleIndexMap[selectedGroupIndex] ?? 0;
@@ -292,6 +258,31 @@ function App() {
     // re-bind on every change so the listener sees fresh values.
   });
 
+  // Toolkit panel config rows trigger workbench actions via postMessage.
+  // These listeners let the content.js Toolkit panel open modals and toggle
+  // collapse state without duplicating React UI in imperative DOM.
+  useEffect(() => {
+    const handleMessage = (event: MessageEvent) => {
+      const data = event.data;
+      if (!data) return;
+      switch (data.type) {
+        case 'MOCKKIT_OPEN_IMPORT_EXPORT':
+          setImportExportVisible(true);
+          break;
+        case 'MOCKKIT_OPEN_PAGE_HEADERS':
+          openPageHeadersModal();
+          break;
+        case 'MOCKKIT_TOGGLE_COLLAPSE_ALL':
+          toggleCollapseAll();
+          break;
+        default:
+          break;
+      }
+    };
+    window.addEventListener('message', handleMessage);
+    return () => window.removeEventListener('message', handleMessage);
+  });
+
   const handleGroupOpenChange = (groupIndex: number, open: boolean) => {
     const nextGroupIndex = onGroupOpenChange(groupIndex, open);
 
@@ -373,22 +364,8 @@ function App() {
         <div className="workbench-layout">
           <OperationsRail
             ajaxToolsSwitchOn={ajaxToolsSwitchOn}
-            csrModeEnabled={csrEnabled}
-            csrModeLoading={csrModeLoading}
-            csrModeToggling={csrModeToggling}
             globalControlsCollapsed={moduleCollapseState.globalControls}
-            domainWhitelist={domainWhitelist}
-            currentHostname={currentHostname}
-            onAddDomain={addDomain}
-            onRemoveDomain={removeDomain}
-            allModulesCollapsed={allModulesCollapsed}
-            onToggleCollapseAll={toggleCollapseAll}
-            onOpenImportExport={() => setImportExportVisible(true)}
-            onPageHeadersOpen={openPageHeadersModal}
             onToggleAjaxToolsSwitch={handleToggleAjaxToolsSwitch}
-            onToggleCsrMode={(value) => {
-              void toggleCsrMode(value);
-            }}
             onGlobalControlsCollapseToggle={() => {
               updateModuleCollapseState('globalControls', !moduleCollapseState.globalControls);
             }}

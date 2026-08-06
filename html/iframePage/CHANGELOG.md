@@ -1,5 +1,19 @@
 # Build Changelog
 
+## v0.0.55
+
+- Built At: 2026-08-06T11:46:35.283Z
+- Previous Version: v0.0.54
+- Git Branch: master
+- Git Commit: fd1e6a8b
+
+### Changed Files
+- html/iframePage/common/value.ts
+- html/iframePage/main/components/ModifyDataModal/index.tsx
+- html/iframePage/stats.html
+- pageScripts/index.js
+
+
 ## v0.0.54
 
 - Built At: 2026-08-06T07:01:44.399Z

@@ -1,10 +1,6 @@
 import { useEffect, useState } from 'react';
 
-type ModuleCollapseKey =
-  | 'globalControls'
-  | 'groupNavigator'
-  | 'groupWorkbench'
-  | 'requestSniffer';
+type ModuleCollapseKey = 'globalControls' | 'groupWorkbench';
 
 type ModuleCollapseState = Record<ModuleCollapseKey, boolean>;
 
@@ -12,9 +8,7 @@ const MODULE_COLLAPSE_STORAGE_KEY = 'ajaxToolsModuleCollapseState';
 
 const defaultModuleCollapseState: ModuleCollapseState = {
   globalControls: false,
-  groupNavigator: false,
   groupWorkbench: false,
-  requestSniffer: false,
 };
 
 // Keys toggled by the "collapse all" shortcut. globalControls is excluded so
@@ -54,8 +48,7 @@ export const useModuleCollapseState = () => {
     }
   };
 
-  // Collapse/expand the rule modules together. Returns the resulting collapsed
-  // flag so callers can flip a button label between "Collapse all" / "Expand all".
+  // Collapse/expand the rule modules together.
   const setAllModulesCollapsed = (collapsed: boolean) => {
     const nextState = { ...moduleCollapseState };
     COLLAPSE_ALL_KEYS.forEach((key) => {
@@ -78,7 +71,6 @@ export const useModuleCollapseState = () => {
   return {
     moduleCollapseState,
     updateModuleCollapseState,
-    allModulesCollapsed,
     toggleCollapseAll,
   };
 };

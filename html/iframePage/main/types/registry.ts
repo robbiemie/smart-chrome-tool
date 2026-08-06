@@ -24,3 +24,13 @@ export interface ModifyDataModalOpenProps {
   responseLanguage: string;
   responseText: string;
 }
+
+export interface CapturedRequest {
+  id: number;
+  source: 'xhr' | 'fetch';
+  method: string;
+  url: string;
+  status: number;
+  responseText: string;
+  capturedAt: number;
+}

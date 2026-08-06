@@ -126,6 +126,33 @@ const ajax_tools_space = {
     const n = parseInt(s, 10);
     return isNaN(n) ? 0 : Math.max(0, n);
   },
+  // Resolve the final HTTP status for a mocked response. Centralizes three
+  // concerns so XHR and fetch stay consistent:
+  //   1. ajaxToolsSwitchOnNot200: normalize non-200 originals to 200 (hidden
+  //      "always succeed" feature; no UI toggle, defaults to true). Applied
+  //      BEFORE the per-rule override so an explicit replacementStatusCode
+  //      (e.g. 404) still wins.
+  //   2. replacementStatusCode: explicit per-rule override. Coerced to Number
+  //      because XHR.status and ResponseInit.status are both unsigned short —
+  //      the storage/UI layer keeps it as a string (consistent with `delay`),
+  //      so the boundary coercion happens here.
+  //   3. Empty/invalid replacement falls back to the normalized original so
+  //      clearing the field restores passthrough behavior.
+  resolveMockStatus: function (originalStatus, matchedInterface) {
+    let status = originalStatus;
+    if (ajax_tools_space.ajaxToolsSwitchOnNot200 && status !== 200) {
+      status = 200;
+    }
+    if (matchedInterface && matchedInterface.replacementStatusCode) {
+      const code = Number(matchedInterface.replacementStatusCode);
+      // Guard against NaN / 0 so a malformed value never produces an invalid
+      // HTTP status — fall back to the normalized original instead.
+      if (code > 0) {
+        status = code;
+      }
+    }
+    return status;
+  },
   getRequestParams: (requestUrl) => {
     if (!requestUrl) {
       return null;
@@ -203,13 +230,11 @@ const ajax_tools_space = {
         const overrideText = ajax_tools_space.getOverrideText(matchedInterface.responseText, funcArgs, false, matchedInterface.language);
         this.responseText = overrideText;
         this.response = overrideText;
-        if (ajax_tools_space.ajaxToolsSwitchOnNot200 && this.status !== 200) {
-          this.status = 200;
-        }
-        if (matchedInterface.replacementStatusCode) {
-          this.status = matchedInterface.replacementStatusCode;
-        }
-        // infoDev('ⓢ ►►►►►►►►►►►►►►►►►►►►►►►►►►►►►►►► ⓢ');
+        // Resolve the mocked status once and reuse for both the XHR status
+        // assignment and the Sniffer capture below — guarantees the panel
+        // reports the same status the page actually received. The helper
+        // returns a Number so XHR.status (unsigned short) stays type-correct.
+        this.status = ajax_tools_space.resolveMockStatus(this.status, matchedInterface);
         console.groupCollapsed(`%cMatched XHR Response modified：${matchedInterface.request}`, 'background-color: #108ee9; color: white; padding: 4px');
         infoDev(`%cOriginal Request Url：`, 'background-color: #ff8040; color: white;', this.responseURL);
         infoDev('%cModified Response Payload：', 'background-color: #ff5500; color: white;', JSON.parse(overrideText));
@@ -472,11 +497,18 @@ const ajax_tools_space = {
         if (delayMs > 0) {
           await new Promise((r) => setTimeout(r, delayMs));
         }
+        // Resolve the mocked status once and reuse for both the Sniffer
+        // capture and the new Response — guarantees the panel reports the
+        // same status the page actually received (previously the Sniffer
+        // emitted the original status while the body was mocked). The helper
+        // returns a Number and honors ajaxToolsSwitchOnNot200, so fetch now
+        // matches XHR's status-resolution semantics.
+        const finalStatus = ajax_tools_space.resolveMockStatus(response.status, matchedInterface);
         ajax_tools_space.emitCapturedRequest({
           source: 'fetch',
           method: data && data.method,
           url: requestUrl,
-          status: response.status,
+          status: finalStatus,
           responseText: overrideText,
         });
         const stream = new ReadableStream({
@@ -487,7 +519,7 @@ const ajax_tools_space = {
         });
         const newResponse = new Response(stream, {
           headers: response.headers,
-          status: matchedInterface && matchedInterface.replacementStatusCode || response.status,
+          status: finalStatus,
           statusText: response.statusText,
         });
         const responseProxy = new Proxy(newResponse, {

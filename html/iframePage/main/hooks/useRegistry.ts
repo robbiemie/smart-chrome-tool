@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
 import { defaultAjaxDataList, defaultInterface } from '../../common/value';
-import { openImportJsonModal } from '../utils/importJson';
 import { colorMap } from '../common/constants';
 import { ModifyDataModalOnSaveProps } from '../components/ModifyDataModal';
 import { AjaxGroup } from '../types/registry';
@@ -57,16 +56,6 @@ export const useRegistry = () => {
     }
 
     return groupIndex;
-  };
-
-  const onImportClick = async () => {
-    if (!chrome.storage) return;
-    const importJsonData = await openImportJsonModal();
-    let newAjaxDataList = ajaxDataList;
-    if (Array.isArray(importJsonData)) {
-      newAjaxDataList = [...ajaxDataList, ...importJsonData];
-    }
-    persistAjaxDataList(newAjaxDataList);
   };
 
   // Batch import: when `replace` is true the imported groups fully overwrite
@@ -305,7 +294,6 @@ export const useRegistry = () => {
 
     onGroupAdd,
     onGroupMove,
-    onImportClick,
     onBatchImport,
     onMockCapture,
     setIsRegistry,
