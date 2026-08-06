@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 
-type ModuleCollapseKey = 'globalControls' | 'groupWorkbench';
+type ModuleCollapseKey = 'globalControls';
 
 type ModuleCollapseState = Record<ModuleCollapseKey, boolean>;
 
@@ -8,7 +8,6 @@ const MODULE_COLLAPSE_STORAGE_KEY = 'ajaxToolsModuleCollapseState';
 
 const defaultModuleCollapseState: ModuleCollapseState = {
   globalControls: false,
-  groupWorkbench: false,
 };
 
 export const useModuleCollapseState = () => {

@@ -402,7 +402,6 @@ function App() {
                   groupIndex={selectedGroupIndex}
                   selectedRuleIndex={selectedRuleIndex}
                   ajaxToolsExpandAll={ajaxToolsExpandAll}
-                  collapsed={moduleCollapseState.groupWorkbench}
                   onSelectGroup={setSelectedGroupIndex}
                   onGroupAdd={handleGroupAdd}
                   onSelectRule={(ruleIndex) => {
@@ -421,9 +420,6 @@ function App() {
                   onInterfaceMove={onInterfaceMove}
                   onInterfaceListChange={handleInterfaceListChange}
                   onOpenModifyModal={handleOpenModifyModal}
-                  onToggleCollapse={() => {
-                    updateModuleCollapseState('groupWorkbench', !moduleCollapseState.groupWorkbench);
-                  }}
                 />
               ) : (
                 <ToolsTab

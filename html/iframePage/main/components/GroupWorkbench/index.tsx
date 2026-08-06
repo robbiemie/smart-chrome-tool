@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Button, Empty, Input, Select, Tag } from 'antd';
 import {
   DeleteOutlined,
@@ -24,7 +24,6 @@ interface GroupWorkbenchProps {
   groupIndex: number;
   selectedRuleIndex: number;
   ajaxToolsExpandAll: boolean;
-  collapsed: boolean;
   onSelectGroup: (groupIndex: number) => void;
   onGroupAdd: () => void;
   onSelectRule: (ruleIndex: number) => void;
@@ -43,7 +42,6 @@ interface GroupWorkbenchProps {
     value: string | boolean
   ) => void;
   onOpenModifyModal: (payload: ModifyDataModalOpenProps) => void;
-  onToggleCollapse: () => void;
 }
 
 const GroupWorkbench = ({
@@ -53,7 +51,6 @@ const GroupWorkbench = ({
   groupIndex,
   selectedRuleIndex,
   ajaxToolsExpandAll,
-  collapsed,
   onSelectGroup,
   onGroupAdd,
   onSelectRule,
@@ -67,73 +64,27 @@ const GroupWorkbench = ({
   onInterfaceMove,
   onInterfaceListChange,
   onOpenModifyModal,
-  onToggleCollapse,
 }: GroupWorkbenchProps) => {
   const hasGroups = ajaxDataList.length > 0;
 
-  // Group switcher bar: lives inside Group Studio so selecting/adding groups
-  // and editing the selected group happen in one place. Rendered even when no
-  // group exists so the user can create the first one.
-  const groupSwitcherBar = (
-    <div className="group-studio__bar">
-      {hasGroups ? (
-        <Select
-          value={selectedGroupIndex}
-          className="group-switcher__select"
-          popupClassName="group-switcher__dropdown"
-          onChange={onSelectGroup}
-          options={ajaxDataList.map((item, index) => {
-            const enabledCount = item.interfaceList.filter((rule) => rule.open).length;
-            const isDisabled = enabledCount === 0;
-            const title = item.summaryText || `Group ${index + 1}`;
+  // Inline-edit state for the group title (h2). The title doubles as the
+  // rename entry — clicking the pencil turns the h2 into an input — so we
+  // avoid the old layout where a separate 26px Input duplicated the title.
+  const [editingTitle, setEditingTitle] = useState(false);
+  const [titleDraft, setTitleDraft] = useState('');
 
-            return {
-              label: (
-                <div className="group-switcher__option">
-                  <span className={`group-switcher__option-dot ${item.headerClass}`} />
-                  <span className="group-switcher__option-title">{title}</span>
-                  <span className={`group-switcher__option-meta${isDisabled ? ' group-switcher__option-meta--disabled' : ''}`}>
-                    {isDisabled ? 'Disabled' : `${enabledCount} active`}
-                  </span>
-                </div>
-              ),
-              value: index,
-            };
-          })}
-        />
-      ) : (
-        <span className="group-studio__bar-empty">No groups yet</span>
-      )}
-      <Button type="text" size="small" icon={<PlusOutlined />} onClick={onGroupAdd} title="Add a new group">
-        Add Group
-      </Button>
-    </div>
-  );
-
-  if (!group) {
-    return (
-      <ModuleSection
-        title="Group Studio"
-        description="Create a group to start composing rewrite rules."
-        eyebrow="Group Studio"
-        className="group-workbench group-workbench--empty"
-        collapsed={collapsed}
-        onToggleCollapse={onToggleCollapse}
-      >
-        {groupSwitcherBar}
-        <Empty
-          image={Empty.PRESENTED_IMAGE_SIMPLE}
-          description="Create a group to start composing rewrite rules."
-        />
-      </ModuleSection>
-    );
-  }
-
-  const enabledRuleCount = group.interfaceList.filter((rule) => rule.open).length;
-  const isGroupDisabled = enabledRuleCount === 0;
-
+  // Cancel any in-flight rename when the user switches groups; otherwise the
+  // draft from group A would bleed into group B's title slot.
   useEffect(() => {
-    if (collapsed) return;
+    setEditingTitle(false);
+  }, [groupIndex]);
+
+  // Keyboard shortcuts (1-9/0 toggle rules, T pins). Registered unconditionally
+  // so the hook count is constant whether or not a group is loaded — a guard
+  // inside the callback no-ops when there is no group. This MUST stay before
+  // the `if (!group)` early return to avoid a hooks-order violation.
+  useEffect(() => {
+    if (!group) return;
 
     const isTypingTarget = (eventTarget: EventTarget | null) => {
       const target = eventTarget as HTMLElement | null;
@@ -184,26 +135,141 @@ const GroupWorkbench = ({
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
     };
-  }, [collapsed, group.interfaceList, groupIndex, onInterfaceListChange, onInterfaceMove, selectedRuleIndex]);
+  }, [group, groupIndex, onInterfaceListChange, onInterfaceMove, selectedRuleIndex]);
+
+  // Group switcher bar: lives inside Group Studio so selecting/adding groups
+  // and editing the selected group happen in one place. Rendered even when no
+  // group exists so the user can create the first one.
+  const groupSwitcherBar = (
+    <div className="group-studio__bar">
+      {hasGroups ? (
+        <Select
+          value={selectedGroupIndex}
+          className="group-switcher__select"
+          popupClassName="group-switcher__dropdown"
+          onChange={onSelectGroup}
+          options={ajaxDataList.map((item, index) => {
+            const enabledCount = item.interfaceList.filter((rule) => rule.open).length;
+            const isDisabled = enabledCount === 0;
+            const title = item.summaryText || `Group ${index + 1}`;
+
+            return {
+              label: (
+                <div className="group-switcher__option">
+                  <span className={`group-switcher__option-dot ${item.headerClass}`} />
+                  <span className="group-switcher__option-title">{title}</span>
+                  <span className={`group-switcher__option-meta${isDisabled ? ' group-switcher__option-meta--disabled' : ''}`}>
+                    {isDisabled ? 'Disabled' : `${enabledCount} active`}
+                  </span>
+                </div>
+              ),
+              value: index,
+            };
+          })}
+        />
+      ) : (
+        <span className="group-studio__bar-empty">No groups yet</span>
+      )}
+      <Button type="text" size="small" icon={<PlusOutlined />} onClick={onGroupAdd} title="Add a new group">
+        Add Group
+      </Button>
+    </div>
+  );
+
+  if (!group) {
+    return (
+      <ModuleSection
+        title="Group Studio"
+        description="Create a group to start composing rewrite rules."
+        eyebrow="Group Studio"
+        className="group-workbench group-workbench--empty"
+        collapsible={false}
+        collapsed={false}
+      >
+        {groupSwitcherBar}
+        <Empty
+          image={Empty.PRESENTED_IMAGE_SIMPLE}
+          description="Create a group to start composing rewrite rules."
+        />
+      </ModuleSection>
+    );
+  }
+
+  const enabledRuleCount = group.interfaceList.filter((rule) => rule.open).length;
+  const isGroupDisabled = enabledRuleCount === 0;
+
+  // Title doubles as the rename entry: pencil turns the h2 into an input,
+  // Enter/blur commits, Esc cancels. Eliminates the old separate 26px Input
+  // that duplicated the title and inverted the visual hierarchy.
+  const startEditing = () => {
+    setTitleDraft(group.summaryText || '');
+    setEditingTitle(true);
+  };
+
+  const commitTitle = () => {
+    setEditingTitle(false);
+    if (titleDraft !== (group.summaryText || '')) {
+      onGroupSummaryTextChange(
+        { target: { value: titleDraft } } as React.ChangeEvent<HTMLInputElement>,
+        groupIndex
+      );
+    }
+  };
+
+  const titleNode = editingTitle ? (
+    <input
+      className="group-title-edit-input"
+      value={titleDraft}
+      autoFocus
+      placeholder="Group title"
+      onChange={(event) => setTitleDraft(event.target.value)}
+      onBlur={commitTitle}
+      onKeyDown={(event) => {
+        if (event.key === 'Enter') {
+          event.preventDefault();
+          commitTitle();
+        } else if (event.key === 'Escape') {
+          setEditingTitle(false);
+        }
+      }}
+    />
+  ) : (
+    <span className="group-title-display">{group.summaryText || `Group ${groupIndex + 1}`}</span>
+  );
+
+  // Status chip + rename affordance live in the title-row so the description
+  // slot can return to stable help copy (consistent with OperationsRail).
+  const headerExtra = (
+    <>
+      {!editingTitle ? (
+        <Button
+          type="text"
+          size="small"
+          icon={<EditOutlined />}
+          onClick={startEditing}
+          title="Rename group"
+        />
+      ) : null}
+      <span className={`group-status-chip${isGroupDisabled ? ' group-status-chip--disabled' : ''}`}>
+        {isGroupDisabled ? 'Disabled' : `${enabledRuleCount}/${group.interfaceList.length} active`}
+      </span>
+    </>
+  );
 
   return (
     <ModuleSection
-      title={group.summaryText || `Group ${groupIndex + 1}`}
+      title={titleNode}
       description={isGroupDisabled
-        ? `Disabled group. ${group.interfaceList.length} rules are inactive and the group is pinned to the bottom.`
-        : `${enabledRuleCount} of ${group.interfaceList.length} rules are active.`}
+        ? 'Enable at least one rule to activate this group.'
+        : 'Compose and toggle rewrite rules for this group.'}
       eyebrow="Group Studio"
       className={`group-workbench${isGroupDisabled ? ' group-workbench--disabled' : ''}`}
-      collapsed={collapsed}
-      onToggleCollapse={onToggleCollapse}
+      collapsible={false}
+      collapsed={false}
+      extra={headerExtra}
+      extraInline
     >
       {groupSwitcherBar}
-      <Input
-        value={group.summaryText}
-        className={`group-title-input${isGroupDisabled ? ' group-title-input--disabled' : ''}`}
-        placeholder="Group title"
-        onChange={(event) => onGroupSummaryTextChange(event, groupIndex)}
-      />
 
       <div className="rule-card-list">
         {group.interfaceList.map((rule, interfaceIndex) => {

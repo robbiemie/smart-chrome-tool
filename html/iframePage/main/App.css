@@ -247,19 +247,8 @@
 
 .rail-switch-list {
   display: grid;
-  grid-template-columns: repeat(4, max-content);
-  justify-content: space-between;
-  gap: 8px;
-}
-
-/* Left-aligned variant for plugin groups that only hold a couple of entries
-   (e.g. Toolkit). Switches to flex + flex-start so buttons pack at the left
-   instead of spreading edge-to-edge. */
-.rail-switch-list--start {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: flex-start;
-  gap: 8px;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
 }
 
 .rail-actions {
@@ -401,28 +390,6 @@
   border-radius: 999px;
   padding: 1px 8px;
   margin-bottom: 2px;
-}
-
-/* Extras group — secondary switches (CSR Mode, Toolkit) that are NOT master
-   chokepoints. Visually de-emphasized so the MASTER card stays the focal point. */
-.rail-extras {
-  margin-top: 14px;
-}
-
-.rail-extras__label {
-  display: block;
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: rgb(27 40 34 / 40%);
-  margin-bottom: 6px;
-}
-
-.rail-extras__list {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
 }
 
 .rail-extras__list .rail-switch-item {
@@ -702,16 +669,36 @@
   background: linear-gradient(180deg, rgb(246 247 248 / 96%), rgb(233 236 239 / 88%));
 }
 
-.group-title-input {
-  margin-top: 12px;
-  border-radius: 16px;
-  font-size: 26px;
-  font-weight: 700;
+.group-title-display {
+  display: inline-block;
+  min-width: 0;
 }
 
-.group-title-input--disabled {
-  border-color: rgb(82 92 102 / 24%);
-  background: rgb(122 130 138 / 10%);
+.group-title-edit-input {
+  margin: 0;
+  padding: 2px 8px;
+  border: 1px solid #1a9b7f;
+  border-radius: 8px;
+  font-size: 18px;
+  font-weight: 500;
+  line-height: 1.2;
+  max-width: 60%;
+  outline: none;
+}
+
+.group-status-chip {
+  flex-shrink: 0;
+  padding: 2px 10px;
+  border-radius: 999px;
+  background: rgb(26 155 127 / 12%);
+  color: #1a9b7f;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.group-status-chip--disabled {
+  background: rgb(89 97 107 / 14%);
   color: #59616b;
 }
 

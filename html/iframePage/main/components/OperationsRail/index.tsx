@@ -34,34 +34,20 @@ const OperationsRail = ({
         collapsed={globalControlsCollapsed}
         onToggleCollapse={onGlobalControlsCollapseToggle}
       >
+        {/* Two equal columns: Interceptor (MASTER) and Toolkit. Both sit in
+            one grid so neither dominates a row — the MASTER card keeps its
+            badge + gradient to signal hierarchy, but width is equal. */}
         <div className="rail-switch-list">
-          {/* Interceptor is the MASTER switch. Turning it off hides the
-              Toolkit panel and disables all sub-features (mock hooks, sniffer,
-              floating rules, DOM inspector, animation control, page headers).
-              The workbench sidebar stays visible so the user can re-enable it. */}
           <div className="rail-switch-item rail-switch-item--master">
             <span className="rail-switch-item__badge">MASTER</span>
             <Switch checked={ajaxToolsSwitchOn} onChange={onToggleAjaxToolsSwitch} />
             <strong>Interceptor</strong>
-            <p>Master switch. Off disables all mock sub-features and hides the Toolkit panel.</p>
+            <p>Master switch for all mock sub-features.</p>
           </div>
-        </div>
-
-        <div className="rail-extras">
-          <span className="rail-extras__label">Extras</span>
-          <div className="rail-extras__list">
-            {/* Toolkit switch controls the floating Toolkit panel visibility.
-                The Toolkit panel hosts the runtime debug sub-tools (Floating
-                Rules / DOM Inspect / Animation / Sniffer) + Domain Whitelist.
-                CSR / Headers / Import-Export / Collapse-All live in the
-                workbench "Tools" tab instead. */}
-            <div className="rail-switch-item">
-              <Switch
-                checked={toolkitEnabled}
-                onChange={onToggleToolkit}
-              />
-              <strong>Toolkit</strong>
-            </div>
+          <div className="rail-switch-item">
+            <Switch checked={toolkitEnabled} onChange={onToggleToolkit} />
+            <strong>Toolkit</strong>
+            <p>Floating panel with debug sub-tools.</p>
           </div>
         </div>
       </ModuleSection>
