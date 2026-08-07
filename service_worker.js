@@ -483,8 +483,17 @@ chrome.action.onClicked.addListener(async (tab) => {
   // content script is not injected and DNR header rules cannot modify
   // requests. After granting, ensurePanelMessageReceiver will inject the
   // content script via chrome.scripting so the panel opens without a reload.
-  const alreadyGranted = await hasHostPermissions();
-  const granted = alreadyGranted || await requestHostPermissions();
+  //
+  // chrome.permissions.request MUST run in the user-gesture call stack of the
+  // click. Any `await` before it (e.g. awaiting hasHostPermissions) detaches
+  // it from the gesture and Chrome silently denies without showing a prompt.
+  // So we request synchronously here, then await the result.
+  let granted;
+  try {
+    granted = await chrome.permissions.request({ origins: OPTIONAL_HOST_ORIGINS });
+  } catch (error) {
+    granted = false;
+  }
   if (!granted) {
     return;
   }

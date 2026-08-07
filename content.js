@@ -4250,7 +4250,17 @@ function bindPanelMessageListener(container) {
       return true;
     }
     if (type === 'iframeToggle') {
-      container.style.setProperty('transform', iframeVisible ? 'translateX(0)' : 'translateX(calc(100% + 20px))', 'important');
+      // Reference the live panelContainer from runtime state instead of the
+      // closure-captured `container`. When a SPA replaces document.body, the
+      // MutationObserver recreates the container and updates
+      // ajaxToolsRuntimeState.panelContainer, but bindPanelMessageListener's
+      // guard (panelMessageListenerBound) prevents rebinding. Using the closure
+      // would set transform on the OLD detached container, leaving the new one
+      // stuck with its default hidden transform.
+      const liveContainer = ajaxToolsRuntimeState.panelContainer;
+      if (liveContainer) {
+        liveContainer.style.setProperty('transform', iframeVisible ? 'translateX(0)' : 'translateX(calc(100% + 20px))', 'important');
+      }
       // The floating rules panel is independent of the main side panel —
       // its visibility is controlled only by the master toggle and its
       // own collapse state, so we do not touch it here.
