@@ -98,10 +98,11 @@ export async function verifyExtensionDir(handle: AnyDirHandle): Promise<boolean>
     const manifest = JSON.parse(text);
     const name = String(manifest?.name || '');
     logger.log('[MockKit Update] verifyExtensionDir', { name, version: manifest?.version });
-    // Accept any name starting with "MockKit" (covers "MockKit", "MockKit
-    // v0.0.1", etc.) and the legacy name so users who installed before the
-    // rename can still pick their existing folder.
-    return name.startsWith('MockKit') || name === 'Ajax Interceptor Tools';
+    // Accept the current name "smart-chrome-toolkit", the legacy "MockKit*"
+    // names (covers "MockKit", "MockKit v0.0.1", etc. from older versions),
+    // and the original "Ajax Interceptor Tools" so users who installed before
+    // any rename can still pick their existing folder.
+    return name === 'smart-chrome-toolkit' || name.startsWith('MockKit') || name === 'Ajax Interceptor Tools';
   } catch (e) {
     logger.log('[MockKit Update] verifyExtensionDir failed', e);
     return false;
