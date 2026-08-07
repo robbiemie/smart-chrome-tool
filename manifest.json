@@ -1,6 +1,6 @@
 {
   "name": "smart-chrome-toolkit",
-  "version": "0.0.60",
+  "version": "0.0.61",
   "description": "Modify the response text of Ajax requests",
   "manifest_version": 3,
   "declarative_net_request": {
