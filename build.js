@@ -47,10 +47,6 @@ const RUNTIME_ENTRIES = [
   'manifest.json',
   'service_worker.js',
   'content.js',
-  'devtools.html',
-  'devtools.js',
-  'panel.html',
-  'panel.js',
   'pageScripts',
   'icons',
   'html/iframePage/mock.js',
@@ -111,7 +107,7 @@ const forcePublish = argv.includes('--force') || shouldRetry;
 // CI never commits back — the tag is already pushed and the workflow runs on a
 // detached HEAD at that tag.
 const shouldCommit = !isCi && (argv.includes('--commit') || shouldRetry);
-// Beta builds rename the extension to "MockKit Beta vX" and emit a
+// Beta builds rename the extension to "smart-chrome-toolkit Beta vX" and emit a
 // "-beta-" zip so they are visually distinct from production packages in
 // chrome://extensions and the Downloads folder. Forbidden with --publish
 // because a release must never ship under the beta name.
@@ -171,9 +167,10 @@ const bumpVersion = () => {
 
   // manifest.json is the authoritative version; package.json/lock are mirrors.
   manifestJson.version = nextVersion;
-  // Sync the version into the extension name so it shows up in
-  // chrome://extensions and the toolbar (e.g. "MockKit v0.0.2").
-  manifestJson.name = `MockKit v${nextVersion}`;
+  // Keep the extension name stable (no version infix). Chrome Web Store policy
+  // forbids version numbers in the name; chrome://extensions already shows the
+  // version separately, so a stable name is correct for both local and store.
+  manifestJson.name = 'smart-chrome-toolkit';
   writeJsonFile(manifestJsonPath, manifestJson);
   syncPackageVersionFromManifest(nextVersion);
 
@@ -213,7 +210,7 @@ const runBuild = () => {
     syncPackageVersionFromManifest(readJsonFile(manifestJsonPath).version);
   }
 
-  // Beta builds rewrite the extension display name to "MockKit Beta vX" so
+  // Beta builds rewrite the extension display name to "smart-chrome-toolkit Beta vX" so
   // it shows up distinctly in chrome://extensions. We swap the name in
   // manifest.json before the build (so the zip embeds it) and restore the
   // original after packaging so the working tree stays on the production name.
@@ -221,7 +218,7 @@ const runBuild = () => {
   if (isBetaBuild) {
     const manifestJson = readJsonFile(manifestJsonPath);
     originalManifestName = manifestJson.name;
-    manifestJson.name = `MockKit Beta v${manifestJson.version}`;
+    manifestJson.name = `smart-chrome-toolkit Beta v${manifestJson.version}`;
     writeJsonFile(manifestJsonPath, manifestJson);
     console.log(`Beta build: extension name set to "${manifestJson.name}"`);
   }

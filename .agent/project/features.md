@@ -366,42 +366,7 @@ picture-in-picture, dark-theme (invert), open-in-new-tab, discussions, code-net.
 
 ---
 
-## 13. DevTools panel entry
-
-**Summary:** A Chrome DevTools panel (sibling of Elements / Console / Network)
-that mounts the same React workbench on the inspected page. Serves as an
-alternative entry point to the toolbar action, useful where the toolbar
-action's content-script auto-injection is gated (e.g. enterprise-managed
-browsers) — the DevTools page is permitted in many such environments and
-`chrome.scripting.executeScript` re-injection still works through the
-extension's existing `host_permissions`.
-
-**Lives in:**
-- Panel registration: `devtools.html` → `devtools.js`
-  (`chrome.devtools.panels.create`)
-- Panel UI + mount trigger: `panel.html` → `panel.js`
-  (reads `chrome.devtools.inspectedWindow.tabId`, sends
-  `DEVTOOLS_SHOW_WORKBENCH` to the service worker)
-- Mount handler: `service_worker.js` (`DEVTOOLS_SHOW_WORKBENCH` branch — sets
-  the workbench target tab, calls `ensurePanelMessageReceiver`, force-reveals
-  the iframe via `iframeToggle`)
-- Manifest: `devtools_page: "devtools.html"`
-
-**Wiring:** DevTools panel open → `panel.js` →
-`chrome.runtime.sendMessage({ type: 'DEVTOOLS_SHOW_WORKBENCH', tabId })` →
-SW reuses `ensurePanelMessageReceiver` + `iframeToggle` (force-show) →
-existing content.js iframe workbench on the inspected page. No new UI is
-rendered inside the panel itself; the panel only shows mount status and a
-retry button.
-
-**Constraint:** Cannot mount on `chrome://`, `chrome-extension://`, `edge://`,
-`about:`, or `view-source:` pages — Chrome blocks content-script injection on
-those schemes regardless of entry point. The panel detects this and shows a
-"blocked" status.
-
----
-
-## 14. Toolkit Panel & Animation Control
+## 13. Toolkit Panel & Animation Control
 
 **Summary:** A single draggable bottom-right **Toolkit** master panel
 consolidates the auxiliary debug tools — Floating Rules, DOM Inspect, Animation
@@ -543,7 +508,7 @@ one last time before the patch takes effect (one-frame latency).
 
 ---
 
-## 15. Tooltip suppression (merged into animation pause)
+## 14. Tooltip suppression (merged into animation pause)
 
 **Summary:** Tooltip freezing is part of the animation pause action — when the
 user pauses animations (⌘⇧K or the Pause button), tooltips are frozen too, so
@@ -582,7 +547,7 @@ following the same format (Summary / Lives in / Wiring). See governance.md. -->
 
 ---
 
-## 16. Response delay simulation
+## 15. Response delay simulation
 
 **Summary:** Simulate response latency for mocked requests by deferring the
 delivery of the overridden response body to the page. Supports a fixed delay
@@ -628,7 +593,7 @@ field is evaluated per request, so a random range re-rolls on every hit.
 
 ---
 
-## 17. Workbench Tools tab & tab registry
+## 16. Workbench Tools tab & tab registry
 
 **Summary:** A top-level tab bar inside the React workbench (`workbench-main`)
 switches the main content area between the **Rules** workbench (the default

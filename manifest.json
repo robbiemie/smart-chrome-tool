@@ -1,6 +1,6 @@
 {
-  "name": "MockKit v0.0.58",
-  "version": "0.0.58",
+  "name": "smart-chrome-toolkit",
+  "version": "0.0.59",
   "description": "Modify the response text of Ajax requests",
   "manifest_version": 3,
   "declarative_net_request": {
@@ -34,7 +34,6 @@
   "background": {
     "service_worker": "service_worker.js"
   },
-  "devtools_page": "devtools.html",
   "content_scripts": [
     {
       "matches": [

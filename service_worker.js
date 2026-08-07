@@ -543,57 +543,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 
-  // DevTools panel entry: mount/reveal the workbench on a specific inspected
-  // tab. Unlike the toolbar action (which targets the active tab), the
-  // DevTools panel runs in its own window, so the inspected tab is usually
-  // NOT the active tab — we must use the explicit tabId from the panel.
-  if (message?.type === 'DEVTOOLS_SHOW_WORKBENCH') {
-    const targetTabId = message?.tabId;
-
-    if (typeof targetTabId !== 'number') {
-      sendResponse({ ok: false, message: 'Missing inspected tabId.' });
-      return true;
-    }
-
-    (async () => {
-      try {
-        // Record the inspected tab as the workbench target so existing
-        // CSR / render-mode / header-rule flows (which read this key) keep
-        // operating on the right tab.
-        await chrome.storage.local.set({
-          [WORKBENCH_TARGET_TAB_ID_STORAGE_KEY]: targetTabId,
-        });
-
-        // Make sure content.js is listening on that tab; re-inject if the
-        // initial document_start hook was missed (e.g. page loaded before
-        // the extension, or enterprise policy delayed content-script load).
-        const ensureResponse = await ensurePanelMessageReceiver(targetTabId);
-
-        if (!ensureResponse?.ok) {
-          sendResponse({
-            ok: false,
-            message: ensureResponse?.message || 'Content runtime is unavailable on this tab.',
-          });
-          return;
-        }
-
-        // Force-reveal the iframe workbench (not a toggle): opening the
-        // DevTools panel is an explicit "show me the workbench" intent.
-        await sendMessageToContentScript(targetTabId, {
-          type: 'iframeToggle',
-          iframeVisible: true,
-        });
-        await chrome.storage.local.set({ iframeVisible: true });
-
-        sendResponse({ ok: true });
-      } catch (error) {
-        sendResponse({ ok: false, message: error?.message || 'DevTools mount failed.' });
-      }
-    })();
-
-    return true;
-  }
-
   return false;
 });
 

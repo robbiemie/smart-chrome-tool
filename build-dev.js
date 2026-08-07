@@ -39,10 +39,6 @@ const RUNTIME_ENTRIES = [
   'manifest.json',
   'service_worker.js',
   'content.js',
-  'devtools.html',
-  'devtools.js',
-  'panel.html',
-  'panel.js',
   'pageScripts',
   'icons',
   'html/iframePage/mock.js',
@@ -125,7 +121,7 @@ try {
   // dev package visually distinct in chrome://extensions, the toolbar badge,
   // and the DevTools panel tab.
   manifest.version = devVersion;
-  manifest.name = `MockKit Beta v${devVersion}`;
+  manifest.name = `smart-chrome-toolkit Beta v${devVersion}`;
   writeJsonFile(manifestJsonPath, manifest);
 
   console.log(`\n--- Dev build: v${baseVersion} -> Beta v${devVersion} ---\n`);
@@ -171,7 +167,7 @@ try {
   console.log('1. Open chrome://extensions');
   console.log('2. Enable Developer mode (top-right)');
   console.log('3. Drag the zip above into the window');
-  console.log('4. The extension shows as "MockKit Beta v' + devVersion + '"');
+  console.log('4. The extension shows as "smart-chrome-toolkit Beta v' + devVersion + '"');
   console.log('\nSource manifest.json has been restored to production state.');
 } catch (error) {
   console.error(`\nDev build failed: ${error.message}`);
