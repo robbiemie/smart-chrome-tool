@@ -623,7 +623,10 @@ const GITHUB_REPO = 'robbiemie/smart-chrome-tool';
 const UPDATE_CHECK_INTERVAL_MS = 1000 * 60 * 60 * 6; // 6h
 const UPDATE_LAST_CHECK_KEY = 'ajaxToolsUpdateLastCheckAt';
 const UPDATE_AVAILABLE_KEY = 'ajaxToolsUpdateAvailable';
-const DOWNLOAD_PREFIX = 'smart-chrome-tool-v';
+// build.js packages the GitHub release zip as "smart-chrome-tool-github-vX.zip"
+// (infix "github-"). Match that exact prefix so the asset is found on the
+// Release, not the source zipball.
+const DOWNLOAD_PREFIX = 'smart-chrome-tool-github-v';
 
 // Compare two semver-like strings (a.b.c). Returns 1 if remote > local,
 // 0 if equal, -1 if remote < local.
