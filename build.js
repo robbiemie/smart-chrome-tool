@@ -193,12 +193,10 @@ const runBuild = () => {
     return;
   }
 
-  // Local-only builds leave a stale zip from the previous run that is no
-  // longer needed once the workbench is rebuilt. Publishing needs a fresh zip
-  // produced this run, so only sweep leftovers for non-publish flows.
-  if (!shouldPublish) {
-    cleanupStaleZips();
-  }
+  // Sweep leftover zips from previous builds in ALL local flows so a stale
+  // archive from an older version is never mistaken for the current release.
+  // --cut returns early above and never produces a zip, so it is excluded.
+  cleanupStaleZips();
 
   // Retry mode: don't bump, just rebuild + re-publish the current version.
   if (shouldRetry) {

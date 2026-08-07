@@ -1,5 +1,17 @@
 # Build Changelog
 
+## v0.0.59
+
+- Built At: 2026-08-07T04:00:43.677Z
+- Previous Version: v0.0.58
+- Git Branch: master
+- Git Commit: c47b8771
+
+### Changed Files
+- build.js
+- manifest.json
+
+
 ## v0.0.58
 
 - Built At: 2026-08-06T13:57:01.150Z

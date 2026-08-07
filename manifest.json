@@ -1,6 +1,6 @@
 {
   "name": "smart-chrome-toolkit",
-  "version": "0.0.59",
+  "version": "0.0.60",
   "description": "Modify the response text of Ajax requests",
   "manifest_version": 3,
   "declarative_net_request": {
@@ -22,14 +22,14 @@
   ],
   "action": {
     "default_icon": {
-      "16": "./icons/tools16.png",
-      "24": "./icons/tools24.png",
-      "32": "./icons/tools32.png"
+      "16": "icons/tools16.png",
+      "24": "icons/tools24.png",
+      "32": "icons/tools32.png"
     }
   },
   "icons": {
-    "48": "./icons/tools128.png",
-    "128": "./icons/tools128.png"
+    "48": "icons/tools128.png",
+    "128": "icons/tools128.png"
   },
   "background": {
     "service_worker": "service_worker.js"
@@ -40,7 +40,7 @@
         "<all_urls>"
       ],
       "js": [
-        "./content.js"
+        "content.js"
       ],
       "run_at": "document_start",
       "all_frames": true
