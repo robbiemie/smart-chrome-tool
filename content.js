@@ -3618,7 +3618,11 @@ function applyFloatingPanelState() {
 
 function loadFloatingRulesState(callback) {
   chrome.storage.local.get([FLOATING_ENABLED_KEY], (result) => {
-    ajaxToolsRuntimeState.floatingRulesEnabled = result[FLOATING_ENABLED_KEY] !== false;
+    // Default to hidden: only show when storage explicitly holds true.
+    // The previous `!== false` logic treated undefined (never-set) as enabled,
+    // causing the panel to appear on first paint even when the user never
+    // turned it on. Match the initial runtime state default (false).
+    ajaxToolsRuntimeState.floatingRulesEnabled = result[FLOATING_ENABLED_KEY] === true;
     applyFloatingPanelState();
     if (typeof callback === 'function') callback();
   });
@@ -6696,12 +6700,12 @@ chrome.storage.onChanged.addListener(function (changes, namespace) {
     // Master toggle for the floating panel — react immediately so the
     // panel appears/disappears even when the main side panel is closed.
     if (key === FLOATING_ENABLED_KEY) {
-      ajaxToolsRuntimeState.floatingRulesEnabled = newValue !== false;
+      ajaxToolsRuntimeState.floatingRulesEnabled = newValue === true;
       applyFloatingPanelState();
       // Mirror into the Toolkit panel's rules sub-toggle so the switch stays
       // in sync when the state is changed from elsewhere (e.g. the workbench's
       // legacy Floating Rules switch, if still wired).
-      toolkitPanelState.rulesOpen = newValue !== false;
+      toolkitPanelState.rulesOpen = newValue === true;
       syncToolkitPanelUi();
     }
     // Toolkit master panel visibility — driven by the Global Controls Toolkit

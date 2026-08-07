@@ -405,18 +405,36 @@ const packageExtension = (isStoreVariant = false) => {
 const SERVICE_WORKER_PATH = path.resolve(projectRoot, 'service_worker.js');
 const STORE_FLAG_RE = /const IS_STORE_BUILD = false;/;
 
+// The manifest "key" field pins the extension ID for unpacked/CRX installs
+// (GitHub distribution). The Web Store assigns its own key on first upload
+// and rejects packages whose key field doesn't match its record. Store builds
+// must omit "key" so the upload is accepted.
+const stripManifestKeyForStore = () => {
+  const original = fs.readFileSync(manifestJsonPath, 'utf8');
+  const manifest = JSON.parse(original);
+  if (!manifest.key) {
+    return original;
+  }
+  delete manifest.key;
+  const stripped = JSON.stringify(manifest, null, 2) + '\n';
+  fs.writeFileSync(manifestJsonPath, stripped, 'utf8');
+  return original;
+};
+
 const packageStoreExtension = () => {
   const originalSw = fs.readFileSync(SERVICE_WORKER_PATH, 'utf8');
   if (!STORE_FLAG_RE.test(originalSw)) {
     throw new Error('service_worker.js is missing "const IS_STORE_BUILD = false;" expected by the store build.');
   }
   const storeSw = originalSw.replace(STORE_FLAG_RE, 'const IS_STORE_BUILD = true;');
+  const originalManifest = stripManifestKeyForStore();
   try {
     fs.writeFileSync(SERVICE_WORKER_PATH, storeSw, 'utf8');
     return packageExtension(true);
   } finally {
     fs.writeFileSync(SERVICE_WORKER_PATH, originalSw, 'utf8');
-    console.log('Restored original service_worker.js after store packaging.');
+    fs.writeFileSync(manifestJsonPath, originalManifest, 'utf8');
+    console.log('Restored original service_worker.js and manifest.json after store packaging.');
   }
 };
 
