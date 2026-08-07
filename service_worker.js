@@ -18,6 +18,13 @@ const isDevMode = (() => {
 })();
 const logDev = (...args) => { if (isDevMode) console.log(...args); };
 const warnDev = (...args) => { if (isDevMode) console.warn(...args); };
+// Web Store submission builds flip this to true at package time (build.js
+// rewrites the literal before zipping the store variant) so the self-update
+// codepath is fully inert at runtime: no update alarm, no GitHub fetch, and
+// update/reload/token messages return a disabled response. GitHub-distributed
+// builds keep it false so self-update stays available. The footer UI is
+// hidden in parallel via the MOCKKIT_STORE_BUILD Vite flag.
+const IS_STORE_BUILD = false;
 // Tracks the page tab that last sent CHECK_UPDATE so RELOAD_EXTENSION can
 // refresh only that tab after a self-update.
 let lastWorkbenchTabId = null;
@@ -449,8 +456,36 @@ async function disableAllHeaderRules() {
   await syncHeaderRules();
 }
 
+// The extension uses optional_host_permissions so the store install does not
+// request broad host access up front. The first toolbar click is a valid user
+// gesture, which is the only context chrome.permissions.request() may run in.
+const OPTIONAL_HOST_ORIGINS = ['http://*/*', 'https://*/*'];
+
+async function hasHostPermissions() {
+  return chrome.permissions.contains({ origins: OPTIONAL_HOST_ORIGINS });
+}
+
+async function requestHostPermissions() {
+  try {
+    return await chrome.permissions.request({ origins: OPTIONAL_HOST_ORIGINS });
+  } catch (error) {
+    logDev('[ajax-tools] request host permissions failed', error);
+    return false;
+  }
+}
+
 chrome.action.onClicked.addListener(async (tab) => {
   if (!tab?.id) {
+    return;
+  }
+
+  // First-run gate: prompt the user to grant host access. Until granted, the
+  // content script is not injected and DNR header rules cannot modify
+  // requests. After granting, ensurePanelMessageReceiver will inject the
+  // content script via chrome.scripting so the panel opens without a reload.
+  const alreadyGranted = await hasHostPermissions();
+  const granted = alreadyGranted || await requestHostPermissions();
+  if (!granted) {
     return;
   }
 
@@ -510,6 +545,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   if (message?.type === 'CHECK_UPDATE') {
+    // Store builds never check for updates (the Web Store delivers them), so
+    // respond disabled instead of hitting GitHub. The footer UI is also
+    // hidden in store builds, so this branch is defensive only.
+    if (IS_STORE_BUILD) {
+      sendResponse({ ok: true, hasUpdate: false, disabled: true, localVersion: chrome.runtime.getManifest().version });
+      return true;
+    }
     // Record which page tab initiated the check so RELOAD_EXTENSION can
     // refresh only that tab (not the update tab or other tabs).
     if (sender?.tab?.id) {
@@ -522,6 +564,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   if (message?.type === 'RELOAD_EXTENSION') {
+    // Store builds do not self-reload; updates are applied by the browser.
+    if (IS_STORE_BUILD) {
+      sendResponse({ ok: false, disabled: true, message: 'Self-update is disabled in the Web Store build.' });
+      return true;
+    }
     // Only refresh the original page tab that triggered the update, not all
     // tabs. lastWorkbenchTabId was recorded when CHECK_UPDATE came in from
     // the iframe (which runs in the page tab).
@@ -537,6 +584,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   if (message?.type === 'SET_GITHUB_TOKEN') {
+    // The token only lifts the GitHub API rate limit for self-update checks,
+    // which never run in store builds — refuse to persist it so no auth
+    // material is collected in a store-distributed extension.
+    if (IS_STORE_BUILD) {
+      sendResponse({ ok: true, disabled: true });
+      return true;
+    }
     chrome.storage.local.set({ ajaxToolsGithubToken: message?.token || '' }, () => {
       sendResponse({ ok: true });
     });
@@ -754,26 +808,30 @@ async function checkForUpdate(force = false) {
 
 // Background tick: re-check on a fixed cadence so the badge appears without
 // user interaction. chrome.alarms is the MV3-correct timer primitive.
-chrome.alarms?.create?.('ajax-tools-update-check', { periodInMinutes: 60 * 6 });
-chrome.alarms?.onAlarm?.addListener?.((alarm) => {
-  if (alarm?.name === 'ajax-tools-update-check') {
-    checkForUpdate(false).catch(() => {});
-  }
-});
+// Disabled in store builds — the Web Store owns update delivery, so the
+// extension never polls GitHub.
+if (!IS_STORE_BUILD) {
+  chrome.alarms?.create?.('ajax-tools-update-check', { periodInMinutes: 60 * 6 });
+  chrome.alarms?.onAlarm?.addListener?.((alarm) => {
+    if (alarm?.name === 'ajax-tools-update-check') {
+      checkForUpdate(false).catch(() => {});
+    }
+  });
 
-// Run one check shortly after startup/install so the badge reflects the
-// latest state without waiting for the first alarm tick. On install/update
-// we clear the stale cached result first so a just-applied update doesn't
-// keep showing a red dot from the pre-update check.
-chrome.runtime.onStartup.addListener(() => {
-  setTimeout(() => checkForUpdate(false).catch(() => {}), 5000);
-});
-chrome.runtime.onInstalled.addListener((details) => {
-  if (details?.reason === 'update') {
-    chrome.storage.local.remove([UPDATE_AVAILABLE_KEY, UPDATE_LAST_CHECK_KEY], () => {
-      setTimeout(() => checkForUpdate(true).catch(() => {}), 2000);
-    });
-  } else {
+  // Run one check shortly after startup/install so the badge reflects the
+  // latest state without waiting for the first alarm tick. On install/update
+  // we clear the stale cached result first so a just-applied update doesn't
+  // keep showing a red dot from the pre-update check.
+  chrome.runtime.onStartup.addListener(() => {
     setTimeout(() => checkForUpdate(false).catch(() => {}), 5000);
-  }
-});
+  });
+  chrome.runtime.onInstalled.addListener((details) => {
+    if (details?.reason === 'update') {
+      chrome.storage.local.remove([UPDATE_AVAILABLE_KEY, UPDATE_LAST_CHECK_KEY], () => {
+        setTimeout(() => checkForUpdate(true).catch(() => {}), 2000);
+      });
+    } else {
+      setTimeout(() => checkForUpdate(false).catch(() => {}), 5000);
+    }
+  });
+}

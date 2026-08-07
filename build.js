@@ -299,7 +299,7 @@ const runBuild = async () => {
     if (buildStore) {
       await runViteBuild(true);
       console.log('\nStore build completed successfully.');
-      storeZip = packageExtension(true);
+      storeZip = packageStoreExtension();
       if (originalManifestName && !githubZip) {
         const mj = readJsonFile(manifestJsonPath);
         mj.name = originalManifestName;
@@ -389,6 +389,31 @@ const packageExtension = (isStoreVariant = false) => {
   console.log(`\nPackaged: ${zipName} (${(stats.size / 1024).toFixed(1)} KB)`);
   console.log(`Location: ${zipPath}`);
   return zipName;
+};
+
+// Web Store submission builds must ship a service worker with the self-update
+// codepath fully disabled (no alarm, no GitHub fetch, no update messages),
+// matching how MOCKKIT_STORE_BUILD=1 strips the self-update UI from the
+// Vite bundle. We flip the IS_STORE_BUILD literal in service_worker.js
+// in-memory before packaging and restore the original byte-for-byte in a
+// finally block, so the working tree never retains the store-flavored SW —
+// the same swap-and-restore pattern used for the beta extension name.
+const SERVICE_WORKER_PATH = path.resolve(projectRoot, 'service_worker.js');
+const STORE_FLAG_RE = /const IS_STORE_BUILD = false;/;
+
+const packageStoreExtension = () => {
+  const originalSw = fs.readFileSync(SERVICE_WORKER_PATH, 'utf8');
+  if (!STORE_FLAG_RE.test(originalSw)) {
+    throw new Error('service_worker.js is missing "const IS_STORE_BUILD = false;" expected by the store build.');
+  }
+  const storeSw = originalSw.replace(STORE_FLAG_RE, 'const IS_STORE_BUILD = true;');
+  try {
+    fs.writeFileSync(SERVICE_WORKER_PATH, storeSw, 'utf8');
+    return packageExtension(true);
+  } finally {
+    fs.writeFileSync(SERVICE_WORKER_PATH, originalSw, 'utf8');
+    console.log('Restored original service_worker.js after store packaging.');
+  }
 };
 
 const packageWithZip = (zipName) => {

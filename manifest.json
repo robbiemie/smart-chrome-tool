@@ -1,7 +1,7 @@
 {
   "name": "smart-chrome-toolkit",
-  "version": "0.0.62",
-  "description": "Modify the response text of Ajax requests",
+  "version": "0.0.63",
+  "description": "Frontend debugging toolkit: mock XHR/fetch responses, rewrite requests, manage headers, toggle CSR mode, and inspect DOM nodes.",
   "manifest_version": 3,
   "declarative_net_request": {
     "rule_resources": []
@@ -16,7 +16,7 @@
     "declarativeNetRequestWithHostAccess",
     "alarms"
   ],
-  "host_permissions": [
+  "optional_host_permissions": [
     "http://*/*",
     "https://*/*"
   ],
