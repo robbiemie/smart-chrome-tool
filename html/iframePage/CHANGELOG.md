@@ -1,5 +1,19 @@
 # Build Changelog
 
+## v0.0.66
+
+- Built At: 2026-08-07T07:49:56.096Z
+- Previous Version: v0.0.65
+- Git Branch: master
+- Git Commit: ee80b623
+
+### Changed Files
+- html/iframePage/package-lock.json
+- html/iframePage/package.json
+- manifest.json
+- smart-chrome-tool-github-v0.0.65.zip
+
+
 ## v0.0.65
 
 - Built At: 2026-08-07T07:42:29.443Z
