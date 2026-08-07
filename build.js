@@ -12,8 +12,8 @@
  * Publish:  node build.js --publish  -> bump + build + zip + create a GitHub Release with the zip attached
  *   --force                          -> with --publish, delete an existing tag/release and recreate
  *   --notes "<text>"                 -> override auto-generated release notes
- *   --commit                         -> after publishing, git add + commit the version bump & dist, then push to origin
- *           Combined: node build.js --publish --commit  -> bump, build, zip, release, commit, push (one-shot)
+ *   --commit                         -> before publishing, git add + commit the version bump & dist, then push to origin
+ *           Combined: node build.js --publish --commit  -> bump, build, zip, commit, push, release (one-shot)
  * Retry:    node build.js --retry    -> re-publish the CURRENT version (no bump). Implies --force + --commit.
  *                                      Use when a previous --publish failed midway (stale tag, network error, etc).
  * CI:       node build.js --ci --tag v0.0.x -> build + zip + attach to an ALREADY-PUSHED tag.
@@ -308,11 +308,15 @@ const runBuild = async () => {
       }
     }
 
-    if (shouldPublish) {
-      publishToGitHub(githubZip);
-    }
+    // Commit the version bump BEFORE publishing so the tag lands on the bump
+    // commit (not the pre-bump HEAD). Otherwise the tag points at a commit
+    // whose manifest.json still holds the old version, and CI's version check
+    // fails. This mirrors cutRelease()'s commit-then-tag ordering.
     if (shouldCommit) {
       commitAndPush();
+    }
+    if (shouldPublish) {
+      publishToGitHub(githubZip);
     }
   } catch (error) {
     console.error('\n' + error.message);
@@ -587,8 +591,9 @@ const publishToGitHub = (zipName) => {
   console.log(`  https://github.com/robbiemie/smart-chrome-tool/releases/tag/${tag}`);
 };
 
-// After publishing, commit the version bump + rebuilt dist and push to origin
-// so the remote master branch matches the released tag.
+// Commit the version bump + rebuilt dist and push to origin BEFORE the tag is
+// created, so publishToGitHub()'s createAndPushTag() lands the tag on this bump
+// commit. Ordering is commit -> push HEAD -> tag -> push tag, matching cutRelease().
 const commitAndPush = () => {
   console.log('\n--- Committing version bump & dist, then pushing ---');
   const version = readManifestVersion();
