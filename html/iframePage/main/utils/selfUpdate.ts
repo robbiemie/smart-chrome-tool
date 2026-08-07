@@ -72,10 +72,21 @@ export async function pickExtensionDir(): Promise<AnyDirHandle | null> {
   if (!isFsAccessSupported()) {
     throw new Error('File System Access API is unavailable. Use a recent Chrome.');
   }
-  const handle = await (window as any).showDirectoryPicker({
-    mode: 'readwrite',
-    id: 'smart-chrome-tool-extension-dir',
-  });
+  let handle;
+  try {
+    handle = await (window as any).showDirectoryPicker({
+      mode: 'readwrite',
+      id: 'smart-chrome-tool-extension-dir',
+    });
+  } catch (e: any) {
+    // User cancelled the directory picker (AbortError) — treat as "no pick",
+    // not a hard failure, so the caller can close the modal gracefully.
+    const name = e?.name || '';
+    if (name === 'AbortError' || name === 'NotFoundError') {
+      return null;
+    }
+    throw e;
+  }
   if (!handle) return null;
   await storeDirHandle(handle);
   return handle;

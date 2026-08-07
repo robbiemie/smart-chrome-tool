@@ -21,7 +21,11 @@ const ajaxToolsRuntimeState = window[AJAX_TOOLS_RUNTIME_STATE_KEY] || (window[AJ
   panelInitBound: false,
   floatingPanel: null,
   floatingPanelBound: false,
-  floatingRulesEnabled: true,
+  // Default to hidden; loadFloatingRulesState reads the persisted value from
+  // storage and shows the panel if the user previously enabled it. Starting
+  // false prevents the panel from flashing on first paint before storage
+  // returns, which is especially jarring when the user never turned it on.
+  floatingRulesEnabled: false,
   // Tracks whether the user has manually dragged the floating rules panel.
   // Once true, the auto-reposition logic (which shifts the panel out of the
   // workbench's footprint) stays hands-off so it never fights the user's

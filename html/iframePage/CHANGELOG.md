@@ -1,5 +1,17 @@
 # Build Changelog
 
+## v0.0.72
+
+- Built At: 2026-08-07T08:49:16.764Z
+- Previous Version: v0.0.71
+- Git Branch: master
+- Git Commit: ba8cdead
+
+### Changed Files
+- html/iframePage/main/utils/selfUpdate.ts
+- html/iframePage/stats.html
+
+
 ## v0.0.71
 
 - Built At: 2026-08-07T08:42:11.501Z
