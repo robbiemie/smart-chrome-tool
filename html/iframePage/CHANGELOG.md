@@ -1,5 +1,17 @@
 # Build Changelog
 
+## v0.0.71
+
+- Built At: 2026-08-07T08:42:11.501Z
+- Previous Version: v0.0.70
+- Git Branch: master
+- Git Commit: 0c34d7c1
+
+### Changed Files
+- html/iframePage/stats.html
+- smart-chrome-tool-store-v0.0.70.zip
+
+
 ## v0.0.70
 
 - Built At: 2026-08-07T08:31:13.259Z
