@@ -3298,6 +3298,13 @@ if (pageScripts) {
         : ['*'];
       const snifferOpen = result[SNIFFER_OPEN_KEY] === true;
       ajaxToolsRuntimeState.domainWhitelist = domainWhitelist;
+      // Re-render the Toolkit panel's whitelist tags now that the real value
+      // has loaded from storage. Without this, the panel keeps showing the
+      // initial default ['*'] because renderWhitelistTags ran before this
+      // async callback resolved.
+      if (toolkitPanelState._rerenderWhitelist) {
+        toolkitPanelState._rerenderWhitelist();
+      }
       // Keep the runtime mirror of the global interceptor switch in sync so
       // applyFloatingPanelState() can hide the floating panel when paused.
       ajaxToolsRuntimeState.ajaxToolsSwitchOn = ajaxToolsSwitchOn;
