@@ -1,9 +1,15 @@
-/* global require, __dirname */
+/* global require, __dirname, process */
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import { visualizer } from 'rollup-plugin-visualizer';
 
 const path = require('path');
+
+// Web Store review builds set MOCKKIT_STORE_BUILD=1 to hide the self-update
+// entry (avoids remote-code-download scrutiny). GitHub-distributed builds
+// leave it unset so the self-update UI stays available. The value is exposed
+// to client code via import.meta.env.STORE_BUILD.
+const isStoreBuild = process.env.MOCKKIT_STORE_BUILD === '1';
 
 // https://vitejs.dev/config/
 export default defineConfig({
@@ -13,6 +19,9 @@ export default defineConfig({
     // open:true
   })],
   base: './',
+  define: {
+    'import.meta.env.STORE_BUILD': JSON.stringify(isStoreBuild),
+  },
   build: {
     // 输出路径
     // outDir: './dist',

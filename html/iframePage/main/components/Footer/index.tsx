@@ -18,6 +18,12 @@ type UpdateInfo = {
 // flow (check → red dot → modal → progress) can be exercised in the browser.
 const isExtensionContext = typeof chrome !== 'undefined' && !!chrome.runtime?.id;
 
+// Self-update entry is hidden in Web Store review builds to avoid
+// remote-code-download scrutiny. STORE_BUILD is injected at build time by
+// vite.config.js (true when MOCKKIT_STORE_BUILD=1 is set). GitHub-distributed
+// builds leave it false so the self-update UI stays available.
+const SHOW_UPDATE_ENTRY = !import.meta.env.STORE_BUILD;
+
 function Footer() {
   const [updateInfo, setUpdateInfo] = useState<UpdateInfo>(null);
   const [checking, setChecking] = useState(false);
@@ -118,36 +124,40 @@ function Footer() {
       >
         Releases
       </a>
-      <span className="ajax-tools-iframe-footer__divider">·</span>
-      {hasUpdate ? (
-        <button
-          type="button"
-          className="ajax-tools-iframe-footer__update ajax-tools-iframe-footer__update--available"
-          onClick={handleInstall}
-          title={`New version ${updateInfo?.remoteVersion} available. Click to install.`}
-        >
-          <span className="ajax-tools-iframe-footer__dot" />
-          Update
-        </button>
-      ) : (
-        <button
-          type="button"
-          className="ajax-tools-iframe-footer__update"
-          onClick={handleCheck}
-          disabled={checking}
-          title={
-            updateInfo?.error
-              ? `Check failed: ${updateInfo.error}`
-              : updateInfo?.localVersion
-                ? `You're on v${updateInfo.localVersion}. Click to check for updates.`
-                : 'Check for updates'
-          }
-        >
-          {checking ? 'Checking...' : 'Check Update'}
-        </button>
-      )}
-      {!isExtensionContext && (
-        <span style={{ fontSize: 10, color: '#999', marginLeft: 4 }}>(dev)</span>
+      {SHOW_UPDATE_ENTRY && (
+        <>
+          <span className="ajax-tools-iframe-footer__divider">·</span>
+          {hasUpdate ? (
+            <button
+              type="button"
+              className="ajax-tools-iframe-footer__update ajax-tools-iframe-footer__update--available"
+              onClick={handleInstall}
+              title={`New version ${updateInfo?.remoteVersion} available. Click to install.`}
+            >
+              <span className="ajax-tools-iframe-footer__dot" />
+              Update
+            </button>
+          ) : (
+            <button
+              type="button"
+              className="ajax-tools-iframe-footer__update"
+              onClick={handleCheck}
+              disabled={checking}
+              title={
+                updateInfo?.error
+                  ? `Check failed: ${updateInfo.error}`
+                  : updateInfo?.localVersion
+                    ? `You're on v${updateInfo.localVersion}. Click to check for updates.`
+                    : 'Check for updates'
+              }
+            >
+              {checking ? 'Checking...' : 'Check Update'}
+            </button>
+          )}
+          {!isExtensionContext && (
+            <span style={{ fontSize: 10, color: '#999', marginLeft: 4 }}>(dev)</span>
+          )}
+        </>
       )}
     </footer>
   );

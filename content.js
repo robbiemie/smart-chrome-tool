@@ -3823,7 +3823,7 @@ function renderFloatingRules() {
     if (headerEl) headerEl.textContent = groupTitle;
 
     const interfaceList = group?.interfaceList || [];
-    if (countEl) countEl.textContent = `${interfaceList.length} rules`;
+    if (countEl) countEl.textContent = `${interfaceList.length}`;
 
     // Enable/disable the group switcher arrows based on group count.
     const prevBtn = panel.querySelector('.mockkit-floating-rules__group-btn:first-child');
@@ -5654,6 +5654,8 @@ function createToolkitPanel() {
     input.type = 'text';
     input.className = 'mockkit-toolkit-panel__domain-input';
     input.placeholder = 'e.g. *.foo.com';
+    // Default to the current host so the user can add it with one keystroke.
+    input.value = window.location.hostname || '';
     input.addEventListener('keydown', (event) => {
       if (event.key === 'Enter') {
         event.preventDefault();

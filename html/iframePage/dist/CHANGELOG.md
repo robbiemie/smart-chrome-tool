@@ -1,5 +1,37 @@
 # Build Changelog
 
+## v0.0.62
+
+- Built At: 2026-08-07T06:22:21.822Z
+- Previous Version: v0.0.61
+- Git Branch: master
+- Git Commit: b02529f8
+
+### Changed Files
+- build.js
+- content.js
+- google676434c3dd9c18b3.html
+- html/iframePage/CHANGELOG.md
+- html/iframePage/main/components/Footer/index.tsx
+- html/iframePage/package-lock.json
+- html/iframePage/package.json
+- html/iframePage/stats.html
+- html/iframePage/vite-env.d.ts
+- html/iframePage/vite.config.js
+- manifest.json
+
+
+## v0.0.61
+
+- Built At: 2026-08-07T05:44:12.431Z
+- Previous Version: v0.0.60
+- Git Branch: master
+- Git Commit: b02529f8
+
+### Changed Files
+- No source file changes detected
+
+
 ## v0.0.59
 
 - Built At: 2026-08-07T04:00:43.677Z

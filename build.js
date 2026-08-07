@@ -3,8 +3,12 @@
 /**
  * Build script for smart-chrome-tool.
  *
- * Default:  node build.js            -> build iframe app, then zip the runtime (no version change)
- * Bump:     node build.js --bump     -> bump manifest version, sync package.json, build, then zip
+ * Default:  node build.js            -> build BOTH variants (GitHub + Store), then zip each (no version change)
+ *                                      GitHub variant keeps the self-update UI; Store variant strips it.
+ *                                      Zips: smart-chrome-tool-github-vX.zip + smart-chrome-tool-store-vX.zip
+ *           node build.js --no-store   -> build GitHub variant only (skip the Store variant)
+ *           node build.js --store-only -> build Store variant only (Web Store submission, no release)
+ * Bump:     node build.js --bump     -> bump manifest version, sync package.json, build both, zip each
  * Publish:  node build.js --publish  -> bump + build + zip + create a GitHub Release with the zip attached
  *   --force                          -> with --publish, delete an existing tag/release and recreate
  *   --notes "<text>"                 -> override auto-generated release notes
@@ -120,6 +124,17 @@ if (isBetaBuild && isCi) {
   console.error('--beta cannot be combined with --ci (releases must use the production name).');
   process.exit(1);
 }
+// Store-only build: produces a single Web Store submission zip with the
+// self-update entry stripped (MOCKKIT_STORE_BUILD=1). Mutually exclusive with
+// release flows — a store build must never be attached to a GitHub Release.
+const storeOnly = argv.includes('--store-only');
+if (storeOnly && (shouldPublish || isCi)) {
+  console.error('--store-only cannot be combined with --publish/--retry/--ci.');
+  process.exit(1);
+}
+// Skip the store variant in a plain local build (e.g. when iterating on the
+// GitHub-distributed build). No-op in release flows, which already skip it.
+const noStore = argv.includes('--no-store');
 const notesIndex = argv.indexOf('--notes');
 const customNotes = notesIndex !== -1 ? argv[notesIndex + 1] : null;
 
@@ -185,7 +200,38 @@ const bumpVersion = () => {
   console.log(`Version bumped: v${previousVersion} -> v${nextVersion}`);
 };
 
-const runBuild = () => {
+// Promise-wrapped vite build. When isStoreVariant is true, MOCKKIT_STORE_BUILD=1
+// is injected so vite.config.js strips the self-update entry from the bundle.
+// Each invocation overwrites html/iframePage/dist, so packaging must happen
+// between builds (build → zip → build → zip), not build → build → zip → zip.
+const runViteBuild = (isStoreVariant) => {
+  const env = { ...process.env };
+  if (isStoreVariant) {
+    env.MOCKKIT_STORE_BUILD = '1';
+    console.log('\n--- Building Store variant (self-update hidden) ---');
+  } else {
+    delete env.MOCKKIT_STORE_BUILD;
+    console.log('\n--- Building GitHub variant (self-update visible) ---');
+  }
+  return new Promise((resolve, reject) => {
+    const buildProcess = spawn('npm', ['run', 'build'], {
+      cwd: iframePageRoot,
+      stdio: 'inherit',
+      shell: process.platform === 'win32',
+      env,
+    });
+    buildProcess.on('exit', (code) => {
+      if (code !== 0) {
+        reject(new Error(`Build failed with exit code ${code}.`));
+      } else {
+        resolve();
+      }
+    });
+    buildProcess.on('error', reject);
+  });
+};
+
+const runBuild = async () => {
   // --cut: local one-shot release. Bump + commit + tag + push, then exit. The
   // pushed tag triggers release.yml to build & publish. No local build here.
   if (isCut) {
@@ -221,55 +267,64 @@ const runBuild = () => {
     console.log(`Beta build: extension name set to "${manifestJson.name}"`);
   }
 
-  const buildProcess = spawn('npm', ['run', 'build'], {
-    cwd: iframePageRoot,
-    stdio: 'inherit',
-    shell: process.platform === 'win32',
-  });
+  // Decide which variants to produce:
+  // - Release flows (--publish/--retry/--ci): GitHub variant only (attached to Release)
+  // - --store-only: Store variant only (Web Store submission)
+  // - --no-store: GitHub variant only (skip the store variant in a plain build)
+  // - Default plain build: BOTH variants — GitHub first, then Store
+  const isReleaseFlow = shouldPublish || isCi;
+  const buildGitHub = !storeOnly;
+  const buildStore = storeOnly || (!noStore && !isReleaseFlow);
 
-  buildProcess.on('exit', (code) => {
-    if (code !== 0) {
-      console.error(`\nBuild failed with exit code ${code}.`);
-      // Restore the manifest name even on failure so a crashed beta build
-      // never leaves the working tree with the beta name persisted.
-      if (originalManifestName) {
-        const mj = readJsonFile(manifestJsonPath);
-        mj.name = originalManifestName;
-        writeJsonFile(manifestJsonPath, mj);
-      }
-      process.exit(code || 1);
-      return;
-    }
+  let githubZip = null;
+  let storeZip = null;
 
-    console.log('\nBuild completed successfully.');
-    try {
-      const zipName = packageExtension();
-      // Packaging has read the manifest; restore the production name so the
-      // working tree (and any subsequent non-beta build) is unaffected.
+  try {
+    // GitHub variant: self-update UI visible. Built first because release
+    // flows only need this one and we want to fail fast on the common path.
+    if (buildGitHub) {
+      await runViteBuild(false);
+      console.log('\nBuild completed successfully.');
+      githubZip = packageExtension(false);
       if (originalManifestName) {
         const mj = readJsonFile(manifestJsonPath);
         mj.name = originalManifestName;
         writeJsonFile(manifestJsonPath, mj);
         console.log('Restored production extension name in manifest.json.');
       }
-      if (shouldPublish) {
-        publishToGitHub(zipName);
-      }
-      if (shouldCommit) {
-        commitAndPush();
-      }
-    } catch (error) {
-      console.error('\nPost-build step failed.');
-      console.error(error.message);
-      process.exit(1);
     }
-  });
 
-  buildProcess.on('error', (error) => {
-    console.error('\nUnable to start the build process.');
-    console.error(error.message);
+    // Store variant: self-update UI stripped. Built second so it overwrites
+    // dist with the store-flavored bundle. Skipped entirely in release flows.
+    if (buildStore) {
+      await runViteBuild(true);
+      console.log('\nStore build completed successfully.');
+      storeZip = packageExtension(true);
+      if (originalManifestName && !githubZip) {
+        const mj = readJsonFile(manifestJsonPath);
+        mj.name = originalManifestName;
+        writeJsonFile(manifestJsonPath, mj);
+        console.log('Restored production extension name in manifest.json.');
+      }
+    }
+
+    if (shouldPublish) {
+      publishToGitHub(githubZip);
+    }
+    if (shouldCommit) {
+      commitAndPush();
+    }
+  } catch (error) {
+    console.error('\n' + error.message);
+    // Restore the manifest name even on failure so a crashed beta build
+    // never leaves the working tree with the beta name persisted.
+    if (originalManifestName) {
+      const mj = readJsonFile(manifestJsonPath);
+      mj.name = originalManifestName;
+      writeJsonFile(manifestJsonPath, mj);
+    }
     process.exit(1);
-  });
+  }
 };
 
 const readManifestVersion = () => {
@@ -278,13 +333,13 @@ const readManifestVersion = () => {
   return manifest.version;
 };
 
-// Sweep leftover smart-chrome-tool(-beta)?-v*.zip from the project root so
-// each local build starts clean. Matches both production and beta naming so
-// switching between the two never leaves stale archives. Other archives are
-// left untouched. Called at the start of non-publish runs.
+// Sweep leftover smart-chrome-tool(-beta|-store|-github)?-v*.zip from the
+// project root so each local build starts clean. Matches all three variant
+// namings so switching between them never leaves stale archives. Other
+// archives are left untouched. Called at the start of non-publish runs.
 const cleanupStaleZips = () => {
   const entries = fs.readdirSync(projectRoot);
-  const zipPattern = /^smart-chrome-tool-(?:beta-)?v\d+\.\d+\.\d+\.zip$/;
+  const zipPattern = /^smart-chrome-tool-(?:beta-|store-|github-)?v\d+\.\d+\.\d+\.zip$/;
   let removed = 0;
   entries.forEach((entry) => {
     if (zipPattern.test(entry)) {
@@ -303,11 +358,12 @@ const cleanupStaleZips = () => {
   }
 };
 
-const packageExtension = () => {
+const packageExtension = (isStoreVariant = false) => {
   const version = readManifestVersion();
-  // Beta packages carry a "-beta-" infix so they never collide with
-  // production archives and are easy to tell apart in Downloads.
-  const infix = isBetaBuild ? 'beta-' : '';
+  // Beta packages carry a "-beta-" infix; store packages carry a "-store-"
+  // infix; GitHub packages carry a "-github-" infix so all three variants
+  // stay distinct in the Downloads folder / Release assets.
+  const infix = isBetaBuild ? 'beta-' : isStoreVariant ? 'store-' : 'github-';
   const zipName = `smart-chrome-tool-${infix}v${version}.zip`;
 
   // Verify every runtime entry exists before archiving so a broken build
