@@ -3630,7 +3630,16 @@ function loadFloatingRulesState(callback) {
     // causing the panel to appear on first paint even when the user never
     // turned it on. Match the initial runtime state default (false).
     ajaxToolsRuntimeState.floatingRulesEnabled = result[FLOATING_ENABLED_KEY] === true;
+    // Mirror the loaded state into the Toolkit panel's rules sub-toggle so the
+    // switch reflects the real panel visibility. The storage.onChanged listener
+    // (which syncs rulesOpen) only fires on CHANGES — on a fresh page load the
+    // persisted value is unchanged, so without this the toggle would keep its
+    // initial `false` while the panel is already shown. That desync makes the
+    // first click re-assert the already-on state (panel does not toggle) and
+    // only collapses the Toolkit, looking completely unresponsive.
+    toolkitPanelState.rulesOpen = ajaxToolsRuntimeState.floatingRulesEnabled;
     applyFloatingPanelState();
+    syncToolkitPanelUi();
     if (typeof callback === 'function') callback();
   });
 }
