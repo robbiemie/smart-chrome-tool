@@ -14,6 +14,23 @@ const isDevMode = (() => {
 })();
 const logDev = (...args) => { if (isDevMode) console.log(...args); };
 
+// Safely write to chrome.storage.local. After the extension is reloaded or
+// updated while a tab is still open, this content script's chrome.* APIs are
+// invalidated: `chrome.storage?.local` is still truthy (the property exists on
+// the stale object), but calling .set() throws "Extension context invalidated".
+// Without this guard a throw here aborts the caller before it can update the
+// DOM, which makes Toolkit panel switches look stuck/unclickable. Swallow the
+// error (dev-mode log only) so in-memory + DOM state still updates; the
+// persisted value is re-synced on the next page load.
+function safeStorageLocalSet(payload) {
+  if (!chrome.storage?.local) return;
+  try {
+    chrome.storage.local.set(payload);
+  } catch (e) {
+    logDev('safeStorageLocalSet ignored invalidated context:', e && e.message);
+  }
+}
+
 const ajaxToolsRuntimeState = window[AJAX_TOOLS_RUNTIME_STATE_KEY] || (window[AJAX_TOOLS_RUNTIME_STATE_KEY] = {
   panelContainer: null,
   panelMessageListenerBound: false,
@@ -4900,9 +4917,7 @@ function setToolkitSnifferOpen(open) {
   toolkitPanelState.snifferOpen = open;
   setSnifferPanelVisible(open);
   syncToolkitPanelUi();
-  if (chrome.storage?.local) {
-    chrome.storage.local.set({ [SNIFFER_OPEN_KEY]: open });
-  }
+  safeStorageLocalSet({ [SNIFFER_OPEN_KEY]: open });
   // Mirror sniffer state to the page script. Hook installation is gated by
   // the Interceptor master switch, so capture only runs while it is on.
   postMessage({
@@ -4926,9 +4941,7 @@ function setToolkitSnifferOpen(open) {
 // re-toggled manually.
 function disableSubFeaturesOnInterceptorOff() {
   setToolkitSnifferOpen(false);
-  if (chrome.storage?.local) {
-    chrome.storage.local.set({ [FLOATING_ENABLED_KEY]: false });
-  }
+  safeStorageLocalSet({ [FLOATING_ENABLED_KEY]: false });
   // Stop the DOM Inspector if an inspect/measure session is mid-flight so
   // the page is fully restored to its original interaction state.
   if (domInspectorState.active) {
@@ -5818,9 +5831,7 @@ function setToolkitPanelVisible(visible) {
     syncToolkitPanelUi();
   }
   // Persist so the Global Controls Toolkit switch reflects the right state.
-  if (chrome.storage?.local) {
-    chrome.storage.local.set({ [TOOLKIT_VISIBLE_KEY]: visible });
-  }
+  safeStorageLocalSet({ [TOOLKIT_VISIBLE_KEY]: visible });
   // Rules panel is independent of Toolkit — no reposition needed here.
 }
 
@@ -5869,11 +5880,13 @@ function setToolkitRulesOpen(open) {
   // Defer to the existing floating-rules panel machinery. We drive its enabled
   // state through the same storage key so the workbench switch stays in sync.
   ajaxToolsRuntimeState.floatingRulesEnabled = open;
-  if (chrome.storage?.local) {
-    chrome.storage.local.set({ [FLOATING_ENABLED_KEY]: open });
-  }
+  // Update the DOM FIRST so the switch toggles immediately even when storage
+  // is unavailable (e.g. after the extension was reloaded mid-session and the
+  // content script's chrome context is invalidated). Persisting to storage
+  // happens last and must never block the visible toggle.
   applyFloatingPanelState();
   syncToolkitPanelUi();
+  safeStorageLocalSet({ [FLOATING_ENABLED_KEY]: open });
 }
 
 // Toggle the animation sub-panel.
