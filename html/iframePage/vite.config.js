@@ -29,6 +29,7 @@ export default defineConfig({
     rollupOptions: {
       input: {
         index: path.resolve(__dirname, './index.html'),
+        devtools: path.resolve(__dirname, './devtools.html'),
       },
       output: {
         chunkFileNames: 'static/js/[name]-[hash].js',

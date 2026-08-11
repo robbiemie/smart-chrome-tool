@@ -1,0 +1,1 @@
+import"./modulepreload-polyfill-f26481d0.js";const o="icons/tools16.png",e="MockKit",t="html/iframePage/dist/index.html";typeof chrome!="undefined"&&chrome.devtools&&chrome.devtools.panels&&chrome.devtools.panels.create(e,o,t);

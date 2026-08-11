@@ -193,6 +193,21 @@ const ajax_tools_space = {
     if (!ruleKey) return;
     window.postMessage({ type: 'AJAX_TOOLS_RULE_HIT', to: 'contentScript', ruleKey }, '*');
   },
+  // Notify the content script that a mock response was successfully delivered
+  // to the page, so it can surface a global top-right toast. Fired only when
+  // the override is actually applied (response body rewritten), which is the
+  // true "interception success" signal — request-rewrite-only rules do not
+  // fire this, since no mocked payload reached the page.
+  notifyInterceptSuccess: function (url) {
+    if (!url) return;
+    try {
+      window.postMessage({
+        type: 'MOCKKIT_INTERCEPT_SUCCESS',
+        to: 'contentScript',
+        url,
+      }, '*');
+    } catch (e) {}
+  },
   // Relay captured XHR/fetch traffic to the content script so the iframe
   // workbench's Request Sniffer can list it. We forward method, url, status
   // and response text; the consumer filters out static-resource URLs.
@@ -240,6 +255,11 @@ const ajax_tools_space = {
         infoDev('%cModified Response Payload：', 'background-color: #ff5500; color: white;', JSON.parse(overrideText));
         console.groupEnd();
         // infoDev('ⓔ ▣▣▣▣▣▣▣▣▣▣▣▣▣▣▣▣▣▣▣▣▣▣▣▣▣▣▣▣▣▣▣▣ ⓔ')
+        // Surface a global toast so the user sees this interception succeeded.
+        // Fired here (inside the responseText override block) so it only fires
+        // when mocked data actually reached the page, and naturally respects
+        // the master switch (modifyResponse returns early when it is off).
+        ajax_tools_space.notifyInterceptSuccess(requestUrl);
       }
     }
 
@@ -511,6 +531,11 @@ const ajax_tools_space = {
           status: finalStatus,
           responseText: overrideText,
         });
+        // Surface a global toast so the user sees this interception succeeded.
+        // Fired inside the override-applied branch so it only fires when mocked
+        // data is returned to the page (and after the delay, if any, so the
+        // toast matches when the page actually received the response).
+        ajax_tools_space.notifyInterceptSuccess(requestUrl);
         const stream = new ReadableStream({
           start(controller) {
             controller.enqueue(new TextEncoder().encode(overrideText));

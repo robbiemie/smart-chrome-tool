@@ -35,6 +35,7 @@
   "background": {
     "service_worker": "service_worker.js"
   },
+  "devtools_page": "html/iframePage/dist/devtools.html",
   "content_scripts": [
     {
       "matches": [

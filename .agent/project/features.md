@@ -541,6 +541,129 @@ Triggered from `setAnimationPaused` (freeze together) and `setAnimationEnabled(f
 
 ---
 
+---
+
+## 17. Intercept-success toast
+
+**Summary:** When a mock response is successfully delivered to the page (the
+override is applied), a transient global toast appears in the page's top-right
+corner confirming the interception. Title is fixed ("Intercepted request
+success"); the description shows the intercepted API path (`api: <url>`). This
+gives immediate, glanceable confirmation that a mock took effect, complementing
+the existing per-rule green dot.
+
+**Lives in:**
+- Fire points: `pageScripts/index.js` — `notifyInterceptSuccess(url)` called
+  inside the XHR `modifyResponse` responseText-override block and inside the
+  fetch `overrideText !== undefined` block (both after the override is applied,
+  so the toast reflects when mocked data actually reached the page; both
+  naturally respect the master switch since the override is skipped when it is
+  off, and after any configured delay).
+- Message: `MOCKKIT_INTERCEPT_SUCCESS` (page → content, payload `{url}`).
+- Renderer: `content.js` `showInterceptSuccessToast` (+ `ensureInterceptToastStyle`,
+  `ensureInterceptToastContainer`). Top-frame only; iframe interceptions do not
+  spawn toasts.
+
+**Wiring:** page script override applied → `notifyInterceptSuccess(requestUrl)`
+→ `window.postMessage` `MOCKKIT_INTERCEPT_SUCCESS` → content.js message
+listener → `showInterceptSuccessToast(url)` → top-right toast.
+
+**Behavior:**
+- Stacks up to 5 visible toasts; older toasts are dropped when the cap is
+  exceeded.
+- Each toast auto-dismisses after 3s (fade-out); click-to-dismiss also works.
+- Dedupes rapid repeats: the same URL is not re-toasted within 1.5s, so a burst
+  of identical requests does not flood the corner.
+- Session-only state (the dedupe map is in-memory); nothing persisted.
+
+**Scope:** Fires ONLY for response-override successes (rules with a
+`responseText` that matched and was applied). Request-rewrite-only rules (URL /
+method / headers / payload script, no `responseText`) do not fire the toast —
+they rewrite the outgoing request but do not deliver a mocked response. The
+toast is subordinate to the Interceptor master switch (no override → no toast)
+but is NOT subordinate to any panel/Toolkit visibility flag: it shows whenever
+an interception succeeds, regardless of whether the floating panel or Toolkit
+is open.
+
+**Anti-occlusion note:** The toast container anchors to the same top-right
+corner as the Floating Rules panel (`right:24px; top:24px`). The container is
+appended on demand (after the panel mounts) and shares the max `z-index`, so
+toasts stack above the panel while visible. Overlap is brief (toasts are
+transient, ≤3s) and intentional per the "top-right" placement requirement.
+
+**Auto-add host to whitelist on Floating Rules enable:** turning the Floating
+Rules switch ON is treated as explicit intent to use the mock layer on the
+current page. If the current host is not yet in the domain whitelist, it is
+auto-appended to `ajaxToolsDomainWhitelist` (persisted) so the panel shows
+immediately instead of staying `display:none` with no feedback. A short green
+success toast ("Added to whitelist — {host} is now allowed") confirms the
+change so the persistent side effect is transparent. Wired in
+`setToolkitRulesOpen(true)` (covers both the Toolkit switch click and the
+Toolkit re-open restore path) via `maybeAutoAddHostToWhitelist` →
+`addCurrentHostToWhitelist` + `showWhitelistAddedToast`. The auto-add is a
+no-op if the host is already allowlisted, so toggling on an already-allowed
+host shows no toast and performs no storage write.
+
+---
+
+---
+
+## 18. DevTools panel entry (dual-entry with iframe workbench)
+
+**Summary:** The React workbench is now available as a Chrome DevTools panel
+("MockKit" tab), in addition to the existing iframe side panel. Both entries
+share the same `chrome.storage.local` data and the same React bundle, so
+changes made in one are instantly visible in the other via `storage.onChanged`.
+The DevTools panel is immune to host-page CSP / z-index / style interference,
+making it the preferred entry for Monaco-heavy editing (ModifyDataModal) and
+bulk rule management.
+
+**Lives in:**
+- Panel registration: `html/iframePage/main/devtools.ts` →
+  `chrome.devtools.panels.create('MockKit', icon, 'index.html')`
+- Panel HTML: `html/iframePage/devtools.html` (loaded by Chrome when DevTools
+  opens; runs the registration script)
+- Panel page: `html/iframePage/dist/index.html` (the SAME React app as the
+  iframe workbench — no separate bundle)
+- `pageOrigin` DevTools fallback: `html/iframePage/main/hooks/usePageHeaders.ts`
+  — when the URL param is missing (DevTools context), falls back to
+  `chrome.devtools.inspectedWindow.eval('location.origin')` to get the
+  inspected page's origin for Page Headers (DNR) features.
+
+**Wiring:**
+- `manifest.json` `devtools_page` → `devtools.html` → `devtools.ts` →
+  `chrome.devtools.panels.create()` → loads `index.html` as the panel page →
+  React app boots, reads/writes `chrome.storage.local` → `storage.onChanged`
+  syncs to content script / iframe / SW.
+- Vite builds `devtools.html` as a second rollup input (`vite.config.js`),
+  producing `dist/devtools.html` + `dist/static/js/devtools-*.js`. The
+  `html/iframePage/dist` directory is already a runtime entry in `build.js`,
+  so no packaging change was needed.
+
+**What works in the DevTools panel:** Rules management (GroupWorkbench),
+ModifyDataModal (Monaco editor), Page Headers (with async `pageOrigin`
+fallback), Import/Export, CSR toggle, self-update, OperationsRail (Interceptor
+switch + Toolkit switch), Tools tab.
+
+**What does NOT work from the DevTools panel (requires the floating panel on
+the page):** DOM Inspect, Floating Rules visibility, Animation Control, Request
+Sniffer (floating), page-interaction toasts. These are content-script / page
+features. The Toolkit switch in the panel persists its state to storage, and
+the content script's `storage.onChanged` listener shows/hides the floating
+Toolkit panel accordingly — so toggling Toolkit from the panel still controls
+the page-side overlays.
+
+**Dual-entry coexistence:** Both entries can be open simultaneously. Session-
+only UI state (active tab, modal open/close, selected group) is independent
+per entry; persisted data (rules, switch state, whitelist) syncs via
+`storage.onChanged`. Incoming `postMessage` events from content.js
+(`AJAX_TOOLS_OPEN_EDIT`, `MOCKKIT_MOCK_CAPTURE`, `AJAX_TOOLS_APPLY_UPDATE`)
+only reach the iframe workbench (the DevTools panel has no parent iframe
+relationship) — these drive floating-panel-initiated actions and are not
+needed in the panel context where the user is already in the workbench.
+
+---
+
 <!-- NEW FEATURES GO HERE
 When adding a core feature, append a new numbered section above this comment
 following the same format (Summary / Lives in / Wiring). See governance.md. -->

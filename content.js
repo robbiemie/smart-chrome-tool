@@ -3577,6 +3577,17 @@ window.addEventListener('message', (event) => {
     return;
   }
 
+  // Surface a top-right toast when a mock response is successfully applied.
+  // The page script fires this only after the override is delivered to the
+  // page, so it represents a real interception success. Gated to the top
+  // frame so iframe interceptions do not spawn toasts inside nested frames.
+  if (data.type === 'MOCKKIT_INTERCEPT_SUCCESS') {
+    if (window.self === window.top) {
+      showInterceptSuccessToast(data.url);
+    }
+    return;
+  }
+
   // Forward captured XHR/fetch traffic to the iframe workbench so the
   // Request Sniffer module can list it. The page script runs in the page
   // context and cannot message the iframe directly.
@@ -5887,6 +5898,14 @@ function setToolkitRulesOpen(open) {
   applyFloatingPanelState();
   syncToolkitPanelUi();
   safeStorageLocalSet({ [FLOATING_ENABLED_KEY]: open });
+  // When the user turns Floating Rules ON, treat that as explicit intent to
+  // use the mock layer on the current page. If the current host is not yet in
+  // the domain whitelist, auto-add it so the panel shows immediately instead
+  // of staying display:none with no feedback. A short toast confirms the
+  // whitelist change so the persistent side effect is transparent.
+  if (open) {
+    maybeAutoAddHostToWhitelist();
+  }
 }
 
 // Toggle the animation sub-panel.
@@ -6016,6 +6035,195 @@ function showTooltipSuppressBadge(suppressed) {
     badge.style.opacity = '0';
     setTimeout(() => badge.remove(), 300);
   }, 1200);
+}
+
+
+// --- Top-right global toast notifications -----------------------------------
+// A small shared toast system anchored to the top-right corner. Green success
+// variant used for: a mock response was delivered to the page, and a host was
+// auto-added to the domain whitelist. Stacks up to TOAST_MAX, auto-dismisses
+// after TOAST_TTL_MS, click-to-dismiss. Session-only state (never persisted).
+// Top-frame only.
+const TOAST_STYLE_ID = 'mockkit-toast-style';
+const TOAST_CONTAINER_ID = 'mockkit-toast-container';
+const TOAST_MAX = 5;
+const TOAST_TTL_MS = 3000;
+const TOAST_DEDUPE_MS = 1500;
+const interceptToastLastShownByUrl = new Map();
+
+function ensureToastStyle() {
+  if (document.getElementById(TOAST_STYLE_ID)) return;
+  const style = document.createElement('style');
+  style.id = TOAST_STYLE_ID;
+  style.textContent = `
+    #mockkit-toast-container {
+      position: fixed !important;
+      top: 24px !important;
+      right: 24px !important;
+      display: flex !important;
+      flex-direction: column !important;
+      gap: 8px !important;
+      z-index: 2147483647 !important;
+      pointer-events: none !important;
+      max-width: 380px !important;
+    }
+    .mockkit-toast {
+      pointer-events: auto;
+      cursor: pointer;
+      background: #fff;
+      border-radius: 8px;
+      border-left: 4px solid #1a9b7f;
+      box-shadow: 0 4px 16px rgb(0 0 0 / 18%), 0 0 0 1px rgb(27 40 34 / 6%);
+      padding: 9px 12px 10px;
+      font: 12px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      color: rgb(27 40 34 / 85%);
+      opacity: 0;
+      transform: translateX(12px);
+      transition: opacity 0.25s ease, transform 0.25s ease;
+      word-break: break-all;
+    }
+    .mockkit-toast--show {
+      opacity: 1;
+      transform: translateX(0);
+    }
+    .mockkit-toast__title {
+      font-weight: 600;
+      font-size: 13px;
+      color: #1a9b7f;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .mockkit-toast__title::before {
+      content: "";
+      display: inline-block;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: currentColor;
+      flex: 0 0 auto;
+    }
+    .mockkit-toast__desc {
+      margin-top: 3px;
+      color: rgb(27 40 34 / 60%);
+      font-size: 12px;
+    }
+  `;
+  (document.documentElement || document.body).appendChild(style);
+}
+
+function ensureToastContainer() {
+  let container = document.getElementById(TOAST_CONTAINER_ID);
+  if (container) return container;
+  container = document.createElement('div');
+  container.id = TOAST_CONTAINER_ID;
+  (document.body || document.documentElement).appendChild(container);
+  return container;
+}
+
+// Mount a toast element into the shared container with enter/exit animation,
+// the visible cap, and an optional auto-dismiss TTL. Returns the toast node
+// plus a dismiss callback so callers can wire their own close affordances.
+function mountToast(toast, ttlMs) {
+  ensureToastStyle();
+  const container = ensureToastContainer();
+  const dismiss = () => {
+    toast.classList.remove('mockkit-toast--show');
+    setTimeout(() => toast.remove(), 260);
+  };
+  // Click-to-dismiss for all toasts (quick manual close).
+  toast.addEventListener('click', dismiss);
+  container.appendChild(toast);
+  // Enforce the visible cap by dropping the oldest toasts.
+  while (container.children.length > TOAST_MAX) {
+    container.removeChild(container.firstElementChild);
+  }
+  // Trigger the enter transition on the next frame.
+  requestAnimationFrame(() => toast.classList.add('mockkit-toast--show'));
+  if (ttlMs > 0) setTimeout(dismiss, ttlMs);
+}
+
+function showInterceptSuccessToast(url) {
+  if (!url) return;
+  // Dedupe rapid repeats of the same URL so a burst of identical requests
+  // does not flood the corner with toasts.
+  const now = Date.now();
+  const last = interceptToastLastShownByUrl.get(url) || 0;
+  if (now - last < TOAST_DEDUPE_MS) return;
+  interceptToastLastShownByUrl.set(url, now);
+
+  const toast = document.createElement('div');
+  toast.className = 'mockkit-toast mockkit-toast--success';
+  toast.setAttribute('role', 'status');
+
+  const title = document.createElement('div');
+  title.className = 'mockkit-toast__title';
+  title.textContent = 'Intercepted request success';
+
+  const desc = document.createElement('div');
+  desc.className = 'mockkit-toast__desc';
+  // Description: the intercepted API path. Title text is fixed per spec.
+  desc.textContent = `api: ${url}`;
+
+  toast.appendChild(title);
+  toast.appendChild(desc);
+  mountToast(toast, TOAST_TTL_MS);
+}
+
+// Append a host to the domain whitelist and persist. The storage.onChanged
+// listener re-applies the floating panel state, so the panel shows as soon as
+// the host is allowlisted (assuming floatingRulesEnabled is already true).
+function addCurrentHostToWhitelist(host) {
+  if (!host) return;
+  const current = Array.isArray(ajaxToolsRuntimeState.domainWhitelist)
+    ? ajaxToolsRuntimeState.domainWhitelist
+    : ['*'];
+  // No-op if already allowlisted — guard against redundant writes.
+  if (current.includes(host)) return false;
+  const next = current.concat(host);
+  ajaxToolsRuntimeState.domainWhitelist = next;
+  safeStorageLocalSet({ ajaxToolsDomainWhitelist: next });
+  return true;
+}
+
+// When the user turns Floating Rules ON, treat that as an explicit intent to
+// use the mock layer on the current page. If the current host is not yet in
+// the domain whitelist, auto-add it (persisted) so the panel shows immediately
+// instead of staying display:none with no feedback. A short success toast
+// ("Added {host}") surfaces the whitelist change so the persistent side effect
+// is transparent, not silent. Called from setToolkitRulesOpen(true) so both
+// the switch click and the Toolkit restore path are covered.
+function maybeAutoAddHostToWhitelist() {
+  if (currentHostWhitelisted()) return;
+  const host = window.location.hostname;
+  if (!host) return;
+  const added = addCurrentHostToWhitelist(host);
+  if (!added) return;
+  // Re-apply panel state in case the storage listener is delayed — this makes
+  // the panel appear immediately on the same click.
+  applyFloatingPanelState();
+  // Transparent confirmation: the whitelist was modified, tell the user.
+  showWhitelistAddedToast(host);
+}
+
+// Short success toast confirming the host was auto-added to the whitelist.
+// Reuses the green success variant so it visually matches intercept-success.
+function showWhitelistAddedToast(host) {
+  const toast = document.createElement('div');
+  toast.className = 'mockkit-toast mockkit-toast--success';
+  toast.setAttribute('role', 'status');
+
+  const title = document.createElement('div');
+  title.className = 'mockkit-toast__title';
+  title.textContent = 'Added to whitelist';
+
+  const desc = document.createElement('div');
+  desc.className = 'mockkit-toast__desc';
+  desc.textContent = `${host} is now allowed. Floating Rules and mocks are active.`;
+
+  toast.appendChild(title);
+  toast.appendChild(desc);
+  mountToast(toast, TOAST_TTL_MS);
 }
 
 

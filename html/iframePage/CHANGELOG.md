@@ -1,5 +1,20 @@
 # Build Changelog
 
+## v0.0.77
+
+- Built At: 2026-08-09T09:34:36.667Z
+- Previous Version: v0.0.76
+- Git Branch: master
+- Git Commit: b76ff371
+
+### Changed Files
+- .agent/project/features.md
+- .agent/project/tech-detail.md
+- content.js
+- html/iframePage/stats.html
+- pageScripts/index.js
+
+
 ## v0.0.73
 
 - Built At: 2026-08-07T08:54:52.205Z

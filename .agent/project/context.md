@@ -75,6 +75,29 @@ and a different role. Data crosses the boundaries via `window.postMessage` and
   worker via `chrome.runtime.sendMessage` (the iframe runs in the extension
   origin so it has chrome API access).
 
+### 5. DevTools panel — DEVTOOLS context
+
+- Registered via `manifest.json` `devtools_page` → `devtools.html` →
+  `main/devtools.ts`, which calls `chrome.devtools.panels.create('MockKit',
+  icon, 'html/iframePage/dist/index.html')`.
+- Loads the SAME React app as the iframe workbench — no separate panel bundle.
+  The app is context-agnostic: all data flows through `chrome.storage.local`
+  and `chrome.runtime.sendMessage`, both available in the DevTools panel
+  (extension origin).
+- Advantages over the iframe workbench: immune to host-page CSP / z-index /
+  style interference; Monaco editor runs in a clean extension page; full
+  `chrome.*` API access without the `window.parent.postMessage` → content.js
+  relay hop for SW communication.
+- `pageOrigin` (used by `usePageHeaders` for per-origin DNR rules) is not
+  passed via URL param in DevTools context. `usePageHeaders` falls back to
+  `chrome.devtools.inspectedWindow.eval('location.origin')` asynchronously when
+  the URL param is missing, so Page Headers works in the panel.
+- Page-interaction features (DOM Inspect, Floating Rules, Toolkit, Animation
+  Control) still require the content script / floating panel — they are NOT
+  available from the DevTools panel. The Toolkit switch in the panel persists
+  `ajaxToolsToolkitPanelVisible` to storage, which the content script picks up
+  via `storage.onChanged` to show/hide the floating Toolkit panel on the page.
+
 ## Message flow at a glance
 
 ```

@@ -46,7 +46,7 @@
 | Rule matching | `getMatchedInterface`, `strToRegExp`, `getRequestParams` |
 | Response override | `getOverrideText` (supports JSON or function-string) |
 | Payload script | `executeStringFunction` (`new Function(stringFunction)(args)`) |
-| Notifications | `notifyRuleHit` (→ content for green dot), `emitCapturedRequest` (→ sniffer) |
+| Notifications | `notifyRuleHit` (→ content for green dot), `notifyInterceptSuccess` (→ content for top-right toast), `emitCapturedRequest` (→ sniffer) |
 | Header normalization | `normalizeHeadersToObject` |
 | XHR/fetch patch | (lower in file) wraps `window.XMLHttpRequest` and `window.fetch` |
 
@@ -54,8 +54,9 @@
 | File | Role |
 | --- | --- |
 | `App.tsx` | Root: composes rails + workbench + modals; handles update-mode rendering |
+| `devtools.ts` | DevTools panel registration (`chrome.devtools.panels.create`) |
 | `hooks/useRegistry.ts` | Rule-group storage & mutations (add/move/delete/import/save) |
-| `hooks/usePageHeaders.ts` | Per-page header profile management |
+| `hooks/usePageHeaders.ts` | Per-page header profile management (DevTools fallback via `inspectedWindow.eval`) |
 | `hooks/usePageRenderMode.ts` | CSR mode toggle (talks to SW) |
 | `hooks/useFloatingRules.ts` | Floating panel enable/disable |
 | `hooks/useDomainWhitelist.ts` | Domain whitelist CRUD |
@@ -89,7 +90,9 @@
    rewritten (URL/method/headers); payload script may run via
    `executeStringFunction`.
 5. `notifyRuleHit(ruleKey)` → `window.postMessage` → `content.js` lights the
-   matching floating-panel row green (`refreshFloatingHitDots`).
+   matching floating-panel row green (`refreshFloatingHitDots`). When the
+   override is applied, `notifyInterceptSuccess(url)` → `content.js`
+   `showInterceptSuccessToast` shows a top-right toast.
 6. `emitCapturedRequest` → `content.js` → iframe `useRequestSniffer` lists it.
 
 ## Storage keys (authoritative)
@@ -124,6 +127,7 @@ All in `chrome.storage.local`. Prefixes: `ajaxTools*` (legacy/interceptor),
 | --- | --- | --- | --- |
 | `ajaxTools` (key/value) | content → page | `{key, value}` | Push config to page script |
 | `AJAX_TOOLS_RULE_HIT` | page → content | `{ruleKey}` | Green dot on matching rule |
+| `MOCKKIT_INTERCEPT_SUCCESS` | page → content | `{url}` | Top-right intercept-success toast |
 | `AJAX_TOOLS_CAPTURED_REQUEST` | page → content → iframe | `{method,url,status,responseText,...}` | Feed sniffer |
 | `MOCKKIT_INSPECT_DOM` | iframe → content | — | Start DOM inspector pick mode |
 | `AJAX_TOOLS_OPEN_EDIT` | content → iframe | `{groupIndex, ruleIndex}` | Open `ModifyDataModal` for a rule |

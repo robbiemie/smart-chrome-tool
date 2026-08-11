@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { notification } from 'antd';
 
 interface HeaderRuleItem {
@@ -170,7 +170,24 @@ export const usePageHeaders = () => {
   const [quickEnabled, setQuickEnabled] = useState(false);
   const [hasConfiguredHeaders, setHasConfiguredHeaders] = useState(false);
   const [quickToggling, setQuickToggling] = useState(false);
-  const pageOrigin = useMemo(() => getPageOrigin(), []);
+  // pageOrigin is read synchronously from the URL param (set by content.js
+  // when loading the iframe). In DevTools panel context there is no URL param,
+  // so we fall back to chrome.devtools.inspectedWindow.eval to get the
+  // inspected page's origin asynchronously. useState (not useMemo) so the
+  // async fallback can trigger a re-render once the origin resolves.
+  const [pageOrigin, setPageOrigin] = useState(() => getPageOrigin());
+
+  // DevTools panel fallback: if pageOrigin is empty (no URL param) and we're
+  // inside a DevTools panel, ask the inspected window for its origin. This is
+  // a no-op in the iframe context (chrome.devtools is undefined there).
+  useEffect(() => {
+    if (pageOrigin) return;
+    if (typeof chrome === 'undefined' || !chrome.devtools?.inspectedWindow) return;
+    // evaluated in the inspected page's context; returns the origin string.
+    chrome.devtools.inspectedWindow.eval('location.origin', (result: string | undefined) => {
+      if (result) setPageOrigin(result);
+    });
+  }, [pageOrigin]);
 
   const loadRuleMeta = useCallback(async () => {
     if (!chrome.storage || !pageOrigin) return;
