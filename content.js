@@ -622,6 +622,37 @@ injectedStyle(`
     pointer-events: none;
     box-sizing: border-box;
   }
+  /* × close button on the picked overlay's top-right corner (outside the
+     margin box so it doesn't cover the margin-R/T badges). Only attached to
+     the picked overlay (not the hover overlay) via showPickedMarginOverlay.
+     pointer-events:auto so it's clickable despite the container being
+     pointer-events:none. */
+  .mockkit-box-model-overlay__hide-btn {
+    position: absolute;
+    top: -10px;
+    right: -10px;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    border: 1px solid rgb(212 56 13 / 50%);
+    background: #d4380d;
+    color: #fff;
+    font-size: 12px;
+    line-height: 1;
+    font-family: Menlo, Monaco, Consolas, monospace;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    pointer-events: auto;
+    box-shadow: 0 1px 3px rgb(0 0 0 / 25%);
+    transition: transform 0.12s ease, background 0.12s ease;
+    padding: 0;
+  }
+  .mockkit-box-model-overlay__hide-btn:hover {
+    background: #b3260a;
+    transform: scale(1.12);
+  }
   .mockkit-box-model-overlay__margin {
     position: absolute;
     inset: 0;
@@ -1448,6 +1479,277 @@ injectedStyle(`
     transform: scale(0.96);
     border-color: rgb(124 58 237 / 0);
   }
+  /* ===== Hide Elements module =====
+     Red-orange theme to distinguish from the purple Mark module — hiding
+     is a destructive (display:none) action, marking is non-destructive. */
+  .mockkit-dom-inspector__hide-module {
+    border-top: 1px solid rgb(27 40 34 / 6%);
+    padding: 10px 14px;
+  }
+  .mockkit-dom-inspector__hide-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 6px;
+  }
+  .mockkit-dom-inspector__hide-title {
+    font-size: 11px;
+    font-weight: 600;
+    color: #d4380d;
+  }
+  .mockkit-dom-inspector__hide-clear-btn {
+    flex-shrink: 0;
+    padding: 2px 8px;
+    border: 1px solid rgb(212 56 13 / 30%);
+    border-radius: 4px;
+    background: transparent;
+    cursor: pointer;
+    color: rgb(212 56 13 / 70%);
+    font-size: 10px;
+    font-weight: 600;
+    transition: all 0.15s ease;
+  }
+  .mockkit-dom-inspector__hide-clear-btn:hover {
+    background: rgb(212 56 13 / 10%);
+    color: #d4380d;
+  }
+  .mockkit-dom-inspector__hide-clear-btn:disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+  }
+  .mockkit-dom-inspector__hide-input-row {
+    display: flex;
+    gap: 6px;
+  }
+  .mockkit-dom-inspector__hide-input {
+    flex: 1;
+    min-width: 0;
+    font-family: Menlo, Monaco, Consolas, monospace;
+    font-size: 11px;
+    color: #1b2822;
+    border: 1px solid rgb(212 56 13 / 30%);
+    border-radius: 5px;
+    padding: 4px 8px;
+    background: rgb(255 255 255 / 95%);
+    outline: none;
+    transition: border-color 0.15s ease;
+  }
+  .mockkit-dom-inspector__hide-input:focus {
+    border-color: #d4380d;
+    box-shadow: 0 0 0 2px rgb(212 56 13 / 15%);
+  }
+  .mockkit-dom-inspector__hide-add-btn {
+    flex-shrink: 0;
+    padding: 4px 12px;
+    border: none;
+    border-radius: 5px;
+    background: #d4380d;
+    color: #fff;
+    font-size: 11px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s ease;
+  }
+  .mockkit-dom-inspector__hide-add-btn:hover {
+    background: #b3260a;
+  }
+  .mockkit-dom-inspector__hide-list {
+    margin-top: 6px;
+    max-height: 160px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+  }
+  .mockkit-dom-inspector__hide-empty {
+    font-size: 10px;
+    line-height: 1.5;
+    color: rgb(27 40 34 / 40%);
+    padding: 4px 0;
+  }
+  .mockkit-dom-inspector__hide-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 6px;
+    border-radius: 4px;
+    background: rgb(212 56 13 / 4%);
+    cursor: default;
+    transition: background 0.1s ease;
+  }
+  .mockkit-dom-inspector__hide-row:hover {
+    background: rgb(212 56 13 / 12%);
+  }
+  .mockkit-dom-inspector__hide-row--off {
+    opacity: 0.5;
+  }
+  .mockkit-dom-inspector__hide-row-source {
+    flex-shrink: 0;
+    font-size: 11px;
+    color: rgb(212 56 13 / 60%);
+    line-height: 1;
+  }
+  .mockkit-dom-inspector__hide-selector {
+    flex: 1;
+    min-width: 0;
+    font-family: Menlo, Monaco, Consolas, monospace;
+    font-size: 10px;
+    color: #1b2822;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .mockkit-dom-inspector__hide-count {
+    flex-shrink: 0;
+    font-size: 9px;
+    font-weight: 700;
+    color: rgb(212 56 13 / 60%);
+    background: rgb(212 56 13 / 8%);
+    border-radius: 8px;
+    padding: 1px 5px;
+    min-width: 16px;
+    text-align: center;
+  }
+  /* Per-entry + master toggle switch (sliding style, iOS/Ant-like).
+     Track + knob; --on flips colors and slides the knob right. */
+  .mockkit-dom-inspector__hide-switch {
+    flex-shrink: 0;
+    position: relative;
+    width: 26px;
+    height: 14px;
+    border-radius: 8px;
+    background: rgb(27 40 34 / 20%);
+    border: none;
+    cursor: pointer;
+    padding: 0;
+    transition: background 0.18s ease;
+  }
+  .mockkit-dom-inspector__hide-switch::after {
+    content: '';
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: #fff;
+    box-shadow: 0 1px 2px rgb(0 0 0 / 20%);
+    transition: transform 0.18s ease;
+  }
+  .mockkit-dom-inspector__hide-switch--on {
+    background: #52c41a;
+  }
+  .mockkit-dom-inspector__hide-switch--on::after {
+    transform: translateX(12px);
+  }
+  .mockkit-dom-inspector__hide-switch:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+  /* Master switch in the header — slightly larger to feel like a module
+     control rather than a per-row toggle. */
+  .mockkit-dom-inspector__hide-master-switch {
+    flex-shrink: 0;
+    position: relative;
+    width: 30px;
+    height: 16px;
+    border-radius: 9px;
+    background: rgb(27 40 34 / 20%);
+    border: none;
+    cursor: pointer;
+    padding: 0;
+    transition: background 0.18s ease;
+  }
+  .mockkit-dom-inspector__hide-master-switch::after {
+    content: '';
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: #fff;
+    box-shadow: 0 1px 2px rgb(0 0 0 / 20%);
+    transition: transform 0.18s ease;
+  }
+  .mockkit-dom-inspector__hide-master-switch--on {
+    background: #d4380d;
+  }
+  .mockkit-dom-inspector__hide-master-switch--on::after {
+    transform: translateX(14px);
+  }
+  .mockkit-dom-inspector__hide-delete {
+    flex-shrink: 0;
+    width: 18px;
+    height: 18px;
+    border: none;
+    border-radius: 3px;
+    background: transparent;
+    color: rgb(27 40 34 / 35%);
+    font-size: 14px;
+    line-height: 1;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+  .mockkit-dom-inspector__hide-delete:hover {
+    background: rgb(212 56 13 / 15%);
+    color: #d4380d;
+  }
+  .mockkit-dom-inspector__hide-status {
+    margin-top: 4px;
+    font-size: 10px;
+    font-weight: 600;
+    color: #d4380d;
+    min-height: 14px;
+  }
+  /* Page overlay for hover preview — orange to distinguish from purple
+     marks and green/blue inspect overlays. */
+  .mockkit-dom-inspector__hide-preview {
+    position: fixed;
+    z-index: 2147483643;
+    pointer-events: none;
+    border: 2px solid rgb(212 56 13 / 0.7);
+    border-radius: 3px;
+    background: rgb(212 56 13 / 0.1);
+    box-shadow: 0 0 0 1px rgb(212 56 13 / 0.2);
+  }
+  /* Hide action button on the inspect tag-row — small, red-orange to
+     signal destructive (display:none) intent. */
+  .mockkit-dom-inspector__hide-action-btn {
+    flex-shrink: 0;
+    padding: 1px 8px;
+    border: 1px solid rgb(212 56 13 / 35%);
+    border-radius: 4px;
+    background: transparent;
+    color: rgb(212 56 13 / 85%);
+    font-size: 10px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+  .mockkit-dom-inspector__hide-action-btn:hover {
+    background: rgb(212 56 13 / 12%);
+    color: #d4380d;
+  }
+  /* "Hide marked" button in the Mark by Class module — outlined style so
+     it reads as a secondary action next to the filled Mark button. */
+  .mockkit-dom-inspector__mark-hide-btn {
+    flex-shrink: 0;
+    padding: 4px 10px;
+    border: 1px solid rgb(212 56 13 / 35%);
+    border-radius: 5px;
+    background: transparent;
+    color: rgb(212 56 13 / 85%);
+    font-size: 11px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+  .mockkit-dom-inspector__mark-hide-btn:hover {
+    background: rgb(212 56 13 / 12%);
+    color: #d4380d;
+  }
 `);
 
 let domInspectorState = {
@@ -1499,6 +1801,20 @@ let domInspectorState = {
   pickedNode: null,
   pickedRepositionFrame: null,
   pickedListenersBound: false,
+  // ----- Hide Elements state -----
+  // AdBlock-style element hiding. Entries are [{id, selector, source,
+  // enabled, addedAt}]; compiled into a single <style> tag with
+  // display:none!important. Persisted per-hostname in ajaxToolsHideProfiles
+  // (see HIDE_PROFILES_KEY) so hiding survives reloads and swaps when the
+  // user navigates to a different site. hideMasterEnabled is the module-level
+  // kill switch: when false, the <style> is emptied even if entries exist.
+  hideEntries: [],
+  hideStyleEl: null,
+  hideMasterEnabled: true,
+  hidePreviewOverlays: [],
+  hidePreviewFrame: null,
+  hideRepositionListenersBound: false,
+  hideNextId: 1,
 };
 
 // Create an empty box-model overlay element with the full layer structure:
@@ -2816,8 +3132,23 @@ function buildMarkByClassModule() {
       markBtn.click();
     }
   });
+  // "Hide marked" button: promotes the current mark class into a Hide entry
+  // so all elements with that class are hidden (display:none). Uses the
+  // active mark class if set, else the input value. Bridge between Mark
+  // (non-destructive inspect) and Hide (destructive AdBlock-style removal).
+  const hideMarkedBtn = document.createElement('button');
+  hideMarkedBtn.type = 'button';
+  hideMarkedBtn.className = 'mockkit-dom-inspector__mark-hide-btn';
+  hideMarkedBtn.textContent = 'Hide marked';
+  hideMarkedBtn.title = 'Hide all elements matching the marked class (display:none)';
+  hideMarkedBtn.addEventListener('click', () => {
+    const className = domInspectorState.markClassName || input.value.trim();
+    if (!className) return;
+    addHideEntry(`.${className}`, 'class');
+  });
   inputRow.appendChild(input);
   inputRow.appendChild(markBtn);
+  inputRow.appendChild(hideMarkedBtn);
 
   // Usage hint.
   const hint = document.createElement('div');
@@ -2836,6 +3167,422 @@ function buildMarkByClassModule() {
   wrap.appendChild(inputRow);
   wrap.appendChild(hint);
   wrap.appendChild(status);
+  return wrap;
+}
+
+// ===== Hide Elements module =====
+// AdBlock-style element hiding. Maintains a list of CSS selectors compiled
+// into a single <style> tag with `display:none!important`. Each entry can be
+// toggled or deleted; hovering a row previews matched elements on the page
+// (orange overlay). Persisted per-hostname in ajaxToolsHideProfiles so
+// hiding survives reloads and swaps when the user navigates to a different
+// site (see HIDE_PROFILES_KEY).
+
+// Get the current page's hostname — used as the profile key so each site
+// has its own hide list.
+function getHideHostKey() {
+  return window.location.hostname || '__unknown__';
+}
+
+// Read the current host's hide profile from storage and hydrate
+// domInspectorState. Called once on init (before the DOM Inspector panel is
+// ever opened) so the <style> is applied immediately on page load, not only
+// after the user opens the panel. Safe to call multiple times — it replaces
+// in-memory state wholesale.
+function loadHideProfile() {
+  if (!chrome.storage?.local) return;
+  const host = getHideHostKey();
+  chrome.storage.local.get([HIDE_PROFILES_KEY], (result) => {
+    const profiles = result[HIDE_PROFILES_KEY] || {};
+    const profile = profiles[host] || { entries: [], masterEnabled: true };
+    domInspectorState.hideEntries = Array.isArray(profile.entries) ? profile.entries : [];
+    domInspectorState.hideMasterEnabled = profile.masterEnabled !== false;
+    // Recompute hideNextId so new entries don't collide with persisted ids.
+    const maxId = domInspectorState.hideEntries.reduce((m, e) => Math.max(m, e.id || 0), 0);
+    domInspectorState.hideNextId = maxId + 1;
+    rewriteHideStyle();
+    // If the panel is currently open, re-render the list to show persisted entries.
+    renderHideList();
+  });
+}
+
+// Persist the current in-memory hide state to the current host's profile.
+// Called after every mutation (add/remove/toggle/clear/master). Uses a
+// read-modify-write so other hosts' profiles are preserved.
+function persistHideProfile() {
+  if (!chrome.storage?.local) return;
+  const host = getHideHostKey();
+  chrome.storage.local.get([HIDE_PROFILES_KEY], (result) => {
+    const profiles = result[HIDE_PROFILES_KEY] || {};
+    profiles[host] = {
+      entries: domInspectorState.hideEntries,
+      masterEnabled: domInspectorState.hideMasterEnabled,
+    };
+    safeStorageLocalSet({ [HIDE_PROFILES_KEY]: profiles });
+  });
+}
+
+function ensureHideStyleEl() {
+  if (!domInspectorState.hideStyleEl || !domInspectorState.hideStyleEl.isConnected) {
+    const el = document.createElement('style');
+    el.id = 'mockkit-hide-style';
+    (document.head || document.documentElement).appendChild(el);
+    domInspectorState.hideStyleEl = el;
+  }
+  return domInspectorState.hideStyleEl;
+}
+
+function rewriteHideStyle() {
+  const el = ensureHideStyleEl();
+  // Master switch off → lift all hiding without dropping the list.
+  if (!domInspectorState.hideMasterEnabled) {
+    el.textContent = '';
+    return;
+  }
+  const enabled = domInspectorState.hideEntries.filter((e) => e.enabled);
+  if (enabled.length === 0) {
+    el.textContent = '';
+    return;
+  }
+  const selectors = enabled.map((e) => e.selector).join(',\n');
+  el.textContent = `${selectors} { display: none !important; }`;
+}
+
+function toggleHideMaster() {
+  domInspectorState.hideMasterEnabled = !domInspectorState.hideMasterEnabled;
+  rewriteHideStyle();
+  renderHideList();
+  persistHideProfile();
+}
+
+// Generate the most natural selector for a picked node. Prefers ID (unique),
+// then classes (hits all matching — AdBlock style), then a tag:nth-of-type
+// path as the last-resort fallback.
+function generateSelectorForNode(node) {
+  if (!node || !node.isConnected) return '';
+  if (node.id) {
+    try {
+      if (document.querySelectorAll(`#${CSS.escape(node.id)}`).length === 1) {
+        return `#${node.id}`;
+      }
+    } catch (e) {
+      // CSS.escape may be unavailable in very old browsers — fall through.
+    }
+  }
+  const desc = describeDomNode(node);
+  if (desc.classes.length > 0) {
+    return `.${desc.classes.join('.')}`;
+  }
+  const parts = [];
+  let el = node;
+  let depth = 0;
+  while (el && el !== document.documentElement && depth < 5) {
+    const tag = el.tagName ? el.tagName.toLowerCase() : '';
+    const parent = el.parentElement;
+    if (parent) {
+      const siblings = Array.from(parent.children).filter((c) => c.tagName === el.tagName);
+      if (siblings.length === 1) {
+        parts.unshift(tag);
+      } else {
+        const idx = siblings.indexOf(el) + 1;
+        parts.unshift(`${tag}:nth-of-type(${idx})`);
+      }
+    } else {
+      parts.unshift(tag);
+    }
+    el = parent;
+    depth++;
+  }
+  return parts.join(' > ');
+}
+
+function countHideEntryMatches(selector) {
+  try {
+    return document.querySelectorAll(selector).length;
+  } catch (e) {
+    return 0;
+  }
+}
+
+function addHideEntry(selector, source) {
+  const trimmed = String(selector || '').trim();
+  if (!trimmed) return false;
+  const existing = domInspectorState.hideEntries.find((e) => e.selector === trimmed);
+  if (existing) {
+    if (!existing.enabled) {
+      existing.enabled = true;
+      rewriteHideStyle();
+      renderHideList();
+      persistHideProfile();
+    }
+    return false;
+  }
+  domInspectorState.hideEntries.push({
+    id: domInspectorState.hideNextId++,
+    selector: trimmed,
+    source: source || 'manual',
+    enabled: true,
+    addedAt: Date.now(),
+  });
+  rewriteHideStyle();
+  renderHideList();
+  persistHideProfile();
+  return true;
+}
+
+function removeHideEntry(id) {
+  const idx = domInspectorState.hideEntries.findIndex((e) => e.id === id);
+  if (idx < 0) return;
+  domInspectorState.hideEntries.splice(idx, 1);
+  rewriteHideStyle();
+  renderHideList();
+  persistHideProfile();
+}
+
+function toggleHideEntry(id) {
+  const entry = domInspectorState.hideEntries.find((e) => e.id === id);
+  if (!entry) return;
+  entry.enabled = !entry.enabled;
+  rewriteHideStyle();
+  renderHideList();
+  persistHideProfile();
+}
+
+function clearHideEntries() {
+  domInspectorState.hideEntries = [];
+  rewriteHideStyle();
+  renderHideList();
+  clearHidePreview();
+  persistHideProfile();
+}
+
+// ===== Hover preview =====
+// On row hover, draw orange overlays on every matched element so the user
+// can see exactly what a selector will hide before toggling/deleting. Uses
+// the same rAF-throttled reposition pattern as Mark by Class.
+
+function scheduleHidePreviewReposition() {
+  if (domInspectorState.hidePreviewFrame) return;
+  domInspectorState.hidePreviewFrame = requestAnimationFrame(() => {
+    domInspectorState.hidePreviewFrame = null;
+    repositionHidePreview();
+  });
+}
+
+function repositionHidePreview() {
+  const overlays = domInspectorState.hidePreviewOverlays;
+  for (const ov of overlays) {
+    if (!ov._target || !ov._target.isConnected) {
+      ov.style.display = 'none';
+      continue;
+    }
+    const rect = ov._target.getBoundingClientRect();
+    ov.style.left = `${rect.left}px`;
+    ov.style.top = `${rect.top}px`;
+    ov.style.width = `${rect.width}px`;
+    ov.style.height = `${rect.height}px`;
+    ov.style.display = rect.width === 0 && rect.height === 0 ? 'none' : '';
+  }
+}
+
+function previewHideEntry(entry) {
+  clearHidePreview();
+  let matches = [];
+  try {
+    matches = Array.from(document.querySelectorAll(entry.selector));
+  } catch (e) {
+    return;
+  }
+  if (matches.length === 0) return;
+  for (const el of matches) {
+    const overlay = document.createElement('div');
+    overlay.className = 'mockkit-dom-inspector__hide-preview';
+    overlay._target = el;
+    document.body.appendChild(overlay);
+    domInspectorState.hidePreviewOverlays.push(overlay);
+  }
+  repositionHidePreview();
+  if (!domInspectorState.hideRepositionListenersBound) {
+    domInspectorState.hideRepositionListenersBound = true;
+    document.addEventListener('scroll', scheduleHidePreviewReposition, true);
+    window.addEventListener('resize', scheduleHidePreviewReposition);
+  }
+}
+
+function clearHidePreview() {
+  domInspectorState.hidePreviewOverlays.forEach((el) => el.remove());
+  domInspectorState.hidePreviewOverlays = [];
+  if (domInspectorState.hidePreviewFrame) {
+    cancelAnimationFrame(domInspectorState.hidePreviewFrame);
+    domInspectorState.hidePreviewFrame = null;
+  }
+  if (domInspectorState.hideRepositionListenersBound) {
+    domInspectorState.hideRepositionListenersBound = false;
+    document.removeEventListener('scroll', scheduleHidePreviewReposition, true);
+    window.removeEventListener('resize', scheduleHidePreviewReposition);
+  }
+}
+
+function renderHideList() {
+  const listEl = domInspectorState.panel?.querySelector('.mockkit-dom-inspector__hide-list');
+  if (!listEl) return;
+  listEl.innerHTML = '';
+  const entries = domInspectorState.hideEntries;
+  if (entries.length === 0) {
+    const empty = document.createElement('div');
+    empty.className = 'mockkit-dom-inspector__hide-empty';
+    empty.textContent = 'No hidden elements. Pick a node and click Hide, or type a CSS selector above.';
+    listEl.appendChild(empty);
+  } else {
+    for (const entry of entries) {
+      const row = document.createElement('div');
+      row.className = 'mockkit-dom-inspector__hide-row';
+      if (!entry.enabled) row.classList.add('mockkit-dom-inspector__hide-row--off');
+
+      const source = document.createElement('span');
+      source.className = 'mockkit-dom-inspector__hide-row-source';
+      source.textContent = entry.source === 'picked' ? '◎' : entry.source === 'class' ? '◆' : '⌨';
+      source.title = entry.source;
+
+      const selector = document.createElement('span');
+      selector.className = 'mockkit-dom-inspector__hide-selector';
+      selector.textContent = entry.selector;
+      selector.title = entry.selector;
+
+      const count = document.createElement('span');
+      count.className = 'mockkit-dom-inspector__hide-count';
+      count.textContent = String(countHideEntryMatches(entry.selector));
+
+      const toggle = document.createElement('button');
+      toggle.type = 'button';
+      toggle.className = 'mockkit-dom-inspector__hide-switch';
+      if (entry.enabled && domInspectorState.hideMasterEnabled) {
+        toggle.classList.add('mockkit-dom-inspector__hide-switch--on');
+      }
+      toggle.title = entry.enabled ? 'Disable hiding (keep entry)' : 'Enable hiding';
+      toggle.addEventListener('click', (e) => {
+        e.stopPropagation();
+        toggleHideEntry(entry.id);
+      });
+
+      const del = document.createElement('button');
+      del.type = 'button';
+      del.className = 'mockkit-dom-inspector__hide-delete';
+      del.textContent = '×';
+      del.title = 'Remove entry and restore elements';
+      del.addEventListener('click', (e) => {
+        e.stopPropagation();
+        removeHideEntry(entry.id);
+      });
+
+      row.appendChild(source);
+      row.appendChild(selector);
+      row.appendChild(count);
+      row.appendChild(toggle);
+      row.appendChild(del);
+
+      row.addEventListener('mouseenter', () => previewHideEntry(entry));
+      row.addEventListener('mouseleave', () => clearHidePreview());
+
+      listEl.appendChild(row);
+    }
+  }
+  const clearBtn = domInspectorState.panel?.querySelector('.mockkit-dom-inspector__hide-clear-btn');
+  if (clearBtn) clearBtn.disabled = entries.length === 0;
+  // Sync the master switch visual to current state.
+  const masterSwitch = domInspectorState.panel?.querySelector('.mockkit-dom-inspector__hide-master-switch');
+  if (masterSwitch) {
+    masterSwitch.classList.toggle('mockkit-dom-inspector__hide-master-switch--on', domInspectorState.hideMasterEnabled);
+    masterSwitch.title = domInspectorState.hideMasterEnabled ? 'Disable all hiding (keep list)' : 'Enable all hiding';
+  }
+  const statusEl = domInspectorState.panel?.querySelector('.mockkit-dom-inspector__hide-status');
+  if (statusEl) {
+    if (entries.length === 0) {
+      statusEl.textContent = '';
+    } else if (!domInspectorState.hideMasterEnabled) {
+      statusEl.textContent = `Master OFF — ${entries.length} entries preserved, none active`;
+    } else {
+      const active = entries.filter((e) => e.enabled).length;
+      statusEl.textContent = `${active}/${entries.length} active — hover a row to preview, × to restore`;
+    }
+  }
+}
+
+function buildHideElementsModule() {
+  const wrap = document.createElement('div');
+  wrap.className = 'mockkit-dom-inspector__hide-module';
+
+  const header = document.createElement('div');
+  header.className = 'mockkit-dom-inspector__hide-header';
+  const title = document.createElement('span');
+  title.className = 'mockkit-dom-inspector__hide-title';
+  title.textContent = 'Hide Elements';
+  // Master switch: module-level kill switch. When off, the <style> is
+  // emptied but entries are preserved — lift all hiding without losing the
+  // list. Default on so newly added entries take effect immediately.
+  const masterSwitch = document.createElement('button');
+  masterSwitch.type = 'button';
+  masterSwitch.className = 'mockkit-dom-inspector__hide-master-switch';
+  if (domInspectorState.hideMasterEnabled) {
+    masterSwitch.classList.add('mockkit-dom-inspector__hide-master-switch--on');
+  }
+  masterSwitch.title = domInspectorState.hideMasterEnabled ? 'Disable all hiding (keep list)' : 'Enable all hiding';
+  masterSwitch.addEventListener('click', (e) => {
+    e.stopPropagation();
+    toggleHideMaster();
+  });
+  // Remove-all button: clears the entire list and restores display.
+  // Disabled when there are no entries. Labeled "Clear all" for clarity.
+  const clearBtn = document.createElement('button');
+  clearBtn.type = 'button';
+  clearBtn.className = 'mockkit-dom-inspector__hide-clear-btn';
+  clearBtn.textContent = 'Clear all';
+  clearBtn.title = 'Remove all hidden entries and restore display';
+  clearBtn.disabled = domInspectorState.hideEntries.length === 0;
+  clearBtn.addEventListener('click', () => clearHideEntries());
+  header.appendChild(title);
+  header.appendChild(masterSwitch);
+  header.appendChild(clearBtn);
+
+  const inputRow = document.createElement('div');
+  inputRow.className = 'mockkit-dom-inspector__hide-input-row';
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.className = 'mockkit-dom-inspector__hide-input';
+  input.placeholder = 'CSS selector (e.g. .ad-banner, #promo)';
+  input.title = 'Enter any CSS selector and press Enter or click Add to hide all matching elements';
+  const addBtn = document.createElement('button');
+  addBtn.type = 'button';
+  addBtn.className = 'mockkit-dom-inspector__hide-add-btn';
+  addBtn.textContent = 'Add';
+  addBtn.addEventListener('click', () => {
+    const value = input.value.trim();
+    if (!value) return;
+    addHideEntry(value, 'manual');
+    input.value = '';
+  });
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      addBtn.click();
+    }
+  });
+  inputRow.appendChild(input);
+  inputRow.appendChild(addBtn);
+
+  const list = document.createElement('div');
+  list.className = 'mockkit-dom-inspector__hide-list';
+
+  const status = document.createElement('div');
+  status.className = 'mockkit-dom-inspector__hide-status';
+
+  wrap.appendChild(header);
+  wrap.appendChild(inputRow);
+  wrap.appendChild(list);
+  wrap.appendChild(status);
+
+  requestAnimationFrame(() => renderHideList());
+
   return wrap;
 }
 
@@ -2998,6 +3745,7 @@ function showDomInspectorPanel(node, hint) {
   closeBtn.textContent = '×';
   closeBtn.addEventListener('click', () => {
     clearPickedMarginOverlay();
+    clearHidePreview();
     panel.remove();
     domInspectorState.panel = null;
   });
@@ -3069,6 +3817,21 @@ function showDomInspectorPanel(node, hint) {
     tagEl.addEventListener('mouseenter', highlightNode);
     tagEl.addEventListener('click', highlightNode);
     tagRow.appendChild(tagEl);
+
+    // Hide button: generates a selector for the picked node and adds it to
+    // the Hide Elements list. Uses the most natural selector (ID > classes >
+    // nth-of-type path) so it hits similar elements AdBlock-style.
+    const hideBtn = document.createElement('button');
+    hideBtn.type = 'button';
+    hideBtn.className = 'mockkit-dom-inspector__hide-action-btn';
+    hideBtn.textContent = 'Hide';
+    hideBtn.title = 'Hide this element (and similar) via CSS selector';
+    hideBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const selector = generateSelectorForNode(node);
+      if (selector) addHideEntry(selector, 'picked');
+    });
+    tagRow.appendChild(hideBtn);
 
     body.appendChild(tagRow);
 
@@ -3160,6 +3923,7 @@ function showDomInspectorPanel(node, hint) {
   // document.body across panel rebuilds; the input value is preserved in
   // domInspectorState.markInputValue.
   body.appendChild(buildMarkByClassModule());
+  body.appendChild(buildHideElementsModule());
 
   panel.appendChild(body);
   document.body.appendChild(panel);
@@ -3212,6 +3976,30 @@ function showPickedMarginOverlay(node) {
     overlay.remove();
     return;
   }
+  // Attach a × "hide" button to the picked overlay's top-right corner.
+  // Clicking it adds the node's selector to the Hide Elements list, then
+  // clears the picked overlay and resets the panel — the node becomes
+  // display:none so the overlay must not linger (its rect collapses to 0
+  // and reposition would freeze a ghost frame).
+  const hideBtn = document.createElement('button');
+  hideBtn.type = 'button';
+  hideBtn.className = 'mockkit-box-model-overlay__hide-btn';
+  hideBtn.textContent = '×';
+  hideBtn.title = 'Hide this element (add to Hide Elements list)';
+  hideBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    e.preventDefault();
+    const selector = generateSelectorForNode(node);
+    if (selector) {
+      addHideEntry(selector, 'picked');
+      // Briefly show a hint so the user gets feedback that the hide took
+      // effect (the panel rebuild below would otherwise wipe any in-panel
+      // status). The hint also tells them they can re-pick or inspect the
+      // Hide Elements list below.
+      showDomInspectorPanel(null, `Hidden "${selector}" — added to Hide Elements. Pick another or Esc to exit.`);
+    }
+  });
+  overlay.appendChild(hideBtn);
   (document.documentElement || document.body).appendChild(overlay);
   domInspectorState.pickedMarginOverlay = overlay;
   domInspectorState.pickedNode = node;
@@ -3560,6 +4348,10 @@ function actionBar (container) {
 // collapse state. Synchronizes data via the same chrome.storage keys.
 const FLOATING_SELECTED_GROUP_KEY = 'ajaxToolsSelectedGroupIndex';
 const FLOATING_ENABLED_KEY = 'ajaxToolsFloatingRulesEnabled';
+// Per-host Hide Elements profiles. Structure: { [hostname]: { entries: HideEntry[], masterEnabled: boolean } }.
+// Each hostname gets its own hide list so switching sites swaps the active
+// hiding rules. Persisted across reloads (unlike Mark by Class which is session-only).
+const HIDE_PROFILES_KEY = 'ajaxToolsHideProfiles';
 
 // Receive rule-hit notifications from the page script (pageScripts/index.js)
 // and mark the corresponding floating-panel row with a green dot. The hit
@@ -6815,11 +7607,21 @@ function mountPanelContainer() {
   // user clicks the dot to expand. Sub-panels still restore to their prior
   // open state (driven by the show path inside setToolkitPanelVisible).
   chrome.storage.local.get([TOOLKIT_VISIBLE_KEY], (result) => {
-    if (result[TOOLKIT_VISIBLE_KEY] === true) {
+    // Default Toolkit to VISIBLE on first load (key undefined). Once the
+    // user explicitly hides it, the persisted `false` is respected. Sub-
+    // features (Floating Rules / Animation / Sniffer) default OFF because
+    // their own keys are undefined on first load and only restore on an
+    // explicit `true` — so first load shows Toolkit but no sub-panels.
+    if (result[TOOLKIT_VISIBLE_KEY] !== false) {
       setToolkitPanelVisible(true);
       setToolkitPanelCollapsed(true);
     }
   });
+
+  // Hydrate the per-host Hide Elements profile so the <style> is applied
+  // immediately on page load (hidden elements stay hidden across reloads),
+  // not only after the user opens the DOM Inspector panel.
+  loadHideProfile();
 
   // Mount the Request Sniffer panel (Toolkit sub-tool). Hidden by default;
   // shown on demand from the Toolkit panel's Sniffer toggle.
@@ -6947,8 +7749,9 @@ chrome.storage.onChanged.addListener(function (changes, namespace) {
     }
     // Toolkit master panel visibility — driven by the Global Controls Toolkit
     // switch in the workbench. Show/hide the Toolkit panel accordingly.
+    // `!== false` matches the first-load default-ON semantic (undefined → ON).
     if (key === TOOLKIT_VISIBLE_KEY) {
-      setToolkitPanelVisible(newValue === true);
+      setToolkitPanelVisible(newValue !== false);
     }
     // Sniffer sub-toggle persistence — only meaningful when Toolkit is on.
     // If Toolkit is visible, reflect the state into the sniffer panel.
@@ -6957,6 +7760,13 @@ chrome.storage.onChanged.addListener(function (changes, namespace) {
       if (open !== toolkitPanelState.snifferOpen) {
         setToolkitSnifferOpen(open);
       }
+    }
+    // Hide Elements per-host profile changed (from another tab or the React
+    // workbench). Re-hydrate from storage so the <style> + panel list stay
+    // in sync. loadHideProfile reads the current host's entry and rewrites
+    // the style + re-renders the list if the panel is open.
+    if (key === HIDE_PROFILES_KEY) {
+      loadHideProfile();
     }
   }
 });

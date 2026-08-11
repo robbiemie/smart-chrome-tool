@@ -6,6 +6,11 @@ const TOOLKIT_VISIBLE_KEY = 'ajaxToolsToolkitPanelVisible';
 // The toggle persists to chrome.storage so the content script picks it up via
 // its storage.onChanged listener — the panel re-appears after a page reload if
 // the user left it on. Mirrors the useFloatingRules pattern.
+//
+// First-load default: Toolkit is ON (key undefined → ON). Sub-features inside
+// Toolkit (Floating Rules / Animation / Sniffer) default OFF and must be
+// enabled manually. Once the user explicitly turns Toolkit OFF (persists
+// false), it stays OFF on subsequent loads.
 export const useToolkitPanel = () => {
   const [enabled, setEnabled] = useState(false);
   const [ready, setReady] = useState(false);
@@ -14,13 +19,14 @@ export const useToolkitPanel = () => {
     if (!chrome.storage?.local) return;
 
     chrome.storage.local.get([TOOLKIT_VISIBLE_KEY], (result) => {
-      setEnabled(result[TOOLKIT_VISIBLE_KEY] === true);
+      // undefined (first load) → ON; false (user hid) → OFF.
+      setEnabled(result[TOOLKIT_VISIBLE_KEY] !== false);
       setReady(true);
     });
 
     const handler = (changes: { [key: string]: chrome.storage.StorageChange }) => {
       if (changes[TOOLKIT_VISIBLE_KEY]) {
-        setEnabled(changes[TOOLKIT_VISIBLE_KEY].newValue === true);
+        setEnabled(changes[TOOLKIT_VISIBLE_KEY].newValue !== false);
       }
     };
     chrome.storage.onChanged.addListener(handler);

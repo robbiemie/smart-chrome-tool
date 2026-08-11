@@ -275,6 +275,62 @@ repositioned on scroll/resize via a rAF-throttled handler. State lives in
 `clearClassMarks`, `repositionClassMarks`, `scheduleMarkReposition`); CSS
 classes `mockkit-dom-inspector__mark-*`.
 
+**Hide Elements (sub-module):** AdBlock-style element hiding, located below
+Mark by Class in the DOM Inspector panel. Maintains a list of CSS selectors
+compiled into a single `<style id="mockkit-hide-style">` tag with
+`display:none!important` — so hidden elements stay hidden even if the page
+re-renders or dynamically injects new matches (CSS selector matching is
+live, no MutationObserver needed). Three ways to add entries:
+- **Inspect panel "Hide" button** (next to the picked selector): generates
+  the most natural selector for the picked node via `generateSelectorForNode`
+  — prefers `#id` (if unique), then `.class1.class2` (hits all matching,
+  AdBlock-style), then a `tag:nth-of-type(n) > …` path (max 5 levels).
+- **Mark by Class "Hide marked" button**: promotes the current mark class
+  into a Hide entry (`.className`), bridging non-destructive marking to
+  destructive hiding.
+- **Manual CSS selector input**: any valid CSS selector (e.g. `div.ad >
+  span`, `#promo, .banner`). Press Enter or click Add.
+
+Each list row shows: source icon (◎ picked / ◆ class / ⌨ manual), selector
+text (truncated, monospace), live match count badge, ON/OFF toggle, and ×
+delete. **Hovering a row** draws orange overlays (`#d4380d`) on every
+matched element so the user can preview exactly what a selector will hide
+before toggling — overlays are repositioned on scroll/resize via a
+rAF-throttled handler (same pattern as Mark by Class). Toggle temporarily
+disables an entry without removing it; × removes the entry and restores
+display. "Clear all" wipes the entire list.
+
+**Per-host persistence:** hide entries ARE persisted across page reloads,
+keyed by `window.location.hostname` in `ajaxToolsHideProfiles`
+(`{ [hostname]: { entries: HideEntry[], masterEnabled: boolean } }`). Each
+site gets its own hide list — navigating to a different host swaps the
+active hiding rules. `loadHideProfile` runs on init (before the DOM
+Inspector panel is ever opened) so the `<style>` is applied immediately on
+page load, not only after the user opens the panel. Every mutation
+(add/remove/toggle/clear/master) calls `persistHideProfile` (read-modify-
+write to preserve other hosts' profiles). A `storage.onChanged` listener
+re-hydrates on external changes (another tab editing the same host's list).
+The hide `<style>` and entries persist across DOM Inspector panel rebuilds
+(picking another node rebuilds the panel but keeps hiding active). Esc
+clears marks but NOT hide entries (avoid accidental mass-restore); use
+"Clear all" or per-row × to restore.
+
+**Color theme:** red-orange (`#d4380d`) throughout — module title, buttons,
+preview overlays, status — to visually distinguish from the purple Mark
+module (non-destructive) and signal that hiding is a destructive action.
+
+**Lives in:** `content.js` (`buildHideElementsModule`, `renderHideList`,
+`addHideEntry`, `removeHideEntry`, `toggleHideEntry`, `clearHideEntries`,
+`toggleHideMaster`, `generateSelectorForNode`, `ensureHideStyleEl`,
+`rewriteHideStyle`, `previewHideEntry`, `clearHidePreview`,
+`repositionHidePreview`, `scheduleHidePreviewReposition`,
+`countHideEntryMatches`, `loadHideProfile`, `persistHideProfile`,
+`getHideHostKey`); storage key `ajaxToolsHideProfiles` (`HIDE_PROFILES_KEY`);
+state in `domInspectorState` (`hideEntries`, `hideStyleEl`,
+`hideMasterEnabled`, `hidePreviewOverlays`, `hidePreviewFrame`,
+`hideRepositionListenersBound`, `hideNextId`); CSS classes
+`mockkit-dom-inspector__hide-*`.
+
 ---
 
 ## 9. Request Sniffer (live capture) — Toolkit sub-tool
