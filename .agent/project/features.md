@@ -84,13 +84,27 @@ picks the DNR condition shape. Note: in `'all'` mode, the page's own top-level
 navigation (`main_frame` from a direct URL/reload) may not match
 `initiatorDomains` (no initiator) — XHR/fetch/sub_frame (the debug targets) do.
 
+**Cross-origin header reuse:** every saved origin's header set automatically
+enters a reuse pool. When the user opens Page Headers on a NEW origin (no rule
+yet), a "Reuse headers from another origin…" dropdown lists every OTHER
+enabled origin's header set (preview `key:val, … (origin)`). Picking one fills
+the editor (headerPairs + matchMode) without saving — the user can tweak then
+Save to persist it as the current origin's own rule. This keeps per-origin
+isolation (each origin still owns its own rule) while making previously-built
+header sets one-click reachable on new sites. Sources are read-only in the
+dropdown; deleting an origin's rule (by saving with empty headers) drops it
+from the pool. The dropdown is hidden when no other enabled origins have
+headers.
+
 **Lives in:**
 - Rule compilation: `service_worker.js` (`compileDynamicRules`,
   `buildRuleCondition`, `getRuleHostname`, `syncHeaderRules`, `buildRuleId`,
   `normalizeHeaderOperations`)
 - Storage: `ajaxToolsHeaderProfiles`, `ajaxToolsManagedHeaderRuleIds`
-- UI: `html/iframePage/main/components/PageHeadersModal/`,
-  `hooks/usePageHeaders.ts` (`HeaderMatchMode`, `matchMode` state)
+- UI: `html/iframePage/main/components/PageHeadersModal/` (match-mode Radio,
+  reuse `Select`),
+  `hooks/usePageHeaders.ts` (`HeaderMatchMode`, `matchMode` state,
+  `ReusableHeaderSource`, `reusableSources`, `applySource`)
 - Sync trigger: `SYNC_PAGE_HEADERS_RULES` message + `storage.onChanged`
 
 **Rule-ID model:** `930000 + hash(profileId:ruleId) % 70000`; forbidden headers

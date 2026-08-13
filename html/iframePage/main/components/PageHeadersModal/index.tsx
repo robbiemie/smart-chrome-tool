@@ -1,7 +1,7 @@
-import React from 'react';
-import { Button, Input, Modal, Radio, Space, Switch } from 'antd';
+import React, { useState } from 'react';
+import { Button, Input, Modal, Radio, Select, Space, Switch } from 'antd';
 import { DeleteOutlined, PlusOutlined } from '@ant-design/icons';
-import { HeaderMatchMode, HeaderPairItem } from '../../hooks/usePageHeaders';
+import { HeaderMatchMode, HeaderPairItem, ReusableHeaderSource } from '../../hooks/usePageHeaders';
 
 interface PageHeadersModalProps {
   visible: boolean;
@@ -9,12 +9,14 @@ interface PageHeadersModalProps {
   matchMode: HeaderMatchMode;
   pageOrigin: string;
   headerPairs: HeaderPairItem[];
+  reusableSources: ReusableHeaderSource[];
   setVisible: (v: boolean) => void;
   setEnabled: (v: boolean) => void;
   setMatchMode: (v: HeaderMatchMode) => void;
   addHeaderPair: () => void;
   removeHeaderPair: (id: string) => void;
   updateHeaderPair: (id: string, field: 'keyText' | 'valueText', value: string) => void;
+  applySource: (source: ReusableHeaderSource) => void;
   onSave: (nextPairs: HeaderPairItem[], nextEnabled: boolean, nextMatchMode: HeaderMatchMode) => Promise<boolean>;
 }
 
@@ -25,14 +27,20 @@ const PageHeadersModal = (props: PageHeadersModalProps) => {
     matchMode,
     pageOrigin,
     headerPairs,
+    reusableSources,
     setVisible,
     setEnabled,
     setMatchMode,
     addHeaderPair,
     removeHeaderPair,
     updateHeaderPair,
+    applySource,
     onSave,
   } = props;
+  // The reuse Select is an action picker, not a setting: picking an item fills
+  // the editor then resets to the placeholder so the same source can be
+  // re-applied or another picked without confusion.
+  const [reuseValue, setReuseValue] = useState<string | undefined>(undefined);
   return (
     <Modal
       centered
@@ -69,10 +77,33 @@ const PageHeadersModal = (props: PageHeadersModalProps) => {
           All requests: add headers to every request initiated by this page (cross-origin included). Same-origin only: only requests targeting this page&apos;s host.
         </div>
       </div>
+      {reusableSources.length > 0 && (
+        <div style={{ marginBottom: 12 }}>
+          <Select
+            value={reuseValue}
+            placeholder="Reuse headers from another origin…"
+            style={{ width: '100%' }}
+            showSearch
+            optionFilterProp="label"
+            options={reusableSources.map((source) => ({
+              value: source.id,
+              label: `${source.headerPreview}  (${source.origin})`,
+            }))}
+            onChange={(value: string) => {
+              const source = reusableSources.find((item) => item.id === value);
+              if (source) applySource(source);
+              setReuseValue(undefined);
+            }}
+          />
+          <div style={{ fontSize: 12, color: '#666', marginTop: 4 }}>
+            Pick a previously-saved header set to fill the editor (save still required to apply to this origin).
+          </div>
+        </div>
+      )}
       <div style={{ fontSize: 12, color: '#666', marginBottom: 10 }}>
         Add key/value pairs below. Empty keys are ignored when saving.
       </div>
-      <div style={{ maxHeight: 'calc(100vh - 400px)', overflowY: 'auto', paddingRight: 4 }}>
+      <div style={{ maxHeight: 'calc(100vh - 460px)', overflowY: 'auto', paddingRight: 4 }}>
         {headerPairs.map((item) => (
           <Space key={item.id} style={{ display: 'flex', marginBottom: 8 }} align="start">
             <Input

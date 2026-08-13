@@ -87,12 +87,14 @@ function App() {
     quickToggling: pageHeadersToggling,
     pageOrigin,
     headerPairs,
+    reusableSources: pageHeadersReusableSources,
     setVisible: setPageHeadersVisible,
     setEnabled: setPageHeadersEnabled,
     setMatchMode: setPageHeadersMatchMode,
     addHeaderPair,
     removeHeaderPair,
     updateHeaderPair,
+    applySource: applyPageHeadersSource,
     openModal: openPageHeadersModal,
     save: savePageHeaders,
     toggleQuickEnabled: togglePageHeadersQuick,
@@ -456,12 +458,14 @@ function App() {
         matchMode={pageHeadersMatchMode}
         pageOrigin={pageOrigin}
         headerPairs={headerPairs}
+        reusableSources={pageHeadersReusableSources}
         setVisible={setPageHeadersVisible}
         setEnabled={setPageHeadersEnabled}
         setMatchMode={setPageHeadersMatchMode}
         addHeaderPair={addHeaderPair}
         removeHeaderPair={removeHeaderPair}
         updateHeaderPair={updateHeaderPair}
+        applySource={applyPageHeadersSource}
         onSave={savePageHeaders}
       />
       <UpdateModal

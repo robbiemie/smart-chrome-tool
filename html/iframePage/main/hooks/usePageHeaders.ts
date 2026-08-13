@@ -38,6 +38,21 @@ export interface HeaderPairItem {
   valueText: string;
 }
 
+export interface ReusableHeaderSource {
+  id: string;
+  origin: string;
+  headerPreview: string;
+  headers: Record<string, string>;
+  matchMode: HeaderMatchMode;
+}
+
+const buildHeaderPreview = (headers: Record<string, string>) => {
+  const text = Object.keys(headers)
+    .map((key) => `${key}:${headers[key]}`)
+    .join(', ');
+  return text.length > 60 ? `${text.slice(0, 60)}…` : text;
+};
+
 const HEADER_PROFILES_STORAGE_KEY = 'ajaxToolsHeaderProfiles';
 const LEGACY_PAGE_HEADERS_STORAGE_KEY = 'ajaxToolsPageHeadersMap';
 const DEFAULT_PROFILE_ID = 'default';
@@ -175,6 +190,7 @@ export const usePageHeaders = () => {
   const [quickEnabled, setQuickEnabled] = useState(false);
   const [hasConfiguredHeaders, setHasConfiguredHeaders] = useState(false);
   const [quickToggling, setQuickToggling] = useState(false);
+  const [reusableSources, setReusableSources] = useState<ReusableHeaderSource[]>([]);
   // pageOrigin is read synchronously from the URL param (set by content.js
   // when loading the iframe). In DevTools panel context there is no URL param,
   // so we fall back to chrome.devtools.inspectedWindow.eval to get the
@@ -197,6 +213,32 @@ export const usePageHeaders = () => {
   const loadRuleMeta = useCallback(async () => {
     if (!chrome.storage || !pageOrigin) return;
     const profiles = await getProfilesFromStorage();
+    // Collect reusable sources: every OTHER origin's rule that has at least
+    // one set-header. These populate the "Reuse from" dropdown so a new
+    // origin can pull in a previously-saved header set with one click.
+    const sources: ReusableHeaderSource[] = [];
+    const currentRuleId = buildRuleId(pageOrigin);
+    profiles.forEach((profile) => {
+      const rules = Array.isArray(profile.rules) ? profile.rules : [];
+      rules.forEach((rule) => {
+        if (!rule?.enabled) return;
+        if (rule.id === currentRuleId) return;
+        const headers = (rule.headers || []).reduce<Record<string, string>>((acc, item) => {
+          if (!item?.key || item.operation === 'remove') return acc;
+          acc[item.key] = item.value;
+          return acc;
+        }, {});
+        if (Object.keys(headers).length === 0) return;
+        sources.push({
+          id: rule.id,
+          origin: rule.name || rule.id,
+          headerPreview: buildHeaderPreview(headers),
+          headers,
+          matchMode: (rule.condition?.matchMode ?? 'sameOrigin') as HeaderMatchMode,
+        });
+      });
+    });
+    setReusableSources(sources);
     const { rule } = findRuleByOrigin(profiles, pageOrigin);
     const headers = (rule?.headers || []).reduce<Record<string, string>>((acc, item) => {
       if (!item?.key || item.operation === 'remove') return acc;
@@ -304,6 +346,13 @@ export const usePageHeaders = () => {
     setHeaderPairs((prev) => prev.map((item) => item.id === id ? { ...item, [field]: value } : item));
   }, []);
 
+  // Pull a reusable source into the editor: fill headerPairs + matchMode so
+  // the user can tweak before saving. Does NOT persist — Save still required.
+  const applySource = useCallback((source: ReusableHeaderSource) => {
+    setHeaderPairs(mapToHeaderPairs(source.headers));
+    setMatchMode(source.matchMode);
+  }, []);
+
   const toggleQuickEnabled = useCallback(async (nextEnabled: boolean) => {
     if (!pageOrigin) {
       notification.error({
@@ -344,12 +393,14 @@ export const usePageHeaders = () => {
     quickToggling,
     pageOrigin,
     headerPairs,
+    reusableSources,
     setVisible,
     setEnabled,
     setMatchMode,
     addHeaderPair,
     removeHeaderPair,
     updateHeaderPair,
+    applySource,
     openModal,
     save,
     toggleQuickEnabled,
