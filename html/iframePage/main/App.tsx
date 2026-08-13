@@ -112,7 +112,7 @@ function App() {
     // Hydrate the workbench from extension storage exactly once after the iframe boots.
     setIsRegistry(true);
     chrome.storage.local.get(
-      ['ajaxDataList', 'ajaxToolsSwitchOn', 'ajaxToolsSkin', 'ajaxToolsExpandAll', SELECTED_GROUP_INDEX_STORAGE_KEY],
+      ['ajaxDataList', 'ajaxToolsSwitchOn', 'ajaxToolsSkin', 'ajaxToolsExpandAll', SELECTED_GROUP_INDEX_STORAGE_KEY, 'ajaxToolsActiveTab'],
       (result) => {
         const {
           ajaxDataList = [],
@@ -120,6 +120,7 @@ function App() {
           ajaxToolsSkin = 'light',
           ajaxToolsExpandAll = false,
           [SELECTED_GROUP_INDEX_STORAGE_KEY]: selectedGroupIndex = 0,
+          ajaxToolsActiveTab,
         } = result;
 
         if (ajaxDataList.length > 0) {
@@ -130,6 +131,15 @@ function App() {
         setAjaxToolsSwitchOn(ajaxToolsSwitchOn);
         setAjaxToolsSkin(ajaxToolsSkin);
         setAjaxToolsExpandAll(ajaxToolsExpandAll);
+
+        // Restore the last-active tab. Validate against the known tab keys so
+        // a stale/renamed value never renders a blank panel.
+        if (typeof ajaxToolsActiveTab === 'string') {
+          const valid = WORKBENCH_TABS.some((t) => t.key === ajaxToolsActiveTab);
+          if (valid) {
+            setActiveTab(ajaxToolsActiveTab as WorkbenchTabKey);
+          }
+        }
       }
     );
   }, [isRegistry, setAjaxDataList, setAjaxToolsExpandAll, setAjaxToolsSkin, setAjaxToolsSwitchOn, setIsRegistry]);
@@ -144,6 +154,16 @@ function App() {
       setSelectedGroupIndex(ajaxDataList.length - 1);
     }
   }, [ajaxDataList, selectedGroupIndex]);
+
+  // Persist the active tab so reloading the workbench (or reopening it later)
+  // returns the user to where they left off. Skips the very first render's
+  // default ('rules') hydration — the hydrate effect above overrides it from
+  // storage anyway, and we don't want to overwrite a stored custom tab with
+  // the default before hydration runs.
+  useEffect(() => {
+    if (!chrome.storage) return;
+    chrome.storage.local.set({ ajaxToolsActiveTab: activeTab });
+  }, [activeTab]);
 
   useEffect(() => {
     if (!chrome.storage) return;

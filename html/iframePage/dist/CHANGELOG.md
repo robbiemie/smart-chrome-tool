@@ -1,5 +1,16 @@
 # Build Changelog
 
+## v0.0.80
+
+- Built At: 2026-08-13T07:45:52.342Z
+- Previous Version: v0.0.79
+- Git Branch: master
+- Git Commit: 4d907624
+
+### Changed Files
+- html/iframePage/stats.html
+
+
 ## v0.0.79
 
 - Built At: 2026-08-11T15:08:32.113Z

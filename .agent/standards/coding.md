@@ -10,7 +10,29 @@
   in the relevant Chrome context as-is.
 - **Workbench** (`html/iframePage/`): TypeScript + React 18. New files default
   to `.ts`/`.tsx`.
-- **No test files** — verification is manual (see `setup.md`).
+- **No test files** — verification is manual (see `setup.md` and the
+  Verification section below).
+
+## Verification (build ≠ verified)
+
+`node build.js` runs `vite build`, which uses **esbuild** to transpile
+TypeScript. Esbuild strips types WITHOUT full type-checking — it does not catch:
+
+- **Undefined references** (e.g. `useCallback` used but not imported from React
+  — the build succeeds, the component crashes at runtime inside
+  `withErrorBoundary` showing "Module unavailable").
+- **Type mismatches** that `tsc --noEmit` would flag.
+
+So a green build only proves the code bundles, not that it runs. Before
+declaring a change done, do ONE of:
+
+1. Run `npx tsc --noEmit` inside `html/iframePage/` to catch type/undefined-ref
+   errors (fast, catches the common pitfalls).
+2. Load the extension in Chrome and exercise the changed flow manually.
+
+Option 1 is the cheap default; option 2 is required for cross-context flows
+(SW ↔ content ↔ iframe) where type-checking alone can't catch message-shape
+mismatches or runtime context errors.
 
 ## Naming
 

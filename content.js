@@ -4082,6 +4082,7 @@ window.addEventListener('message', (event) => {
   }
   startDomInspector();
 });
+
 injectedCss('icons/iconfont/iconfont.css');
 injectedScript('html/iframePage/mock.js');
 // Inject the dev-mode flag into the PAGE context before pageScripts loads,
