@@ -82,12 +82,14 @@ function App() {
   const {
     visible: pageHeadersVisible,
     enabled: pageHeadersEnabled,
+    matchMode: pageHeadersMatchMode,
     quickEnabled: pageHeadersQuickEnabled,
     quickToggling: pageHeadersToggling,
     pageOrigin,
     headerPairs,
     setVisible: setPageHeadersVisible,
     setEnabled: setPageHeadersEnabled,
+    setMatchMode: setPageHeadersMatchMode,
     addHeaderPair,
     removeHeaderPair,
     updateHeaderPair,
@@ -451,10 +453,12 @@ function App() {
       <PageHeadersModal
         visible={pageHeadersVisible}
         enabled={pageHeadersEnabled}
+        matchMode={pageHeadersMatchMode}
         pageOrigin={pageOrigin}
         headerPairs={headerPairs}
         setVisible={setPageHeadersVisible}
         setEnabled={setPageHeadersEnabled}
+        setMatchMode={setPageHeadersMatchMode}
         addHeaderPair={addHeaderPair}
         removeHeaderPair={removeHeaderPair}
         updateHeaderPair={updateHeaderPair}

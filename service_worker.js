@@ -284,6 +284,41 @@ function normalizeResourceTypes(resourceTypes) {
   return filtered.length > 0 ? filtered : SUPPORTED_RESOURCE_TYPES;
 }
 
+// Derive the initiator hostname for an 'all' match-mode rule. The rule id is
+// `origin:<origin>` (see usePageHeaders.buildRuleId), so we prefer that. If the
+// id does not carry the origin (e.g. a hand-edited rule), fall back to parsing
+// the `||hostname^` urlFilter. Returns '' if neither yields a hostname, in
+// which case the caller falls back to urlFilter (same-origin) behavior.
+function getRuleHostname(rule) {
+  const ruleId = String(rule?.id || '');
+  if (ruleId.startsWith('origin:')) {
+    const origin = ruleId.slice('origin:'.length);
+    const parsed = parseUrl(origin);
+    if (parsed?.hostname) return parsed.hostname;
+  }
+  const urlFilter = String(rule?.condition?.urlFilter || '');
+  const match = /^\|\|([^|^]+)\^/.exec(urlFilter);
+  return match ? match[1] : '';
+}
+
+// Build the DNR condition for a header rule. 'all' matches every request
+// initiated by the page (cross-origin included) via initiatorDomains;
+// 'sameOrigin' (and the default for pre-feature rules without the field)
+// matches only requests targeting the page's host via urlFilter.
+function buildRuleCondition(rule) {
+  const resourceTypes = normalizeResourceTypes(rule?.condition?.resourceTypes);
+  const matchMode = String(rule?.condition?.matchMode || 'sameOrigin');
+  if (matchMode === 'all') {
+    const hostname = getRuleHostname(rule);
+    if (hostname) {
+      return { initiatorDomains: [hostname], resourceTypes };
+    }
+    // Cannot derive an initiator domain — fall back to same-origin matching.
+    return { urlFilter: String(rule?.condition?.urlFilter || ''), resourceTypes };
+  }
+  return { urlFilter: String(rule?.condition?.urlFilter || ''), resourceTypes };
+}
+
 function shouldSkipHeaderKey(headerKey) {
   const lowerKey = headerKey.toLowerCase();
   if (FORBIDDEN_REQUEST_HEADERS.has(lowerKey)) return true;
@@ -345,10 +380,7 @@ function compileDynamicRules(profiles) {
           type: 'modifyHeaders',
           requestHeaders,
         },
-        condition: {
-          urlFilter,
-          resourceTypes: normalizeResourceTypes(rule?.condition?.resourceTypes),
-        },
+        condition: buildRuleCondition(rule),
       });
     });
   });
@@ -382,6 +414,7 @@ function makeRuleForOrigin(origin, config) {
     enabled: config?.enabled !== false,
     condition: {
       urlFilter: `||${parsed.hostname}^`,
+      matchMode: 'sameOrigin',
       resourceTypes: SUPPORTED_RESOURCE_TYPES,
     },
     headers: headerList,

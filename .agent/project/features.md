@@ -66,12 +66,31 @@ Interceptor off flips every header rule's `enabled` flag to false and removes
 all DNR dynamic rules; rules do NOT auto-resume when the Interceptor is
 re-enabled and must be toggled back on per origin.
 
+**Match scope (`matchMode`):** each rule's `condition.matchMode` controls which
+requests from the page get the header:
+- `'all'` (default for NEW rules): DNR condition uses `initiatorDomains:
+  [hostname]`, so EVERY request initiated by the page is matched —
+  cross-origin XHR/fetch/sub_frame included. Lets a single header (e.g.
+  `x-debug-mode: 1`) ride on API calls to a different host than the page.
+- `'sameOrigin'`: DNR condition uses `urlFilter: ||hostname^`, so only requests
+  TARGETING the page's own host are matched (original pre-feature behavior;
+  also the implicit default for rules saved before this field existed and for
+  legacy `ajaxToolsPageHeadersMap` migrations, to avoid surprising existing
+  configs).
+
+The scope is chosen in `PageHeadersModal` via a Radio (`All requests` /
+`Same-origin only`) and stored on the rule condition; the SW `buildRuleCondition`
+picks the DNR condition shape. Note: in `'all'` mode, the page's own top-level
+navigation (`main_frame` from a direct URL/reload) may not match
+`initiatorDomains` (no initiator) — XHR/fetch/sub_frame (the debug targets) do.
+
 **Lives in:**
 - Rule compilation: `service_worker.js` (`compileDynamicRules`,
-  `syncHeaderRules`, `buildRuleId`, `normalizeHeaderOperations`)
+  `buildRuleCondition`, `getRuleHostname`, `syncHeaderRules`, `buildRuleId`,
+  `normalizeHeaderOperations`)
 - Storage: `ajaxToolsHeaderProfiles`, `ajaxToolsManagedHeaderRuleIds`
 - UI: `html/iframePage/main/components/PageHeadersModal/`,
-  `hooks/usePageHeaders.ts`
+  `hooks/usePageHeaders.ts` (`HeaderMatchMode`, `matchMode` state)
 - Sync trigger: `SYNC_PAGE_HEADERS_RULES` message + `storage.onChanged`
 
 **Rule-ID model:** `930000 + hash(profileId:ruleId) % 70000`; forbidden headers

@@ -1,23 +1,38 @@
 import React from 'react';
-import { Button, Input, Modal, Space, Switch } from 'antd';
+import { Button, Input, Modal, Radio, Space, Switch } from 'antd';
 import { DeleteOutlined, PlusOutlined } from '@ant-design/icons';
-import { HeaderPairItem } from '../../hooks/usePageHeaders';
+import { HeaderMatchMode, HeaderPairItem } from '../../hooks/usePageHeaders';
 
 interface PageHeadersModalProps {
   visible: boolean;
   enabled: boolean;
+  matchMode: HeaderMatchMode;
   pageOrigin: string;
   headerPairs: HeaderPairItem[];
   setVisible: (v: boolean) => void;
   setEnabled: (v: boolean) => void;
+  setMatchMode: (v: HeaderMatchMode) => void;
   addHeaderPair: () => void;
   removeHeaderPair: (id: string) => void;
   updateHeaderPair: (id: string, field: 'keyText' | 'valueText', value: string) => void;
-  onSave: (nextPairs: HeaderPairItem[], nextEnabled: boolean) => Promise<boolean>;
+  onSave: (nextPairs: HeaderPairItem[], nextEnabled: boolean, nextMatchMode: HeaderMatchMode) => Promise<boolean>;
 }
 
 const PageHeadersModal = (props: PageHeadersModalProps) => {
-  const { visible, enabled, pageOrigin, headerPairs, setVisible, setEnabled, addHeaderPair, removeHeaderPair, updateHeaderPair, onSave } = props;
+  const {
+    visible,
+    enabled,
+    matchMode,
+    pageOrigin,
+    headerPairs,
+    setVisible,
+    setEnabled,
+    setMatchMode,
+    addHeaderPair,
+    removeHeaderPair,
+    updateHeaderPair,
+    onSave,
+  } = props;
   return (
     <Modal
       centered
@@ -28,7 +43,7 @@ const PageHeadersModal = (props: PageHeadersModalProps) => {
       cancelText="Cancel"
       onCancel={() => setVisible(false)}
       onOk={async () => {
-        await onSave(headerPairs, enabled);
+        await onSave(headerPairs, enabled, matchMode);
       }}
     >
       <div style={{ marginBottom: 12 }}>
@@ -39,10 +54,25 @@ const PageHeadersModal = (props: PageHeadersModalProps) => {
           onChange={(v) => setEnabled(v)}
         />
       </div>
+      <div style={{ marginBottom: 12 }}>
+        <Radio.Group
+          value={matchMode}
+          onChange={(e) => setMatchMode(e.target.value as HeaderMatchMode)}
+          optionType="button"
+          buttonStyle="solid"
+          size="small"
+        >
+          <Radio.Button value="all">All requests</Radio.Button>
+          <Radio.Button value="sameOrigin">Same-origin only</Radio.Button>
+        </Radio.Group>
+        <div style={{ fontSize: 12, color: '#666', marginTop: 4 }}>
+          All requests: add headers to every request initiated by this page (cross-origin included). Same-origin only: only requests targeting this page&apos;s host.
+        </div>
+      </div>
       <div style={{ fontSize: 12, color: '#666', marginBottom: 10 }}>
         Add key/value pairs below. Empty keys are ignored when saving.
       </div>
-      <div style={{ maxHeight: 'calc(100vh - 340px)', overflowY: 'auto', paddingRight: 4 }}>
+      <div style={{ maxHeight: 'calc(100vh - 400px)', overflowY: 'auto', paddingRight: 4 }}>
         {headerPairs.map((item) => (
           <Space key={item.id} style={{ display: 'flex', marginBottom: 8 }} align="start">
             <Input

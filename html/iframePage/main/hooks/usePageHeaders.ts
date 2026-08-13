@@ -1,12 +1,15 @@
 import { useCallback, useEffect, useState } from 'react';
 import { notification } from 'antd';
 
+export type HeaderMatchMode = 'all' | 'sameOrigin';
+
 interface HeaderRuleItem {
   id: string;
   name: string;
   enabled: boolean;
   condition: {
     urlFilter: string;
+    matchMode?: HeaderMatchMode;
     resourceTypes: string[];
   };
   headers: Array<{
@@ -131,6 +134,7 @@ const getProfilesFromStorage = async (): Promise<HeaderProfile[]> => {
       enabled: legacyMap[origin]?.enabled !== false,
       condition: {
         urlFilter: normalizeUrlFilter(origin),
+        matchMode: 'sameOrigin' as HeaderMatchMode,
         resourceTypes: ['main_frame', 'sub_frame', 'xmlhttprequest'],
       },
       headers: headersObjectToRuleHeaders(legacyMap[origin]?.headers || {}),
@@ -167,6 +171,7 @@ export const usePageHeaders = () => {
   const [visible, setVisible] = useState(false);
   const [enabled, setEnabled] = useState(true);
   const [headerPairs, setHeaderPairs] = useState<HeaderPairItem[]>([createHeaderPair()]);
+  const [matchMode, setMatchMode] = useState<HeaderMatchMode>('all');
   const [quickEnabled, setQuickEnabled] = useState(false);
   const [hasConfiguredHeaders, setHasConfiguredHeaders] = useState(false);
   const [quickToggling, setQuickToggling] = useState(false);
@@ -199,9 +204,16 @@ export const usePageHeaders = () => {
       return acc;
     }, {});
     const nextEnabled = rule?.enabled ?? false;
+    // Brand-new rule (none stored yet) defaults to 'all' per the feature's
+    // default. Pre-existing rules saved before this field existed are
+    // treated as 'sameOrigin' to preserve their original behavior.
+    const nextMatchMode: HeaderMatchMode = rule
+      ? (rule.condition?.matchMode ?? 'sameOrigin')
+      : 'all';
     setQuickEnabled(nextEnabled);
+    setMatchMode(nextMatchMode);
     setHasConfiguredHeaders(Object.keys(headers).length > 0);
-    return { headers, enabled: nextEnabled };
+    return { headers, enabled: nextEnabled, matchMode: nextMatchMode };
   }, [pageOrigin]);
 
   const load = useCallback(async () => {
@@ -221,7 +233,7 @@ export const usePageHeaders = () => {
     setVisible(true);
   }, [load]);
 
-  const save = useCallback(async (nextPairs: HeaderPairItem[], nextEnabled: boolean) => {
+  const save = useCallback(async (nextPairs: HeaderPairItem[], nextEnabled: boolean, nextMatchMode: HeaderMatchMode) => {
     if (!chrome.storage) return false;
     if (!pageOrigin) {
       notification.error({
@@ -247,6 +259,7 @@ export const usePageHeaders = () => {
         enabled: nextEnabled,
         condition: {
           urlFilter: normalizeUrlFilter(pageOrigin),
+          matchMode: nextMatchMode,
           resourceTypes: ['main_frame', 'sub_frame', 'xmlhttprequest'],
         },
         headers: headersObjectToRuleHeaders(normalizedHeaders),
@@ -261,6 +274,7 @@ export const usePageHeaders = () => {
       });
       await syncPageHeadersRules();
       setEnabled(nextEnabled);
+      setMatchMode(nextMatchMode);
       setHeaderPairs(mapToHeaderPairs(normalizedHeaders));
       setQuickEnabled(nextEnabled);
       setHasConfiguredHeaders(Object.keys(normalizedHeaders).length > 0);
@@ -307,7 +321,8 @@ export const usePageHeaders = () => {
       const pairs = (hasLatestHeaders || !nextEnabled)
         ? latestPairs
         : [createHeaderPair(DEFAULT_HEADER_KEY, DEFAULT_HEADER_VALUE)];
-      const result = await save(pairs, nextEnabled);
+      const nextMatchMode = latestMeta?.matchMode ?? 'all';
+      const result = await save(pairs, nextEnabled, nextMatchMode);
       if (result && !hasLatestHeaders && nextEnabled) {
         notification.success({
           message: 'Enabled quickly',
@@ -323,6 +338,7 @@ export const usePageHeaders = () => {
   return {
     visible,
     enabled,
+    matchMode,
     quickEnabled,
     hasConfiguredHeaders,
     quickToggling,
@@ -330,6 +346,7 @@ export const usePageHeaders = () => {
     headerPairs,
     setVisible,
     setEnabled,
+    setMatchMode,
     addHeaderPair,
     removeHeaderPair,
     updateHeaderPair,
