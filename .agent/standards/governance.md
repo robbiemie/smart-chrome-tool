@@ -1,8 +1,8 @@
 # Governance — Documentation Sync Rule
 
 > **Mandatory rule for every agent (human or AI) working on this repo.**
-> This is the mechanism that keeps `.agent/project/features.md` alive without
-> a separate "docs maintenance" step.
+> This is the mechanism that keeps the `.agent/modules/` feature catalog alive
+> without a separate "docs maintenance" step.
 
 ## Design-first for non-trivial features
 
@@ -15,8 +15,8 @@ modal vs. inline).
 Why: this repo has no CI gate and no tests, so a wrong design is only caught
 after full implementation + manual load — expensive rework. A 30-second design
 confirmation (sketch the data flow + UI shape in text, ask "this direction?")
-saves a full rewrite. Do NOT doc-sync `features.md` until the design is stable
-— rewriting the doc on every design pivot is wasteful.
+saves a full rewrite. Do NOT doc-sync the module docs until the design is
+stable — rewriting the doc on every design pivot is wasteful.
 
 Trivial changes (bug fix, style tweak, adding a field to an existing modal)
 skip this step.
@@ -24,7 +24,8 @@ skip this step.
 ## The rule
 
 **When you add, remove, or materially change a core feature, you MUST update
-`.agent/project/features.md` in the same change set.**
+the relevant module file in `.agent/modules/` (and the index in
+`modules/README.md`) in the same change set.**
 
 "Core feature" = any user-facing capability that an agent would need to know
 about to understand the project: a new interception mode, a new panel, a new
@@ -35,20 +36,22 @@ NOT require a doc update.
 
 ## Why
 
-- `.agent/project/features.md` is the index every agent reads first to orient
-  itself. If it drifts, every subsequent agent starts with a wrong model.
+- [`modules/README.md`](../modules/README.md) is the index every agent reads
+  first to orient itself. If it drifts, every subsequent agent starts with a
+  wrong model.
 - There is no CI gate; the contract is social + enforced by this instruction.
   Treating it as part of the change (like a test) is what keeps it accurate.
 
-## How to update `features.md`
+## How to update the module docs
 
-1. Open `.agent/project/features.md`.
-2. Append a new numbered section **above** the trailing
-   `<!-- NEW FEATURES GO HERE -->` comment, or edit the existing section if
-   changing a feature.
-3. Use the existing entry format:
+The feature catalog lives in [`.agent/modules/`](../modules/) — one file per
+module, indexed by [`modules/README.md`](../modules/README.md).
+
+1. Decide which existing module file the feature belongs to. If none fits,
+   create a new `modules/<name>.md` (one cohesive capability per file).
+2. Append a section to that module file using the standard format:
    ```markdown
-   ## N. <Feature name>
+   ## <Feature name> (§N)
 
    **Summary:** One or two sentences: what it does.
 
@@ -58,6 +61,8 @@ NOT require a doc update.
 
    **Wiring:** Brief data/flow notes (storage key, message types, triggers).
    ```
+3. Add (or update) a row in the index table in
+   [`modules/README.md`](../modules/README.md).
 4. Reference source with `path:line` where it aids navigation.
 
 ## Companion updates
@@ -66,11 +71,11 @@ If your feature introduces any of these, also update:
 
 | You added... | Also update |
 | --- | --- |
-| A new `chrome.storage` key | `../project/tech-detail.md` → Storage keys table |
-| A new cross-context message type | `../project/tech-detail.md` → Message types table |
-| A new runtime file or major module | `../project/tech-detail.md` → Module map |
-| A new permission in `manifest.json` | `../project/context.md` (note it) |
-| A new build/publish flag | `../project/setup.md` → Build section |
+| A new `chrome.storage` key | [`../reference/storage-keys.md`](../reference/storage-keys.md) |
+| A new cross-context message type | [`../reference/message-types.md`](../reference/message-types.md) |
+| A new runtime file or major module | [`../reference/module-map.md`](../reference/module-map.md) |
+| A new permission in `manifest.json` | [`../architecture/context.md`](../architecture/context.md) (note it) |
+| A new build/publish flag | [`../setup/setup.md`](../setup/setup.md) → Build section |
 
 ## Third-party API integration — verify before shipping
 
@@ -93,10 +98,14 @@ If you cannot verify a fact (no access, paywalled docs), mark it with a
 ## Checklist before finishing a feature change
 
 - [ ] Design confirmed with user BEFORE implementing (non-trivial features)
-- [ ] `features.md` updated (new section or edited section)
-- [ ] `tech-detail.md` tables updated if keys/messages/modules changed
-- [ ] `context.md` / `setup.md` updated if architecture or build changed
-- [ ] Code follows `coding.md`
+- [ ] Module doc updated (new section or edited section) + `modules/README.md`
+      index row
+- [ ] [`../reference/`](../reference/) tables updated if keys/messages/modules
+      changed
+- [ ] [`../architecture/context.md`](../architecture/context.md) /
+      [`../setup/setup.md`](../setup/setup.md) updated if architecture or build
+      changed
+- [ ] Code follows [`coding.md`](./coding.md)
 - [ ] `manifest.json` version untouched (bump only via `build.js`)
 - [ ] **Build ≠ verified** — `node build.js` only bundles; it does NOT
       type-check (esbuild strips types without catching undefined refs). After
@@ -104,13 +113,14 @@ If you cannot verify a fact (no access, paywalled docs), mark it with a
       load the extension and exercise the changed flow. A green build does NOT
       mean the feature works.
 - [ ] **No Chinese in code** — grep the changed files for non-ASCII chars in
-      strings/comments/logs. `coding.md:32` already forbids it; this is the
-      enforcement check. (Style files `.css` are exempt.)
+      strings/comments/logs. [`coding.md`](./coding.md) already forbids it;
+      this is the enforcement check. (Style files `.css` are exempt.)
 - [ ] **External API facts verified** — model IDs, endpoints, dashboard URLs,
       and provider constraints checked against current docs (see section above).
 
 ## Failure mode
 
 If you (an agent) realize mid-task that an earlier feature was never
-documented, add it to `features.md` as part of your change. Backfilling is
-always welcome — the catalog should converge toward completeness over time.
+documented, add it to the appropriate module file in `.agent/modules/` as part
+of your change. Backfilling is always welcome — the catalog should converge
+toward completeness over time.

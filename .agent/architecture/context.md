@@ -2,7 +2,9 @@
 
 > Architecture overview and runtime model. Read this before editing any of the
 > three context-bound files (`service_worker.js`, `content.js`,
-> `pageScripts/index.js`).
+> `pageScripts/index.js`). For an end-to-end trace of a rule firing, see
+> [`data-flow.md`](./data-flow.md); for lookup tables see
+> [`../reference/`](../reference/).
 
 ## What it does
 
@@ -116,7 +118,7 @@ PAGE (pageScripts)  ──postMessage──▶  CONTENT (content.js)  ──runt
         └──── MOCKKIT_MOCK_CAPTURE ────┘  (sniffer Mock → promote to rule)
 ```
 
-Concrete message types (see `tech-detail.md` for the full table):
+Concrete message types (see [`../reference/message-types.md`](../reference/message-types.md) for the full table):
 
 - `AJAX_TOOLS_RULE_HIT` (page → content): light up a rule's green dot.
 - `AJAX_TOOLS_CAPTURED_REQUEST` (page → content → iframe): feed the sniffer.
@@ -125,13 +127,15 @@ Concrete message types (see `tech-detail.md` for the full table):
 - `GET_PAGE_RENDER_MODE` / `SET_PAGE_RENDER_MODE` (iframe → SW): CSR toggle.
 - `CHECK_UPDATE` / `RELOAD_EXTENSION` (iframe → SW): self-update.
 
+For an end-to-end trace of a single rule firing, see [`data-flow.md`](./data-flow.md).
+
 ## Storage model
 
 Single namespace: `chrome.storage.local`. Keys are prefixed `ajaxTools*`
 (legacy/interceptor) and `ajaxToolsHeader*` / `mockkit*` (newer). The React
 workbench and the floating panel both read/write the same keys, so
 `chrome.storage.onChanged` is the cross-context sync bus. Authoritative key
-list: `.agent/project/tech-detail.md`.
+list: [`../reference/storage-keys.md`](../reference/storage-keys.md).
 
 ## Non-goals / constraints
 

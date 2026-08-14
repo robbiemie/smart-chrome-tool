@@ -36,27 +36,37 @@ smart-chrome-tool/
 │   ├── common/              # Shared types & defaults (value.ts)
 │   └── package.json
 └── .agent/                  # ← Structured agent context (read these)
+    ├── README.md            # Navigation index — start here
+    ├── architecture/        # context.md (runtime model), data-flow.md
+    ├── setup/               # setup.md (build / dev / load / publish)
+    ├── reference/           # tech-stack, module-map, storage-keys, message-types, dnr-rule-ids
+    ├── modules/             # Feature catalog — one file per module + README index
+    └── standards/           # coding.md, governance.md (doc-sync rule)
 ```
 
 ## Where to look for what
 
 | Topic | File |
 | --- | --- |
-| Architecture, runtime contexts, message flow | [`.agent/project/context.md`](./.agent/project/context.md) |
-| Build, dev, load-into-Chrome, publish | [`.agent/project/setup.md`](./.agent/project/setup.md) |
-| Tech stack, modules, data flow, storage keys | [`.agent/project/tech-detail.md`](./.agent/project/tech-detail.md) |
-| **Core feature catalog** (living doc, keep in sync) | [`.agent/project/features.md`](./.agent/project/features.md) |
+| Navigation index (start here) | [`.agent/README.md`](./.agent/README.md) |
+| Architecture, runtime contexts, message flow | [`.agent/architecture/context.md`](./.agent/architecture/context.md) |
+| End-to-end rule-firing data flow | [`.agent/architecture/data-flow.md`](./.agent/architecture/data-flow.md) |
+| Build, dev, load-into-Chrome, publish | [`.agent/setup/setup.md`](./.agent/setup/setup.md) |
+| Tech stack & module map | [`.agent/reference/tech-stack.md`](./.agent/reference/tech-stack.md) · [`module-map.md`](./.agent/reference/module-map.md) |
+| Storage keys & message types (lookup) | [`.agent/reference/storage-keys.md`](./.agent/reference/storage-keys.md) · [`message-types.md`](./.agent/reference/message-types.md) |
+| **Core feature catalog** (living doc, keep in sync) | [`.agent/modules/README.md`](./.agent/modules/README.md) (index → per-module files) |
 | Code conventions | [`.agent/standards/coding.md`](./.agent/standards/coding.md) |
 | **Governance: mandatory doc-sync rule for new features** | [`.agent/standards/governance.md`](./.agent/standards/governance.md) |
 
 ## Working agreement (must follow)
 
-1. **Before touching code**, skim `.agent/project/context.md` and
-   `.agent/project/tech-detail.md` so you understand the three execution
-   contexts (service worker / content script / page script) and the message
-   bus between them.
-2. **When you add or change a core feature**, you MUST update
-   `.agent/project/features.md` in the same change — see
+1. **Before touching code**, skim [`.agent/architecture/context.md`](./.agent/architecture/context.md)
+   and [`.agent/reference/module-map.md`](./.agent/reference/module-map.md) so
+   you understand the three execution contexts (service worker / content
+   script / page script) and the message bus between them.
+2. **When you add or change a core feature**, you MUST update the relevant
+   file in [`.agent/modules/`](./.agent/modules/) (and its index row in
+   [`modules/README.md`](./.agent/modules/README.md)) in the same change — see
    [`.agent/standards/governance.md`](./.agent/standards/governance.md). This is
    the "auto-supplement" contract: the doc stays alive because every agent
    edits it on every feature change.
@@ -75,7 +85,7 @@ smart-chrome-tool/
 - **Load unpacked:** `chrome://extensions` → Developer mode → Load unpacked →
   pick project root (must contain rebuilt `html/iframePage/dist`).
 - **Storage keys** are prefixed `ajaxTools*` / `mockkit*`; the authoritative
-  list lives in `.agent/project/tech-detail.md`.
+  list lives in [`.agent/reference/storage-keys.md`](./.agent/reference/storage-keys.md).
 - **No test framework is configured.** Verify changes by loading the extension
   and exercising the relevant flow.
 

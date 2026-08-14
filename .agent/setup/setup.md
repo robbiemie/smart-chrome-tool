@@ -118,4 +118,4 @@ There is no automated test framework. Verify changes by:
 2. Opening a target page and exercising the relevant flow (interception,
   header rules, CSR, DOM inspect, sniffer, update).
 3. Checking the service-worker console (`chrome://extensions` → "inspect
-  views: service worker`) and the page console for errors.
+  views: service worker") and the page console for errors.

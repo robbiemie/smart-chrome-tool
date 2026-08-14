@@ -10,8 +10,8 @@
   in the relevant Chrome context as-is.
 - **Workbench** (`html/iframePage/`): TypeScript + React 18. New files default
   to `.ts`/`.tsx`.
-- **No test files** — verification is manual (see `setup.md` and the
-  Verification section below).
+- **No test files** — verification is manual (see
+  [`../setup/setup.md`](../setup/setup.md) and the Verification section below).
 
 ## Verification (build ≠ verified)
 
@@ -75,9 +75,9 @@ mismatches or runtime context errors.
 - Content script ↔ page script: `window.postMessage` only; the page script has
   no `chrome.*` access.
 - When adding a new storage key, add it to the table in
-  `../project/tech-detail.md`.
+  [`../reference/storage-keys.md`](../reference/storage-keys.md).
 - When adding a new message type, add it to the message table in
-  `../project/tech-detail.md`.
+  [`../reference/message-types.md`](../reference/message-types.md).
 
 ## Versioning
 
