@@ -8,8 +8,9 @@
 
 **Summary:** A lightweight DOM panel rendered by `content.js` directly on the
 page (not React), showing current group's rules with on/off toggles, hit dots,
-drag-to-move, collapse, CSR + inspect buttons. Lets users toggle rules without
-opening the full workbench.
+drag-to-move, collapse, CSR + inspect buttons, and per-rule Edit / Inline Edit /
+Fork / Delete actions. Lets users toggle and manage rules without opening the
+full workbench.
 
 **Lives in:**
 - `content.js` (`createFloatingRulesPanel`, `renderFloatingRules`,
@@ -49,6 +50,14 @@ other top-right overlays (Animation).
 force-hides the panel (persists `ajaxToolsFloatingRulesEnabled = false`). The
 panel stays hidden after the Interceptor is re-enabled and must be toggled
 back on manually.
+
+**Per-row actions (hover-revealed):** each rule row exposes, in order, a pill
+toggle, an Inline Edit pencil, `Edit`, `Fork`, and `Delete`. The `Delete`
+button removes the rule from its group via `chrome.storage.local` mutation —
+it also drops the rule's key from `collapseActiveKeys` to mirror the
+workbench's `onInterfaceListDelete` (`useRegistry.ts`) and keep the React UI
+in sync. A native `window.confirm` guards the action because deletion is
+irreversible from this lightweight surface.
 
 ---
 

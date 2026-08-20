@@ -493,6 +493,27 @@ injectedStyle(`
     background: rgb(27 40 34 / 8%);
     color: #1b2822;
   }
+  .mockkit-floating-rules__item-delete {
+    flex-shrink: 0;
+    padding: 3px 8px;
+    border: none;
+    border-radius: 7px;
+    background: transparent;
+    cursor: pointer;
+    color: rgb(220 38 38 / 70%);
+    font-size: 11px;
+    font-weight: 600;
+    line-height: 1.4;
+    opacity: 0;
+    transition: all 0.15s ease;
+  }
+  .mockkit-floating-rules__item:hover .mockkit-floating-rules__item-delete {
+    opacity: 1;
+  }
+  .mockkit-floating-rules__item-delete:hover {
+    background: rgb(220 38 38 / 12%);
+    color: #dc2626;
+  }
   .mockkit-floating-rules__item-inline-edit {
     flex-shrink: 0;
     width: 26px;
@@ -4889,6 +4910,41 @@ function renderFloatingRules() {
       row.appendChild(inlineEditBtn);
       row.appendChild(editBtn);
 
+      // Delete entry: removes the current rule from its group. Mirrors the
+      // workbench's onInterfaceListDelete by also dropping the rule's key
+      // from collapseActiveKeys so the React UI stays in sync. A native
+      // confirm guards the action because deletion is irreversible from
+      // this lightweight surface.
+      const deleteBtn = document.createElement('button');
+      deleteBtn.type = 'button';
+      deleteBtn.className = 'mockkit-floating-rules__item-delete';
+      deleteBtn.textContent = 'Delete';
+      deleteBtn.title = 'Delete this rule';
+      deleteBtn.addEventListener('click', (event) => {
+        event.stopPropagation();
+        if (!window.confirm('Delete this rule? This cannot be undone.')) return;
+        chrome.storage.local.get(['ajaxDataList'], (storageResult) => {
+          const nextList = storageResult?.ajaxDataList || [];
+          if (!nextList[groupIndex]) return;
+          const targetGroup = nextList[groupIndex];
+          const sourceRule = targetGroup.interfaceList[ruleIndex];
+          if (!sourceRule) return;
+          const ruleKey = sourceRule.key;
+
+          const nextAjaxDataList = nextList.map((grp, idx) => {
+            if (idx !== groupIndex) return grp;
+            return {
+              ...grp,
+              interfaceList: grp.interfaceList.filter((_, i) => i !== ruleIndex),
+              collapseActiveKeys: (grp.collapseActiveKeys || []).filter(
+                (activeKey) => activeKey !== ruleKey
+              ),
+            };
+          });
+          chrome.storage.local.set({ ajaxDataList: nextAjaxDataList });
+        });
+      });
+
       // Fork entry: deep-copy the current rule into a backup inserted right
       // after this row. The clone gets a fresh key and is auto-expanded so
       // the user can immediately tell the copy succeeded.
@@ -4925,6 +4981,7 @@ function renderFloatingRules() {
         });
       });
       row.appendChild(forkBtn);
+      row.appendChild(deleteBtn);
 
       listEl.appendChild(row);
     });
