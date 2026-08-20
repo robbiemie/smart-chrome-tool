@@ -5145,7 +5145,7 @@ function bindPanelMessageListener(container) {
 // the host page alongside the other Toolkit sub-tools, keeping the iframe
 // focused on rule editing.
 const SNIFFER_PANEL_ID = 'mockkit-sniffer-panel';
-const SNIFFER_MAX_CAPTURES = 100;
+const SNIFFER_MAX_CAPTURES = 500;
 // Persisted sniffer sub-toggle state so a page refresh restores it. Lives
 // under the Toolkit panel — only meaningful when the Toolkit is visible, but
 // stored independently so the state survives even if the user closes Toolkit.
@@ -5157,6 +5157,8 @@ let snifferState = {
   keyword: '',       // search filter (method or url substring)
   visible: false,
   collapsed: false,  // when true, only the header bar is visible
+  dirty: false,      // captures arrived while hidden/collapsed — render on show
+  renderPending: false, // rAF coalesce flag — prevents per-capture DOM thrash
 };
 
 function injectSnifferStyle() {
@@ -5561,6 +5563,25 @@ function createSnifferPanel() {
   return panel;
 }
 
+// Coalesce rapid captures into a single rAF render. High-traffic pages can
+// push dozens of captures per second; rebuilding the DOM on each one thrashes
+// the list and resets the user's scroll position, making it impossible to read
+// or search. Batching into one render per frame keeps the list stable.
+function scheduleSnifferRender() {
+  // Skip rendering while the panel is hidden or collapsed — just mark dirty
+  // so the next show/expand renders the freshest state once.
+  if (!snifferState.visible || snifferState.collapsed) {
+    snifferState.dirty = true;
+    return;
+  }
+  if (snifferState.renderPending) return;
+  snifferState.renderPending = true;
+  requestAnimationFrame(() => {
+    snifferState.renderPending = false;
+    renderSnifferList();
+  });
+}
+
 // Filter the capture list by the current keyword (url or method substring).
 function getFilteredSnifferRequests() {
   const trimmed = snifferState.keyword.trim().toLowerCase();
@@ -5571,7 +5592,9 @@ function getFilteredSnifferRequests() {
 }
 
 // Re-render the sniffer list body + count badge. Called whenever captures
-// change or the search keyword updates.
+// change or the search keyword updates. Preserves scroll position across
+// rebuilds so incoming requests don't yank the user back to the top while
+// they're scanning older rows.
 function renderSnifferList() {
   const panel = snifferState.panelEl;
   if (!panel) return;
@@ -5581,6 +5604,10 @@ function renderSnifferList() {
   if (countBadge) countBadge.textContent = String(snifferState.requests.length);
   if (clearBtn) clearBtn.disabled = snifferState.requests.length === 0;
   if (!list) return;
+
+  // Preserve scroll position across the rebuild so a flooding list doesn't
+  // reset the viewport to the top on every incoming request.
+  const prevScrollTop = list.scrollTop;
 
   const filtered = getFilteredSnifferRequests();
   if (filtered.length === 0) {
@@ -5654,6 +5681,9 @@ function renderSnifferList() {
     row.appendChild(mockBtn);
     list.appendChild(row);
   });
+
+  // Restore scroll position after the rebuild so the viewport stays put.
+  list.scrollTop = prevScrollTop;
 }
 
 // Push a new capture into the ring buffer and re-render. Called from the
@@ -5677,7 +5707,7 @@ function pushSnifferCapture(payload) {
     capturedAt: Date.now(),
   };
   snifferState.requests = [captured, ...snifferState.requests].slice(0, SNIFFER_MAX_CAPTURES);
-  renderSnifferList();
+  scheduleSnifferRender();
 }
 
 function setSnifferPanelVisible(visible) {
@@ -5687,6 +5717,11 @@ function setSnifferPanelVisible(visible) {
   if (visible) {
     repositionSnifferPanel();
     watchWorkbenchForFloatingOverlays();
+    // If captures arrived while hidden, render the freshest state now.
+    if (snifferState.dirty) {
+      snifferState.dirty = false;
+      renderSnifferList();
+    }
   }
   // Keep the Toolkit panel's sniffer sub-toggle in sync.
   if (!visible && toolkitPanelState.snifferOpen) {
@@ -5708,6 +5743,11 @@ function setSnifferPanelCollapsed(collapsed) {
   if (!panel) return;
   if (panel.style.display !== 'none') {
     panel.style.display = collapsed ? 'none' : 'flex';
+  }
+  // Expanding after captures arrived while collapsed — render the freshest.
+  if (!collapsed && snifferState.dirty) {
+    snifferState.dirty = false;
+    renderSnifferList();
   }
   setPanelCollapsedInDock('sniffer', collapsed);
 }

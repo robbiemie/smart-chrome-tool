@@ -38,10 +38,11 @@ and a different role. Data crosses the boundaries via `window.postMessage` and
 - Runs at `document_start`, `all_frames: true`, on `<all_urls>`.
 - Owns: the floating rules panel, the DOM Inspector, the iframe workbench host
   (mounts the React app), the **Toolkit master panel** (consolidates Floating
-  Rules / DOM Inspect / Animation Control / Request Sniffer as sub-tools), the
-  **Request Sniffer panel** (live XHR/fetch capture list with Mock-to-rule), the
-  **Animation Control popup** (WAAPI + rAF patch), domain-whitelist gating,
-  picture-in-picture / zoom / fullscreen / theme controls for the panel.
+  Rules / DOM Inspect / Animation Control / Request Sniffer
+  as sub-tools), the **Request Sniffer panel** (live XHR/fetch capture list
+  with Mock-to-rule), the **Animation Control popup** (WAAPI + rAF patch),
+  domain-whitelist gating, picture-in-picture / zoom / fullscreen / theme
+  controls for the panel.
 - Holds a runtime mirror of interceptor state on
   `window.__ajaxToolsRuntimeState__` (switch state, domain whitelist, target
   tab id).

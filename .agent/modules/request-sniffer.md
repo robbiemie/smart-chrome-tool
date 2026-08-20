@@ -23,9 +23,10 @@ re-enabled and must be toggled back on manually.
   `if (ajaxToolsSwitchOn && currentHostWhitelisted())` (Interceptor is the
   sole master; Sniffer cannot keep hooks alive on its own)
 - Capture + UI: `content.js` (`createSnifferPanel`, `pushSnifferCapture`,
-  `renderSnifferList`, `setSnifferPanelVisible`, `setToolkitSnifferOpen`,
+  `scheduleSnifferRender` (rAF coalescing), `renderSnifferList` (scroll-preserving),
+  `setSnifferPanelVisible`, `setToolkitSnifferOpen`,
   `repositionSnifferPanel`, `bindSnifferPanelDrag`)
-- State: `snifferState` (`requests` ring buffer max 100, `keyword`, `visible`)
+- State: `snifferState` (`requests` ring buffer max 500, `keyword`, `visible`, `dirty`, `renderPending`)
 - Persistence: `ajaxToolsSnifferPanelOpen` storage key (restored on reload when
   Toolkit is on); `ajaxToolsToolkitPanelVisible` gates the Toolkit master panel
 - Mock promotion: sniffer "Mock" button → `postMessage MOCKKIT_MOCK_CAPTURE`
