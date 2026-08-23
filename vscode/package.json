@@ -1,0 +1,331 @@
+{
+  "name": "stocks-ticker",
+  "displayName": "股票行情",
+  "description": "在命令面板查询港股/美股实时行情，状态栏轮播 + 侧边栏自选股列表。",
+  "version": "0.1.2",
+  "publisher": "robbie",
+  "engines": {
+    "vscode": "^1.80.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "stocksTicker.query",
+        "title": "查询股票",
+        "category": "股票行情",
+        "icon": "$(search)"
+      },
+      {
+        "command": "stocksTicker.addToWatchlist",
+        "title": "添加到自选股",
+        "category": "股票行情",
+        "icon": "$(add)"
+      },
+      {
+        "command": "stocksTicker.removeFromWatchlist",
+        "title": "从自选股移除",
+        "category": "股票行情"
+      },
+      {
+        "command": "stocksTicker.showWatchlist",
+        "title": "查看自选股",
+        "category": "股票行情"
+      },
+      {
+        "command": "stocksTicker.toggleStatusBar",
+        "title": "切换状态栏显示",
+        "category": "股票行情"
+      },
+      {
+        "command": "stocksTicker.refresh",
+        "title": "立即刷新",
+        "category": "股票行情",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "stocksTicker.rename",
+        "title": "重命名",
+        "category": "股票行情"
+      },
+      {
+        "command": "stocksTicker.pin",
+        "title": "置顶",
+        "category": "股票行情"
+      },
+      {
+        "command": "stocksTicker.unpin",
+        "title": "取消置顶",
+        "category": "股票行情"
+      },
+      {
+        "command": "stocksTicker.moveUp",
+        "title": "上移",
+        "category": "股票行情"
+      },
+      {
+        "command": "stocksTicker.moveDown",
+        "title": "下移",
+        "category": "股票行情"
+      },
+      {
+        "command": "stocksTicker.clearAll",
+        "title": "清空自选股",
+        "category": "股票行情"
+      },
+      {
+        "command": "stocksTicker.showDetail",
+        "title": "查看详情",
+        "category": "股票行情"
+      },
+      {
+        "command": "stocksTicker.toggleLock",
+        "title": "锁定/轮播状态栏",
+        "category": "股票行情"
+      },
+      {
+        "command": "stocksTicker.exportJson",
+        "title": "导出自选股",
+        "category": "股票行情"
+      },
+      {
+        "command": "stocksTicker.importJson",
+        "title": "导入自选股",
+        "category": "股票行情"
+      },
+      {
+        "command": "stocksTicker.lockStatusBar",
+        "title": "锁定到状态栏",
+        "category": "股票行情",
+        "icon": "$(lock)"
+      },
+      {
+        "command": "stocksTicker.unlockStatusBar",
+        "title": "从状态栏移除",
+        "category": "股票行情",
+        "icon": "$(unlock)"
+      },
+      {
+        "command": "stocksTicker.joinRotation",
+        "title": "加入轮播",
+        "category": "股票行情",
+        "icon": "$(play)"
+      },
+      {
+        "command": "stocksTicker.leaveRotation",
+        "title": "移出轮播",
+        "category": "股票行情",
+        "icon": "$(stop)"
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "stocksTicker.query",
+        "key": "ctrl+shift+s",
+        "mac": "cmd+shift+s"
+      }
+    ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "stocksTicker",
+          "title": "股票行情",
+          "icon": "media/sidebar.svg"
+        }
+      ]
+    },
+    "views": {
+      "stocksTicker": [
+        {
+          "id": "stocksTicker.watchlist",
+          "name": "自选股"
+        },
+        {
+          "id": "stocksTicker.welcome",
+          "name": "股票行情",
+          "when": "stocksTicker.watchlistEmpty"
+        }
+      ]
+    },
+    "viewsWelcome": [
+      {
+        "view": "stocksTicker.welcome",
+        "contents": "欢迎使用股票行情插件。\n\n[查询股票](command:stocksTicker.query)\n[添加到自选股](command:stocksTicker.addToWatchlist)\n\n自选股为空时会显示此欢迎页。添加股票后切换到「自选股」视图查看实时行情。",
+        "when": "true"
+      },
+      {
+        "view": "stocksTicker.watchlist",
+        "contents": "自选股为空。\n\n[查询并添加股票](command:stocksTicker.query)\n[直接添加代码](command:stocksTicker.addToWatchlist)",
+        "when": "stocksTicker.watchlistEmpty"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "stocksTicker.query",
+          "when": "view == stocksTicker.watchlist",
+          "group": "navigation@1"
+        },
+        {
+          "command": "stocksTicker.addToWatchlist",
+          "when": "view == stocksTicker.watchlist",
+          "group": "navigation@2"
+        },
+        {
+          "command": "stocksTicker.refresh",
+          "when": "view == stocksTicker.watchlist",
+          "group": "navigation@3"
+        },
+        {
+          "command": "stocksTicker.clearAll",
+          "when": "view == stocksTicker.watchlist",
+          "group": "1_actions@1"
+        },
+        {
+          "command": "stocksTicker.toggleLock",
+          "when": "view == stocksTicker.watchlist",
+          "group": "1_actions@2"
+        },
+        {
+          "command": "stocksTicker.exportJson",
+          "when": "view == stocksTicker.watchlist",
+          "group": "1_actions@3"
+        },
+        {
+          "command": "stocksTicker.importJson",
+          "when": "view == stocksTicker.watchlist",
+          "group": "1_actions@4"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "stocksTicker.showDetail",
+          "when": "view == stocksTicker.watchlist && viewItem =~ /^stock(Pinned|WithQuote)$/",
+          "group": "inline@1"
+        },
+        {
+          "command": "stocksTicker.pin",
+          "when": "view == stocksTicker.watchlist && viewItem =~ /^stock(WithQuote|NoQuote)$/",
+          "group": "inline@2"
+        },
+        {
+          "command": "stocksTicker.unpin",
+          "when": "view == stocksTicker.watchlist && viewItem =~ /^stockPinned/",
+          "group": "inline@2"
+        },
+        {
+          "command": "stocksTicker.removeFromWatchlist",
+          "when": "view == stocksTicker.watchlist && viewItem =~ /^stock/",
+          "group": "inline@3"
+        },
+        {
+          "command": "stocksTicker.rename",
+          "when": "view == stocksTicker.watchlist && viewItem =~ /^stock/",
+          "group": "5_cutcopypaste@1"
+        },
+        {
+          "command": "stocksTicker.moveUp",
+          "when": "view == stocksTicker.watchlist && viewItem =~ /^stock/",
+          "group": "5_cutcopypaste@2"
+        },
+        {
+          "command": "stocksTicker.moveDown",
+          "when": "view == stocksTicker.watchlist && viewItem =~ /^stock/",
+          "group": "5_cutcopypaste@3"
+        },
+        {
+          "command": "stocksTicker.pin",
+          "when": "view == stocksTicker.watchlist && viewItem =~ /^stock(WithQuote|NoQuote)$/",
+          "group": "5_cutcopypaste@4"
+        },
+        {
+          "command": "stocksTicker.unpin",
+          "when": "view == stocksTicker.watchlist && viewItem =~ /^stockPinned/",
+          "group": "5_cutcopypaste@4"
+        },
+        {
+          "command": "stocksTicker.lockStatusBar",
+          "when": "view == stocksTicker.watchlist && viewItem =~ /^stock/",
+          "group": "7_statusbar@1"
+        },
+        {
+          "command": "stocksTicker.unlockStatusBar",
+          "when": "view == stocksTicker.watchlist && viewItem =~ /^stock/ && stocksTicker.isLocked",
+          "group": "7_statusbar@2"
+        },
+        {
+          "command": "stocksTicker.joinRotation",
+          "when": "view == stocksTicker.watchlist && viewItem =~ /^stock/ && !(viewItem =~ /-rot$/)",
+          "group": "8_rotation@1"
+        },
+        {
+          "command": "stocksTicker.leaveRotation",
+          "when": "view == stocksTicker.watchlist && viewItem =~ /-rot$/",
+          "group": "8_rotation@2"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "stocksTicker.showDetail",
+          "when": "false"
+        },
+        {
+          "command": "stocksTicker.lockStatusBar",
+          "when": "false"
+        },
+        {
+          "command": "stocksTicker.unlockStatusBar",
+          "when": "false"
+        },
+        {
+          "command": "stocksTicker.joinRotation",
+          "when": "false"
+        },
+        {
+          "command": "stocksTicker.leaveRotation",
+          "when": "false"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "股票行情",
+      "properties": {
+        "stocksTicker.refreshIntervalMs": {
+          "type": "number",
+          "default": 3000,
+          "minimum": 1000,
+          "description": "交易时段刷新间隔（毫秒）。"
+        },
+        "stocksTicker.offHoursRefreshIntervalMs": {
+          "type": "number",
+          "default": 10000,
+          "minimum": 3000,
+          "description": "非交易时段刷新间隔（毫秒）。"
+        },
+        "stocksTicker.statusBarEnabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "是否显示状态栏轮播行情。"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "package": "node scripts/package.js"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "@types/vscode": "^1.80.0",
+    "@vscode/vsce": "^2.24.0",
+    "typescript": "^5.4.0"
+  }
+}

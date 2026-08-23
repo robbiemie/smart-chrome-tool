@@ -453,17 +453,22 @@ injectedStyle(`
   }
   .mockkit-floating-rules__item-edit {
     flex-shrink: 0;
-    padding: 3px 8px;
+    width: 26px;
+    height: 26px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     border: none;
     border-radius: 7px;
     background: transparent;
     cursor: pointer;
     color: rgb(26 155 127 / 70%);
-    font-size: 11px;
-    font-weight: 600;
-    line-height: 1.4;
     opacity: 0;
     transition: all 0.15s ease;
+  }
+  .mockkit-floating-rules__item-edit svg {
+    width: 13px;
+    height: 13px;
   }
   .mockkit-floating-rules__item:hover .mockkit-floating-rules__item-edit {
     opacity: 1;
@@ -474,17 +479,22 @@ injectedStyle(`
   }
   .mockkit-floating-rules__item-fork {
     flex-shrink: 0;
-    padding: 3px 8px;
+    width: 26px;
+    height: 26px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     border: none;
     border-radius: 7px;
     background: transparent;
     cursor: pointer;
     color: rgb(27 40 34 / 55%);
-    font-size: 11px;
-    font-weight: 600;
-    line-height: 1.4;
     opacity: 0;
     transition: all 0.15s ease;
+  }
+  .mockkit-floating-rules__item-fork svg {
+    width: 13px;
+    height: 13px;
   }
   .mockkit-floating-rules__item:hover .mockkit-floating-rules__item-fork {
     opacity: 1;
@@ -495,17 +505,22 @@ injectedStyle(`
   }
   .mockkit-floating-rules__item-delete {
     flex-shrink: 0;
-    padding: 3px 8px;
+    width: 26px;
+    height: 26px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     border: none;
     border-radius: 7px;
     background: transparent;
     cursor: pointer;
     color: rgb(220 38 38 / 70%);
-    font-size: 11px;
-    font-weight: 600;
-    line-height: 1.4;
     opacity: 0;
     transition: all 0.15s ease;
+  }
+  .mockkit-floating-rules__item-delete svg {
+    width: 13px;
+    height: 13px;
   }
   .mockkit-floating-rules__item:hover .mockkit-floating-rules__item-delete {
     opacity: 1;
@@ -4763,8 +4778,8 @@ function renderFloatingRules() {
       const editBtn = document.createElement('button');
       editBtn.type = 'button';
       editBtn.className = 'mockkit-floating-rules__item-edit';
-      editBtn.textContent = 'Edit';
-      editBtn.title = 'Edit this rule in the workbench';
+      editBtn.innerHTML = '<svg viewBox="0 0 16 16" fill="none"><path d="M9 3H4a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V7" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/><path d="M9 7l5-5M14 2h-3M14 2v3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+      editBtn.title = 'Open in workbench to edit';
       editBtn.addEventListener('click', (event) => {
         event.stopPropagation();
         const mainPanel = ajaxToolsRuntimeState.panelContainer;
@@ -4918,7 +4933,7 @@ function renderFloatingRules() {
       const deleteBtn = document.createElement('button');
       deleteBtn.type = 'button';
       deleteBtn.className = 'mockkit-floating-rules__item-delete';
-      deleteBtn.textContent = 'Delete';
+      deleteBtn.innerHTML = '<svg viewBox="0 0 16 16" fill="none"><path d="M3 4h10M6 4V2.5a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1V4M5 4l.5 9a1 1 0 0 0 1 1h3a1 1 0 0 0 1-1L11 4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>';
       deleteBtn.title = 'Delete this rule';
       deleteBtn.addEventListener('click', (event) => {
         event.stopPropagation();
@@ -4951,7 +4966,7 @@ function renderFloatingRules() {
       const forkBtn = document.createElement('button');
       forkBtn.type = 'button';
       forkBtn.className = 'mockkit-floating-rules__item-fork';
-      forkBtn.textContent = 'Fork';
+      forkBtn.innerHTML = '<svg viewBox="0 0 16 16" fill="none"><rect x="2" y="6" width="8" height="8" rx="1.5" stroke="currentColor" stroke-width="1.4"/><path d="M6 2h6a1.5 1.5 0 0 1 1.5 1.5V10" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>';
       forkBtn.title = 'Duplicate this rule into the next slot';
       forkBtn.addEventListener('click', (event) => {
         event.stopPropagation();

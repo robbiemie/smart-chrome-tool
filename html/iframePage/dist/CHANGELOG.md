@@ -1,5 +1,48 @@
 # Build Changelog
 
+## v0.0.83
+
+- Built At: 2026-08-20T14:30:39.291Z
+- Previous Version: v0.0.82
+- Git Branch: master
+- Git Commit: 7e8c4811
+
+### Changed Files
+- content.js
+- vscode/.gitignore
+- vscode/README.md
+- vscode/media/down.svg
+- vscode/media/flat.svg
+- vscode/media/sidebar.svg
+- vscode/media/up.svg
+- vscode/package-lock.json
+- vscode/package.json
+- vscode/scripts/package.js
+- vscode/src/commands/addToWatchlist.ts
+- vscode/src/commands/clearAll.ts
+- vscode/src/commands/importExport.ts
+- vscode/src/commands/move.ts
+- vscode/src/commands/pin.ts
+- vscode/src/commands/query.ts
+- vscode/src/commands/removeFromWatchlist.ts
+- vscode/src/commands/rename.ts
+- vscode/src/commands/showDetail.ts
+- vscode/src/commands/showWatchlist.ts
+- vscode/src/extension.ts
+- vscode/src/poll/poller.ts
+- vscode/src/providers/stockSearch.ts
+- vscode/src/providers/suggest.ts
+- vscode/src/providers/tencent.ts
+- vscode/src/providers/yahoo.ts
+- vscode/src/storage/watchlistStore.ts
+- vscode/src/types/stock.ts
+- vscode/src/ui/statusBar.ts
+- vscode/src/ui/watchlistTreeProvider.ts
+- vscode/src/utils/format.ts
+- vscode/src/utils/marketHours.ts
+- vscode/tsconfig.json
+
+
 ## v0.0.81
 
 - Built At: 2026-08-13T14:33:41.953Z

@@ -1,0 +1,6 @@
+out/
+node_modules/
+release/
+.vscode/*
+!.vscode/launch.json
+!.vscode/tasks.json
