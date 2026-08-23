@@ -36,5 +36,8 @@ npm run compile        # 或: npm run watch
 打包 `.vsix`：
 
 ```bash
-npm run package
+npm run package      # 打当前版本包，自动清理旧版本（保留最新一个）
+npm run repackage    # 升一位 patch 版本并打一个新包，同时清理旧版本
 ```
+
+每次打完新包，`release/` 中的旧版本 `.vsix` 会被自动移除，始终保留至少一个最新安装包。
