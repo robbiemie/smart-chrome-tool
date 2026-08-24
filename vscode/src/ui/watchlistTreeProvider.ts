@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
-import { formatChangePct, formatMarketTag, formatPrice, isUp } from '../utils/format';
+import { formatChangePct, formatDisplayName, formatMarketTag, formatPrice, isUp } from '../utils/format';
 import type { Market, Quote, WatchlistItem } from '../types/stock';
 
 /** Resolve a media icon path to a vscode-ready URI. */
@@ -28,7 +28,6 @@ export class WatchlistTreeProvider implements vscode.TreeDataProvider<TreeNode> 
 
   private watchlist: WatchlistItem[] = [];
   private quotes = new Map<string, Quote>();
-  private lockedRaw: string | undefined;
 
   setWatchlist(items: WatchlistItem[]): void {
     this.watchlist = items;
@@ -40,11 +39,6 @@ export class WatchlistTreeProvider implements vscode.TreeDataProvider<TreeNode> 
     for (const q of quotes) {
       this.quotes.set(q.symbol.raw, q);
     }
-    this._onDidChange.fire(undefined);
-  }
-
-  setLocked(raw: string | undefined): void {
-    this.lockedRaw = raw;
     this._onDidChange.fire(undefined);
   }
 
@@ -115,16 +109,16 @@ export class WatchlistTreeProvider implements vscode.TreeDataProvider<TreeNode> 
     const q = this.quotes.get(it.symbol.raw);
     const pinned = it.pinned === true;
     const inRot = it.inRotation === true;
-    const locked = this.lockedRaw === it.symbol.raw;
-    const lockTag = locked ? ' 🔒' : '';
     // Visual marker: stocks in the rotation pool get a ⊙ suffix so users can
     // see at a glance which stocks will appear in the status bar.
     const rotTag = inRot ? ' ⊙' : '';
     // Prefer the live quote name (always fresh, has proper Chinese name for HK).
     // Fall back to the stored watchlist name (set at add time) when no quote yet.
-    const displayName = q?.name || it.name;
+    // US stocks show their ticker code; HK shows the Chinese name (truncated).
+    const liveName = q?.name || it.name;
+    const displayName = formatDisplayName(it.symbol.market, liveName, it.symbol.code);
     const node = new StockNode(
-      `${displayName}${rotTag}${lockTag}`,
+      `${displayName}${rotTag}`,
       it.symbol,
       it.pinned,
       vscode.TreeItemCollapsibleState.None

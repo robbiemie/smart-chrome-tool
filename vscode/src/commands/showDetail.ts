@@ -1,12 +1,12 @@
 import * as vscode from 'vscode';
-import { formatChangePct, formatMarketTag, formatPrice, isUp } from '../utils/format';
+import { formatChangePct, formatDisplayName, formatMarketTag, formatPrice, isUp } from '../utils/format';
 import type { Quote, StockSymbol } from '../types/stock';
 
 /**
  * Show a stock's detail in a Quick Pick.
- * Triggered by clicking the inline "detail" button or double-clicking a row.
+ * Triggered by right-click →「查看详情」.
  *
- * Also fires `onFollow` so the caller can make the status bar follow this stock.
+ * Fires `onFollow` so the caller can peek the stock in the status bar.
  */
 export async function showDetailCommand(
   symbol: StockSymbol,
@@ -29,11 +29,11 @@ export async function showDetailCommand(
   const extTag = quote.isExtended === 'pre' ? ' · 盘前' : quote.isExtended === 'post' ? ' · 盘后' : '';
   const items: (vscode.QuickPickItem & { action?: string })[] = [
     {
-      label: `${arrow} ${quote.name}  ${formatPrice(quote)}  ${formatChangePct(quote)}${extTag}`,
+      label: `${arrow} ${formatDisplayName(quote.symbol.market, quote.name, quote.symbol.code)}  ${formatPrice(quote)}  ${formatChangePct(quote)}${extTag}`,
       description: `${formatMarketTag(quote.symbol.market)} ${quote.symbol.code}`,
       detail: `昨收 ${quote.prevClose} · 开盘 ${quote.open} · 成交量 ${quote.volume}${quote.timestamp ? ' · ' + quote.timestamp : ''}`,
     },
-    { label: '$(pin) 在状态栏锁定显示', action: 'lock' },
+    { label: '$(eye) 在状态栏查看', action: 'follow' },
     { label: '$(refresh) 刷新', action: 'refresh' },
   ];
 
@@ -43,9 +43,8 @@ export async function showDetailCommand(
   if (!picked) {
     return;
   }
-  if (picked.action === 'lock') {
+  if (picked.action === 'follow') {
     onFollow?.(quote);
-    vscode.window.showInformationMessage(`已在状态栏锁定 ${quote.name}。`);
   } else if (picked.action === 'refresh') {
     void showDetailCommand(symbol, fetchQuote, onFollow);
   }

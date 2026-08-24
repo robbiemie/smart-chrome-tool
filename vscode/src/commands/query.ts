@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 import { fetchQuotes } from '../providers/tencent';
 import { resolveSymbol } from '../providers/stockSearch';
 import { suggest } from '../providers/suggest';
-import { formatChangePct, formatMarketTag, formatPrice, isUp } from '../utils/format';
+import { formatChangePct, formatDisplayName, formatMarketTag, formatPrice, isUp } from '../utils/format';
 import type { Quote, StockSymbol } from '../types/stock';
 
 interface PickItem extends vscode.QuickPickItem {
@@ -118,7 +118,7 @@ export async function queryCommand(
       const extTag = quote.isExtended === 'pre' ? ' · 盘前' : quote.isExtended === 'post' ? ' · 盘后' : '';
       qp.items = [
         {
-          label: `${icon} ${quote.name}  ${formatPrice(quote)}${extTag}`,
+          label: `${icon} ${formatDisplayName(quote.symbol.market, quote.name, quote.symbol.code)}  ${formatPrice(quote)}${extTag}`,
           description: `${formatMarketTag(quote.symbol.market)} ${quote.symbol.code}  ${formatChangePct(quote)}`,
           detail: `昨收 ${quote.prevClose} · 开盘 ${quote.open} · 成交量 ${quote.volume}${quote.timestamp ? ' · ' + quote.timestamp : ''}${quote.regularPrice != null && quote.regularPrice !== quote.price ? ' · 常规时段 ' + quote.regularPrice : ''}`,
           quote,

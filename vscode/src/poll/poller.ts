@@ -1,5 +1,6 @@
 import { fetchQuotes } from '../providers/tencent';
-import { currentSession } from '../utils/marketHours';
+import { isMarketOpen } from '../utils/marketHours';
+import type { Market } from '../types/stock';
 import type { WatchlistStore } from '../storage/watchlistStore';
 import type { Quote } from '../types/stock';
 
@@ -11,16 +12,19 @@ interface PollerCallbacks {
 /**
  * Periodically fetches watchlist quotes and drives the status bar + tree.
  *
- * Uses recursive setTimeout instead of setInterval so:
- *  1. The interval is recomputed after every tick → adapts when market
- *     session transitions between open/closed (no need to restart).
- *  2. No tick overlap: the next timer is scheduled only after the current
- *     fetch finishes, preventing drift and request pile-up.
+ * Polls HK and US markets INDEPENDENTLY — each has its own timer so a closed
+ * market can poll slowly (e.g. 1h) while an open one polls fast (e.g. 8s).
+ * After each tick, both markets' quotes are merged and delivered together so
+ * the UI always shows the full picture.
+ *
+ * Uses recursive setTimeout (not setInterval) so the interval is recomputed
+ * after every tick, adapting when a market transitions between open/closed.
  */
 export class Poller {
-  private timer: NodeJS.Timeout | undefined;
-  private running = false;
+  private timers: Partial<Record<Market, NodeJS.Timeout>> = {};
+  private running: Partial<Record<Market, boolean>> = {};
   private stopped = false;
+  private quotesByMarket: Partial<Record<Market, Quote[]>> = {};
 
   constructor(
     private readonly store: WatchlistStore,
@@ -29,54 +33,65 @@ export class Poller {
   ) {}
 
   start(): void {
-    if (this.timer) {
+    if (this.timers.hk || this.timers.us) {
       return;
     }
     this.stopped = false;
-    // First tick immediately.
-    void this.tick();
+    void this.tick('hk');
+    void this.tick('us');
   }
 
   stop(): void {
     this.stopped = true;
-    if (this.timer) {
-      clearTimeout(this.timer);
-      this.timer = undefined;
-    }
+    (['hk', 'us'] as Market[]).forEach((m) => {
+      const t = this.timers[m];
+      if (t) {
+        clearTimeout(t);
+        delete this.timers[m];
+      }
+    });
   }
 
-  /** Trigger an immediate refresh out-of-cycle (does not reset the scheduled timer). */
+  /** Trigger an immediate refresh out-of-cycle (both markets, does not reset scheduled timers). */
   refreshNow(): void {
-    void this.tick();
+    void this.tick('hk');
+    void this.tick('us');
   }
 
-  private scheduleNext(): void {
+  private scheduleNext(market: Market): void {
     if (this.stopped) {
       return;
     }
     const { on, off } = this.getConfig();
-    const interval = currentSession().open ? on : off;
-    this.timer = setTimeout(() => void this.tick(), interval);
+    const interval = isMarketOpen(market) ? on : off;
+    this.timers[market] = setTimeout(() => void this.tick(market), interval);
   }
 
-  private async tick(): Promise<void> {
-    if (this.running || this.stopped) {
+  private async tick(market: Market): Promise<void> {
+    if (this.running[market] || this.stopped) {
       return;
     }
-    this.running = true;
+    this.running[market] = true;
     try {
       const list = await this.store.getAll();
-      if (list.length === 0) {
-        this.callbacks.onQuotes([]);
-        return;
+      const marketItems = list.filter((it) => it.symbol.market === market);
+      if (marketItems.length === 0) {
+        this.quotesByMarket[market] = [];
+      } else {
+        const quotes = await fetchQuotes(marketItems.map((it) => it.symbol));
+        this.quotesByMarket[market] = quotes;
       }
-      const quotes = await fetchQuotes(list.map((it) => it.symbol));
-      this.callbacks.onQuotes(quotes);
+      // Merge both markets' quotes and deliver the full picture.
+      const all: Quote[] = [
+        ...(this.quotesByMarket.hk ?? []),
+        ...(this.quotesByMarket.us ?? []),
+      ];
+      this.callbacks.onQuotes(all);
     } catch (err) {
       this.callbacks.onError(String(err));
     } finally {
-      this.running = false;
-      this.scheduleNext();
+      this.running[market] = false;
+      this.scheduleNext(market);
     }
   }
 }

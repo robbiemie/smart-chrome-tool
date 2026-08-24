@@ -29,3 +29,39 @@ export function formatPrice(q: Quote): string {
 export function formatMarketTag(market: Market): string {
   return market === 'hk' ? 'HK' : 'US';
 }
+
+/**
+ * Display name for a stock: HK uses the Chinese name (truncated), US uses the
+ * ticker code only (English company names are long and noisy in the UI).
+ */
+export function formatDisplayName(market: Market, name: string, code: string): string {
+  if (market === 'us') {
+    return code;
+  }
+  return formatName(name);
+}
+
+/**
+ * Truncate a stock name to fit a max display width.
+ * CJK characters count as 2 width units; ASCII as 1. Cap at 8 units (= 4 CJK
+ * chars), appending an ellipsis when truncated. Used in status bar / tree /
+ * quick-pick labels where horizontal space is tight.
+ */
+export function formatName(name: string, maxUnits = 8): string {
+  let width = 0;
+  let i = 0;
+  for (; i < name.length; i++) {
+    const code = name.charCodeAt(i);
+    // CJK Unified Ideographs + common CJK punctuation ranges.
+    const isCjk =
+      (code >= 0x4e00 && code <= 0x9fff) ||
+      (code >= 0x3000 && code <= 0x30ff) ||
+      (code >= 0xff00 && code <= 0xffef);
+    const w = isCjk ? 2 : 1;
+    if (width + w > maxUnits) {
+      break;
+    }
+    width += w;
+  }
+  return i < name.length ? `${name.slice(0, i)}…` : name;
+}

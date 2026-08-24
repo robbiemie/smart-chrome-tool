@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { formatChangePct, formatMarketTag, formatPrice, isUp } from '../utils/format';
+import { formatChangePct, formatDisplayName, formatMarketTag, formatPrice, isUp } from '../utils/format';
 import type { Quote } from '../types/stock';
 
 /**
@@ -15,7 +15,7 @@ export async function showWatchlistCommand(quotes: Quote[]): Promise<void> {
     const up = isUp(q);
     const icon = up ? '$(arrow-up)' : '$(arrow-down)';
     return {
-      label: `${icon} ${q.name}  ${formatPrice(q)}`,
+      label: `${icon} ${formatDisplayName(q.symbol.market, q.name, q.symbol.code)}  ${formatPrice(q)}`,
       description: `${formatMarketTag(q.symbol.market)} ${q.symbol.code}  ${formatChangePct(q)}`,
       detail: `昨收 ${q.prevClose} · 开盘 ${q.open} · 成交量 ${q.volume}`,
     };

@@ -2,7 +2,7 @@
   "name": "stocks-ticker",
   "displayName": "股票行情",
   "description": "在命令面板查询港股/美股实时行情，状态栏轮播 + 侧边栏自选股列表。",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "publisher": "robbie",
   "engines": {
     "vscode": "^1.80.0"
@@ -85,11 +85,6 @@
         "category": "股票行情"
       },
       {
-        "command": "stocksTicker.toggleLock",
-        "title": "锁定/轮播状态栏",
-        "category": "股票行情"
-      },
-      {
         "command": "stocksTicker.exportJson",
         "title": "导出自选股",
         "category": "股票行情"
@@ -100,28 +95,16 @@
         "category": "股票行情"
       },
       {
-        "command": "stocksTicker.lockStatusBar",
-        "title": "锁定到状态栏",
-        "category": "股票行情",
-        "icon": "$(lock)"
-      },
-      {
-        "command": "stocksTicker.unlockStatusBar",
-        "title": "从状态栏移除",
-        "category": "股票行情",
-        "icon": "$(unlock)"
-      },
-      {
         "command": "stocksTicker.joinRotation",
         "title": "加入轮播",
         "category": "股票行情",
-        "icon": "$(play)"
+        "icon": "$(add)"
       },
       {
         "command": "stocksTicker.leaveRotation",
         "title": "移出轮播",
         "category": "股票行情",
-        "icon": "$(stop)"
+        "icon": "$(remove)"
       }
     ],
     "keybindings": [
@@ -188,41 +171,41 @@
           "group": "1_actions@1"
         },
         {
-          "command": "stocksTicker.toggleLock",
+          "command": "stocksTicker.exportJson",
           "when": "view == stocksTicker.watchlist",
           "group": "1_actions@2"
         },
         {
-          "command": "stocksTicker.exportJson",
-          "when": "view == stocksTicker.watchlist",
-          "group": "1_actions@3"
-        },
-        {
           "command": "stocksTicker.importJson",
           "when": "view == stocksTicker.watchlist",
-          "group": "1_actions@4"
+          "group": "1_actions@3"
         }
       ],
       "view/item/context": [
         {
-          "command": "stocksTicker.showDetail",
-          "when": "view == stocksTicker.watchlist && viewItem =~ /^stock(Pinned|WithQuote)$/",
-          "group": "inline@1"
-        },
-        {
           "command": "stocksTicker.pin",
           "when": "view == stocksTicker.watchlist && viewItem =~ /^stock(WithQuote|NoQuote)$/",
-          "group": "inline@2"
+          "group": "inline@1"
         },
         {
           "command": "stocksTicker.unpin",
           "when": "view == stocksTicker.watchlist && viewItem =~ /^stockPinned/",
+          "group": "inline@1"
+        },
+        {
+          "command": "stocksTicker.joinRotation",
+          "when": "view == stocksTicker.watchlist && viewItem =~ /^stock/ && !(viewItem =~ /-rot$/)",
           "group": "inline@2"
         },
         {
-          "command": "stocksTicker.removeFromWatchlist",
-          "when": "view == stocksTicker.watchlist && viewItem =~ /^stock/",
-          "group": "inline@3"
+          "command": "stocksTicker.leaveRotation",
+          "when": "view == stocksTicker.watchlist && viewItem =~ /-rot$/",
+          "group": "inline@2"
+        },
+        {
+          "command": "stocksTicker.showDetail",
+          "when": "view == stocksTicker.watchlist && viewItem =~ /^stock(Pinned|WithQuote)$/",
+          "group": "navigation@1"
         },
         {
           "command": "stocksTicker.rename",
@@ -240,47 +223,14 @@
           "group": "5_cutcopypaste@3"
         },
         {
-          "command": "stocksTicker.pin",
-          "when": "view == stocksTicker.watchlist && viewItem =~ /^stock(WithQuote|NoQuote)$/",
-          "group": "5_cutcopypaste@4"
-        },
-        {
-          "command": "stocksTicker.unpin",
-          "when": "view == stocksTicker.watchlist && viewItem =~ /^stockPinned/",
-          "group": "5_cutcopypaste@4"
-        },
-        {
-          "command": "stocksTicker.lockStatusBar",
+          "command": "stocksTicker.removeFromWatchlist",
           "when": "view == stocksTicker.watchlist && viewItem =~ /^stock/",
-          "group": "7_statusbar@1"
-        },
-        {
-          "command": "stocksTicker.unlockStatusBar",
-          "when": "view == stocksTicker.watchlist && viewItem =~ /^stock/ && stocksTicker.isLocked",
-          "group": "7_statusbar@2"
-        },
-        {
-          "command": "stocksTicker.joinRotation",
-          "when": "view == stocksTicker.watchlist && viewItem =~ /^stock/ && !(viewItem =~ /-rot$/)",
-          "group": "8_rotation@1"
-        },
-        {
-          "command": "stocksTicker.leaveRotation",
-          "when": "view == stocksTicker.watchlist && viewItem =~ /-rot$/",
-          "group": "8_rotation@2"
+          "group": "9_delete@1"
         }
       ],
       "commandPalette": [
         {
           "command": "stocksTicker.showDetail",
-          "when": "false"
-        },
-        {
-          "command": "stocksTicker.lockStatusBar",
-          "when": "false"
-        },
-        {
-          "command": "stocksTicker.unlockStatusBar",
           "when": "false"
         },
         {
@@ -298,15 +248,15 @@
       "properties": {
         "stocksTicker.refreshIntervalMs": {
           "type": "number",
-          "default": 3000,
+          "default": 8000,
           "minimum": 1000,
-          "description": "交易时段刷新间隔（毫秒）。"
+          "description": "交易时段刷新间隔（毫秒）。各市场独立判断：开市时用此值，闭市时用非交易时段间隔。"
         },
         "stocksTicker.offHoursRefreshIntervalMs": {
           "type": "number",
-          "default": 10000,
+          "default": 3600000,
           "minimum": 3000,
-          "description": "非交易时段刷新间隔（毫秒）。"
+          "description": "非交易时段刷新间隔（毫秒），默认 1 小时。各市场闭市时独立使用此值。"
         },
         "stocksTicker.statusBarEnabled": {
           "type": "boolean",
