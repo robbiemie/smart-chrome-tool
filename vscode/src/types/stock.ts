@@ -15,6 +15,10 @@ export interface Quote {
   prevClose: number;
   open: number;
   volume: number;
+  /** Day high — current session max price (最高价). */
+  high?: number;
+  /** Day low — current session min price (最低价). */
+  low?: number;
   /** ISO date-time from data source */
   timestamp?: string;
   /** Extended-hours (pre/post market) data, currently only from Yahoo for US stocks. */

@@ -14,6 +14,8 @@ interface ParsedFields {
   price: number;
   prevClose: number;
   open: number;
+  high?: number;
+  low?: number;
   volume: number;
   timestamp?: string;
 }
@@ -29,17 +31,19 @@ function parseQuoteLine(line: string): { raw: string; fields: ParsedFields } | n
     return null;
   }
   const parts = body.split('~');
-  // Stable indices in Tencent format (verified from raw response):
+  // Stable indices in Tencent format (verified from raw HK/US responses):
   // 0 = market type, 1 = name, 2 = code, 3 = current price,
   // 4 = prev close, 5 = open, 6 = volume,
-  // 30 = date (yyyy-MM-dd), 31 = time (HH:mm:ss)
+  // 30 = full datetime (HK: "yyyy/MM/dd HH:mm:ss", US: "yyyy-MM-dd HH:mm:ss"),
+  // 33 = day high (最高价), 34 = day low (最低价)
   const name = parts[1] ?? raw;
   const price = Number(parts[3]);
   const prevClose = Number(parts[4]);
   const open = Number(parts[5]);
   const volume = Number(parts[6]);
-  const date = parts[30];
-  const time = parts[31];
+  const high = Number(parts[33]);
+  const low = Number(parts[34]);
+  const datetime = parts[30];
   if (Number.isNaN(price) && Number.isNaN(prevClose)) {
     return null;
   }
@@ -50,8 +54,8 @@ function parseQuoteLine(line: string): { raw: string; fields: ParsedFields } | n
   if (effectivePrice === 0) {
     return null;
   }
-  const timestamp = date && time ? `${date} ${time}` : undefined;
-  return { raw, fields: { name, price: effectivePrice, prevClose: prevClose || effectivePrice, open, volume, timestamp } };
+  const timestamp = datetime || undefined;
+  return { raw, fields: { name, price: effectivePrice, prevClose: prevClose || effectivePrice, open, high: high > 0 ? high : undefined, low: low > 0 ? low : undefined, volume, timestamp } };
 }
 
 function splitMarket(raw: string): StockSymbol | null {

@@ -27,11 +27,12 @@ export async function showDetailCommand(
   const up = isUp(quote);
   const arrow = up ? '▲' : '▼';
   const extTag = quote.isExtended === 'pre' ? ' · 盘前' : quote.isExtended === 'post' ? ' · 盘后' : '';
+  const range = quote.high != null && quote.low != null ? ` · 最高 ${quote.high} · 最低 ${quote.low}` : '';
   const items: (vscode.QuickPickItem & { action?: string })[] = [
     {
       label: `${arrow} ${formatDisplayName(quote.symbol.market, quote.name, quote.symbol.code)}  ${formatPrice(quote)}  ${formatChangePct(quote)}${extTag}`,
       description: `${formatMarketTag(quote.symbol.market)} ${quote.symbol.code}`,
-      detail: `昨收 ${quote.prevClose} · 开盘 ${quote.open} · 成交量 ${quote.volume}${quote.timestamp ? ' · ' + quote.timestamp : ''}`,
+      detail: `昨收 ${quote.prevClose} · 开盘 ${quote.open}${range} · 成交量 ${quote.volume}${quote.timestamp ? ' · ' + quote.timestamp : ''}`,
     },
     { label: '$(eye) 在状态栏查看', action: 'follow' },
     { label: '$(refresh) 刷新', action: 'refresh' },

@@ -1,25 +1,44 @@
 import type { Quote } from '../types/stock';
 import type { Market } from '../types/stock';
 
+/**
+ * Baseline price used to compute change (pct / abs / up-down).
+ *
+ * During extended hours (pre/post market) the live `price` is an extended-hours
+ * price from Yahoo, so the delta must be measured against the regular session's
+ * close (`regularPrice`), NOT `prevClose` — Tencent's `prevClose` can be stale
+ * (not rolled over to the most recent regular close) during pre-market, which
+ * would yield a wrong change %. `regularPrice` is the authoritative regular
+ * close supplied by Yahoo.
+ */
+export function changeBaseline(q: Quote): number {
+  if (q.isExtended && q.regularPrice != null && q.regularPrice > 0) {
+    return q.regularPrice;
+  }
+  return q.prevClose;
+}
+
 /** Percent change vs prev close, e.g. "+1.23%". */
 export function formatChangePct(q: Quote): string {
-  if (!q.prevClose) {
+  const baseline = changeBaseline(q);
+  if (!baseline) {
     return '0.00%';
   }
-  const pct = ((q.price - q.prevClose) / q.prevClose) * 100;
+  const pct = ((q.price - baseline) / baseline) * 100;
   const sign = pct >= 0 ? '+' : '';
   return `${sign}${pct.toFixed(2)}%`;
 }
 
 /** Absolute change, e.g. "+2.34". */
 export function formatChangeAbs(q: Quote): string {
-  const diff = q.price - q.prevClose;
+  const baseline = changeBaseline(q);
+  const diff = q.price - baseline;
   const sign = diff >= 0 ? '+' : '';
   return `${sign}${diff.toFixed(2)}`;
 }
 
 export function isUp(q: Quote): boolean {
-  return q.price >= q.prevClose;
+  return q.price >= changeBaseline(q);
 }
 
 export function formatPrice(q: Quote): string {
