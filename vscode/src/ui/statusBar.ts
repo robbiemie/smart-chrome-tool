@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { formatChangePct, formatDisplayName, formatMarketTag, formatPrice, isUp } from '../utils/format';
+import { formatChangePct, formatDisplayName, formatMarketTag, formatPrice, isUp, changeBaseline } from '../utils/format';
 import type { Quote } from '../types/stock';
 
 /**
@@ -65,7 +65,7 @@ export class StatusBarController {
     const extTag = q.isExtended === 'pre' ? ' [盘前]' : q.isExtended === 'post' ? ' [盘后]' : '';
     this.nameItem.text = `$(pulse) ${formatMarketTag(q.symbol.market)} ${q.symbol.code} ${formatDisplayName(q.symbol.market, q.name, q.symbol.code)}${extTag}${positionLabel}`;
     this.nameItem.color = undefined;
-    this.nameItem.tooltip = `${q.name} · 昨收 ${q.prevClose} · 开盘 ${q.open} · 成交量 ${q.volume}${extTag} — 点击刷新`;
+    this.nameItem.tooltip = `${q.name} · 昨收 ${changeBaseline(q)} · 开盘 ${q.open} · 成交量 ${q.volume}${extTag} — 点击刷新`;
     this.priceItem.text = `${formatPrice(q)} ${arrow}${formatChangePct(q)}`;
     this.priceItem.color = up ? '#F23645' : '#089981';
     this.priceItem.tooltip = this.nameItem.tooltip;

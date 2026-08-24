@@ -295,6 +295,7 @@ export async function fetchYahooQuote(symbol: StockSymbol): Promise<YahooQuote |
 
   console.log('[stocksTicker] yahoo ok:', ySymbol,
     'regular=', regularPrice,
+    'previousClose=', previousClose,
     'pre=', preMarketPrice,
     'post=', postMarketPrice,
     'latest=', latestPrice,

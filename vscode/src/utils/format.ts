@@ -4,12 +4,20 @@ import type { Market } from '../types/stock';
 /**
  * Baseline price used to compute change (pct / abs / up-down).
  *
- * During extended hours (pre/post market) the live `price` is an extended-hours
- * price from Yahoo, so the delta must be measured against the regular session's
- * close (`regularPrice`), NOT `prevClose` — Tencent's `prevClose` can be stale
- * (not rolled over to the most recent regular close) during pre-market, which
- * would yield a wrong change %. `regularPrice` is the authoritative regular
- * close supplied by Yahoo.
+ * Extended hours (pre/post market): the live `price` is an extended-hours
+ * trade from Yahoo. The delta must be measured against the most recent
+ * REGULAR session's close (`regularPrice` = Yahoo `regularMarketPrice`).
+ *
+ * Why NOT `regularPreviousClose` (Yahoo `previousClose`): during pre-market
+ * that field lags — it still holds the CLOSE BEFORE the last regular session
+ * (e.g. on Monday pre-market it shows Thursday's close, not Friday's), which
+ * yields a wrong change % (off-by-one session). `regularMarketPrice` is the
+ * authoritative last regular close.
+ *
+ * Why NOT Tencent `prevClose` during post-market: it still points to
+ * yesterday's close after the regular session ends.
+ *
+ * Regular session: use Tencent's `prevClose` (today's previous close).
  */
 export function changeBaseline(q: Quote): number {
   if (q.isExtended && q.regularPrice != null && q.regularPrice > 0) {
