@@ -120,8 +120,11 @@ export class WatchlistTreeProvider implements vscode.TreeDataProvider<TreeNode> 
     // Visual marker: stocks in the rotation pool get a ⊙ suffix so users can
     // see at a glance which stocks will appear in the status bar.
     const rotTag = inRot ? ' ⊙' : '';
+    // Prefer the live quote name (always fresh, has proper Chinese name for HK).
+    // Fall back to the stored watchlist name (set at add time) when no quote yet.
+    const displayName = q?.name || it.name;
     const node = new StockNode(
-      `${it.name}${rotTag}${lockTag}`,
+      `${displayName}${rotTag}${lockTag}`,
       it.symbol,
       it.pinned,
       vscode.TreeItemCollapsibleState.None

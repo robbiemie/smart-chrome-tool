@@ -29,10 +29,11 @@ function parseQuoteLine(line: string): { raw: string; fields: ParsedFields } | n
     return null;
   }
   const parts = body.split('~');
-  // Stable indices in Tencent format:
-  // 1 = code, 2 = name, 3 = current price, 4 = prev close, 5 = open, 6 = volume,
+  // Stable indices in Tencent format (verified from raw response):
+  // 0 = market type, 1 = name, 2 = code, 3 = current price,
+  // 4 = prev close, 5 = open, 6 = volume,
   // 30 = date (yyyy-MM-dd), 31 = time (HH:mm:ss)
-  const name = parts[2] ?? raw;
+  const name = parts[1] ?? raw;
   const price = Number(parts[3]);
   const prevClose = Number(parts[4]);
   const open = Number(parts[5]);
@@ -89,7 +90,13 @@ function fetchText(url: string): Promise<string> {
         }
         const chunks: Buffer[] = [];
         res.on('data', (c) => chunks.push(c));
-        res.on('end', () => resolve(Buffer.concat(chunks).toString('utf8')));
+        res.on('end', () => {
+          // Tencent quote API (qt.gtimg.cn) returns GBK-encoded text.
+          // Decode as GBK so Chinese stock names render correctly.
+          const buf = Buffer.concat(chunks);
+          const decoder = new TextDecoder('gbk');
+          resolve(decoder.decode(buf));
+        });
       }
     );
     req.on('error', reject);
@@ -124,7 +131,7 @@ export async function fetchQuotes(symbols: StockSymbol[]): Promise<Quote[]> {
     // Debug: dump field layout for HK quotes to diagnose format issues.
     if (parsed.raw.toLowerCase().startsWith('hk')) {
       const fields = line.match(/v_\w+\s*=\s*"([^"]*)"/)?.[1]?.split('~') ?? [];
-      console.log(`[stocksTicker] HK ${parsed.raw} fields[0..9]:`, JSON.stringify(fields.slice(0, 10)), `total fields: ${fields.length}`);
+      console.log(`[stocksTicker] HK ${parsed.raw} name="${fields[1]}" code="${fields[2]}" price="${fields[3]}" prevClose="${fields[4]}" total fields: ${fields.length}`);
     }
     const symbol = splitMarket(parsed.raw);
     if (!symbol) {

@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import { execSync } from 'child_process';
 import { WatchlistStore } from './storage/watchlistStore';
 import { StatusBarController } from './ui/statusBar';
 import { WatchlistTreeProvider, TreeNode, isStockNode } from './ui/watchlistTreeProvider';
@@ -24,8 +25,134 @@ let latestQuotes: Quote[] = [];
 /** Cached watchlist — used to filter quotes into the rotation subset. */
 let currentWatchlist: WatchlistItem[] = [];
 
+/** Check whether a proxy env var is already set (any case). */
+function hasProxyEnv(): boolean {
+  return !!(process.env.HTTPS_PROXY || process.env.https_proxy ||
+    process.env.HTTP_PROXY || process.env.http_proxy);
+}
+
+/** Set proxy env vars (both cases) to `url`, if not already set. */
+function setProxyEnv(url: string): void {
+  if (!process.env.HTTPS_PROXY && !process.env.https_proxy) {
+    process.env.HTTPS_PROXY = url;
+  }
+  if (!process.env.HTTP_PROXY && !process.env.http_proxy) {
+    process.env.HTTP_PROXY = url;
+  }
+}
+
+/**
+ * Read the macOS system proxy via `scutil --proxy` and return an
+ * `http://host:port` URL if HTTPS proxy is enabled, else undefined.
+ * Returns undefined on non-macOS or any error.
+ */
+function detectMacSystemProxy(): string | undefined {
+  if (process.platform !== 'darwin') {
+    return undefined;
+  }
+  try {
+    const out = execSync('scutil --proxy', { encoding: 'utf8', timeout: 2000 });
+    const httpsEnabled = /HTTPSEnable\s*:\s*1/.test(out);
+    if (!httpsEnabled) {
+      return undefined;
+    }
+    const host = out.match(/HTTPSProxy\s*:\s*([\d.]+)/)?.[1];
+    const port = out.match(/HTTPSPort\s*:\s*(\d+)/)?.[1];
+    if (host && port) {
+      return `http://${host}:${port}`;
+    }
+  } catch {
+    // scutil not available, timed out, or parse failure — give up silently.
+  }
+  return undefined;
+}
+
+/**
+ * Spawn a login shell to read proxy env vars from the user's shell config
+ * (e.g. ~/.zshrc sets `https_proxy`). VSCode launched from the Dock does not
+ * inherit shell env vars, so this is the only way to pick up a proxy that the
+ * user configured only in their dotfiles. Returns the proxy URL or undefined.
+ */
+function detectShellProxy(): string | undefined {
+  const shell = process.env.SHELL || '/bin/zsh';
+  try {
+    // `-i` = interactive shell to source ~/.zshrc / ~/.bashrc;
+    // print both vars, take the first non-empty http:// or https:// value.
+    const out = execSync(
+      `${shell} -i -c 'echo "HTTPS_PROXY=$HTTPS_PROXY"; echo "https_proxy=$https_proxy"; echo "HTTP_PROXY=$HTTP_PROXY"; echo "http_proxy=$http_proxy"' 2>/dev/null`,
+      { encoding: 'utf8', timeout: 4000 }
+    );
+    const lines = out.split('\n').map((l) => l.trim()).filter(Boolean);
+    for (const line of lines) {
+      const eq = line.indexOf('=');
+      if (eq < 0) {
+        continue;
+      }
+      const val = line.slice(eq + 1).trim();
+      if (/^https?:\/\/.+/.test(val)) {
+        return val;
+      }
+    }
+  } catch {
+    // Shell not available, timed out, or config error — give up silently.
+  }
+  return undefined;
+}
+
+/**
+ * Detect proxy from multiple sources and inject into process.env so the Yahoo
+ * provider (which reads env vars) can route through it. Logs the result for
+ * diagnostics.
+ */
+function detectAndSetProxy(): void {
+  // 1. Already in env (shell-inherited) — nothing to do.
+  if (hasProxyEnv()) {
+    console.log('[stocksTicker] proxy: env (', getProxyEnvValue(), ')');
+    return;
+  }
+  // 2. VSCode's http.proxy setting.
+  const httpProxy = vscode.workspace.getConfiguration('http').get<string>('proxy');
+  if (httpProxy) {
+    setProxyEnv(httpProxy);
+    console.log('[stocksTicker] proxy: VSCode http.proxy setting (', httpProxy, ')');
+    return;
+  }
+  // 3. macOS system proxy (scutil — System Preferences / Clash "system proxy").
+  const sysProxy = detectMacSystemProxy();
+  if (sysProxy) {
+    setProxyEnv(sysProxy);
+    console.log('[stocksTicker] proxy: macOS system (', sysProxy, ')');
+    return;
+  }
+  // 4. Shell dotfiles (e.g. ~/.zshrc sets https_proxy). VSCode from Dock
+  //    doesn't inherit shell env, so we spawn a login shell to read it.
+  const shellProxy = detectShellProxy();
+  if (shellProxy) {
+    setProxyEnv(shellProxy);
+    console.log('[stocksTicker] proxy: shell dotfiles (', shellProxy, ')');
+    return;
+  }
+  console.log('[stocksTicker] proxy: none detected — Yahoo extended-hours will fail in mainland China. Set http.proxy in VSCode settings or https_proxy in shell.');
+}
+
+function getProxyEnvValue(): string | undefined {
+  return process.env.HTTPS_PROXY || process.env.https_proxy ||
+    process.env.HTTP_PROXY || process.env.http_proxy || undefined;
+}
+
 export function activate(context: vscode.ExtensionContext): void {
   console.log('[stocksTicker] activate 开始，扩展已加载');
+
+  // ---- Proxy detection ----
+  // Yahoo (extended-hours data) needs a proxy in mainland China. VSCode
+  // launched from the Dock/Spotlight does NOT inherit shell env vars
+  // (e.g. `https_proxy` set in ~/.zshrc), so we probe multiple sources:
+  //   1. Existing process.env (shell-inherited, if launched from terminal)
+  //   2. VSCode's `http.proxy` setting
+  //   3. macOS system proxy via `scutil --proxy` (System Preferences / Clash / Surge)
+  // We only set env when not already present so an explicit value wins.
+  detectAndSetProxy();
+
   const store = new WatchlistStore(context.globalState);
   statusBar = new StatusBarController();
   tree = new WatchlistTreeProvider();

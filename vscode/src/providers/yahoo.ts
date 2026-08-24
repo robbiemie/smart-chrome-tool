@@ -1,3 +1,6 @@
+import * as http from 'http';
+import * as https from 'https';
+import * as tls from 'tls';
 import type { StockSymbol } from '../types/stock';
 
 /**
@@ -13,11 +16,15 @@ import type { StockSymbol } from '../types/stock';
  *   - Tencent "usAAPL" → Yahoo "AAPL"
  *   - Tencent "hk00700" → Yahoo "0700.HK"
  *
- * NOTE: Yahoo is unreachable from mainland China without a VPN. Unlike the
- * Tencent provider (which MUST bypass the system proxy to avoid 403), Yahoo
- * MUST go THROUGH the proxy. We use the global `fetch` API, which respects
- * NODE_USE_ENV_PROXY / https_proxy env vars automatically. On failure we
- * silently return null; the caller falls back to Tencent-only data.
+ * NOTE: Yahoo is unreachable from mainland China without a proxy. Unlike the
+ * Tencent provider (which MUST bypass the system proxy with a direct agent),
+ * Yahoo MUST go THROUGH the proxy. The global `fetch` in VSCode's extension
+ * host does NOT honor `https_proxy` / `NODE_USE_ENV_PROXY` reliably (VSCode
+ * launched from the Dock doesn't even inherit shell env vars), so we tunnel
+ * explicitly via HTTP CONNECT using the proxy URL from the environment. The
+ * caller (extension.ts) also mirrors VSCode's `http.proxy` setting into env
+ * at activation. On failure we return null; the caller falls back to
+ * Tencent-only regular-session data (no extended-hours tag).
  */
 const CHART_ENDPOINT = 'https://query1.finance.yahoo.com/v8/finance/chart';
 
@@ -40,17 +47,197 @@ function toYahooSymbol(symbol: StockSymbol): string {
   return `${Number(symbol.code)}.HK`;
 }
 
-async function fetchJson(url: string): Promise<any> {
-  // Use global fetch (Node 18+) — respects NODE_USE_ENV_PROXY / https_proxy,
-  // routing Yahoo through the system VPN proxy. Tencent uses a custom agent
-  // to bypass the proxy (its domains get 403'd by the proxy allowlist).
-  const res = await fetch(url, {
-    headers: { 'User-Agent': 'Mozilla/5.0' },
-  });
-  if (!res.ok) {
-    throw new Error(`HTTP ${res.status}`);
+/** Resolve an HTTP(S) proxy URL from the environment (set by extension.ts). */
+function getProxyUrl(): string | undefined {
+  return (
+    process.env.HTTPS_PROXY || process.env.https_proxy ||
+    process.env.HTTP_PROXY || process.env.http_proxy || undefined
+  );
+}
+
+/** Whether `hostname` should bypass the proxy per NO_PROXY. Simple suffix match. */
+function isNoProxy(hostname: string): boolean {
+  const noProxy = (process.env.NO_PROXY || process.env.no_proxy || '').toLowerCase();
+  if (!noProxy) {
+    return false;
   }
-  return res.json();
+  const host = hostname.toLowerCase();
+  return noProxy.split(',')
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .some((entry) => {
+      if (entry === '*') {
+        return true;
+      }
+      const e = entry.startsWith('.') ? entry.slice(1) : entry;
+      return host === e || host.endsWith('.' + e);
+    });
+}
+
+/**
+ * Fetch text from a URL, routing through an HTTP CONNECT proxy when
+ * `https_proxy`/`http_proxy` is set (and not bypassed via NO_PROXY).
+ *
+ * Steps when a proxy is configured:
+ *   1. TCP-connect to the proxy and issue `CONNECT host:443`.
+ *   2. Upgrade the tunneled socket to TLS.
+ *   3. Run the HTTPS GET over that TLS socket via `createConnection`.
+ *
+ * Only HTTP CONNECT proxies are supported (the common `http://host:port` form).
+ * SOCKS proxies (`socks5://...`) are not handled — point `https_proxy` at the
+ * HTTP proxy port instead (e.g. Clash/Surge's mixed/http port).
+ */
+function fetchText(urlStr: string): Promise<string> {
+  const target = new URL(urlStr);
+  const proxyUrlStr = getProxyUrl();
+  const useProxy = !!proxyUrlStr && !isNoProxy(target.hostname);
+
+  return new Promise<string>((resolve, reject) => {
+    const ok = (text: string): void => resolve(text);
+    const fail = (err: Error): void => reject(err);
+
+    const handleResponse = (httpRes: http.IncomingMessage): void => {
+      if (httpRes.statusCode && (httpRes.statusCode < 200 || httpRes.statusCode >= 300)) {
+        httpRes.resume();
+        fail(new Error(`HTTP ${httpRes.statusCode}`));
+        return;
+      }
+      const chunks: Buffer[] = [];
+      httpRes.on('data', (c) => chunks.push(c));
+      httpRes.on('end', () => ok(Buffer.concat(chunks).toString('utf8')));
+      httpRes.on('error', fail);
+    };
+
+    if (useProxy) {
+      const proxy = new URL(proxyUrlStr as string);
+      const connectReq = http.request({
+        host: proxy.hostname,
+        port: Number(proxy.port) || (proxy.protocol === 'https:' ? 443 : 80),
+        method: 'CONNECT',
+        path: `${target.hostname}:443`,
+        headers: { Host: `${target.hostname}:443` },
+      });
+      connectReq.once('error', fail);
+      connectReq.once('connect', (res, socket) => {
+        if (res.statusCode !== 200) {
+          socket.destroy();
+          fail(new Error(`proxy CONNECT ${res.statusCode}`));
+          return;
+        }
+        const tlsSocket = tls.connect({ socket, servername: target.hostname }, () => {
+          const getReq = https.request(
+            {
+              createConnection: () => tlsSocket,
+              hostname: target.hostname,
+              path: target.pathname + target.search,
+              method: 'GET',
+              headers: { 'User-Agent': 'Mozilla/5.0', Host: target.hostname },
+            },
+            handleResponse
+          );
+          getReq.once('error', fail);
+          getReq.end();
+        });
+        tlsSocket.once('error', fail);
+      });
+      connectReq.end();
+    } else {
+      const req = https.request(
+        {
+          hostname: target.hostname,
+          port: 443,
+          path: target.pathname + target.search,
+          method: 'GET',
+          agent: new https.Agent({ keepAlive: false }),
+          headers: { 'User-Agent': 'Mozilla/5.0', Host: target.hostname },
+        },
+        handleResponse
+      );
+      req.once('error', fail);
+      req.end();
+    }
+  });
+}
+
+async function fetchJson(url: string): Promise<any> {
+  const text = await fetchText(url);
+  return JSON.parse(text);
+}
+
+/**
+ * Convert a Unix timestamp (seconds) to Eastern Time minutes-of-day,
+ * approximating US DST (2nd Sunday of March → 1st Sunday of November).
+ */
+function timestampToEtMinutes(ts: number): number {
+  const date = new Date(ts * 1000);
+  const year = date.getUTCFullYear();
+  const secondSunMar = 8 + ((7 - new Date(Date.UTC(year, 2, 1)).getUTCDay()) % 7);
+  const firstSunNov = 1 + ((7 - new Date(Date.UTC(year, 10, 1)).getUTCDay()) % 7);
+  const month = date.getUTCMonth() + 1;
+  const day = date.getUTCDate();
+  const inDST =
+    (month > 3 && month < 11) ||
+    (month === 3 && day >= secondSunMar) ||
+    (month === 11 && day < firstSunNov);
+  const offsetHours = inDST ? -4 : -5;
+  const utcMin = date.getUTCHours() * 60 + date.getUTCMinutes();
+  return ((utcMin + offsetHours * 60) % (24 * 60) + 24 * 60) % (24 * 60);
+}
+
+/** Classify ET minutes-of-day into US trading session. */
+function classifyEtSession(etMin: number): 'pre' | 'regular' | 'post' | 'closed' {
+  if (etMin >= 4 * 60 && etMin < 9 * 60 + 30) return 'pre';
+  if (etMin >= 9 * 60 + 30 && etMin < 16 * 60) return 'regular';
+  if (etMin >= 16 * 60 && etMin < 20 * 60) return 'post';
+  return 'closed';
+}
+
+interface ChartBar {
+  price: number;
+  session: 'pre' | 'regular' | 'post' | 'closed';
+}
+
+/**
+ * Parse the chart's intraday bars (timestamp + close arrays) to extract
+ * extended-hours information. Yahoo's meta.preMarketPrice / postMarketPrice
+ * fields are only populated while that session is ACTIVELY trading; after it
+ * closes they disappear. The chart bars, however, retain all sessions' data
+ * when includePrePost=true, so we can reliably find the latest pre/post price
+ * even after hours.
+ *
+ * Returns: latest bar, latest regular-session bar, latest pre bar, latest post bar.
+ */
+function parseChartBars(result: any): {
+  latest?: ChartBar;
+  regular?: ChartBar;
+  pre?: ChartBar;
+  post?: ChartBar;
+} {
+  const timestamps: number[] = result?.timestamp ?? [];
+  const closes: (number | null)[] = result?.indicators?.quote?.[0]?.close ?? [];
+  if (timestamps.length === 0 || closes.length === 0) {
+    return {};
+  }
+  let latest: ChartBar | undefined;
+  let regular: ChartBar | undefined;
+  let pre: ChartBar | undefined;
+  let post: ChartBar | undefined;
+  // Walk backwards — most recent bars first.
+  for (let i = timestamps.length - 1; i >= 0; i--) {
+    const close = closes[i];
+    if (close == null || !Number.isFinite(Number(close))) {
+      continue;
+    }
+    const price = Number(close);
+    const session = classifyEtSession(timestampToEtMinutes(timestamps[i]));
+    const bar: ChartBar = { price, session };
+    if (!latest) latest = bar;
+    if (!regular && session === 'regular') regular = bar;
+    if (!pre && session === 'pre') pre = bar;
+    if (!post && session === 'post') post = bar;
+    if (latest && regular && pre && post) break;
+  }
+  return { latest, regular, pre, post };
 }
 
 /**
@@ -64,7 +251,7 @@ export async function fetchYahooQuote(symbol: StockSymbol): Promise<YahooQuote |
   try {
     data = await fetchJson(url);
   } catch (err) {
-    console.warn('[stocksTicker] yahoo fetch failed:', ySymbol, err);
+    console.warn('[stocksTicker] yahoo fetch failed:', ySymbol, err, '(proxy:', getProxyUrl() ? 'on' : 'off', ')');
     return null;
   }
   const result = data?.chart?.result?.[0];
@@ -73,28 +260,46 @@ export async function fetchYahooQuote(symbol: StockSymbol): Promise<YahooQuote |
     return null;
   }
   const meta = result.meta ?? {};
-  const regularPrice = Number(meta.regularMarketPrice);
+  const metaRegularPrice = Number(meta.regularMarketPrice);
   const previousClose = Number(meta.previousClose ?? meta.chartPreviousClose);
-  if (!Number.isFinite(regularPrice) || regularPrice === 0) {
+  if (!Number.isFinite(metaRegularPrice) || metaRegularPrice === 0) {
     return null;
   }
-  const preMarketPrice = meta.preMarketPrice != null ? Number(meta.preMarketPrice) : undefined;
-  const postMarketPrice = meta.postMarketPrice != null ? Number(meta.postMarketPrice) : undefined;
   const regularTime = meta.regularMarketTime;
 
-  // Determine the latest price and extended session kind.
-  // Prefer postMarket (more recent) over preMarket.
-  let latestPrice: number = regularPrice;
+  // Primary source: parse chart bars for session-aware pricing.
+  // Fallback: meta fields (only set during active extended sessions).
+  const bars = parseChartBars(result);
+  const regularPrice = bars.regular?.price ?? metaRegularPrice;
+  const preMarketPrice = bars.pre?.price ?? (meta.preMarketPrice != null ? Number(meta.preMarketPrice) : undefined);
+  const postMarketPrice = bars.post?.price ?? (meta.postMarketPrice != null ? Number(meta.postMarketPrice) : undefined);
+
+  // The latest bar is the most recent trade — could be pre, regular, or post.
+  // Determine isExtended from the latest bar's session.
+  let latestPrice: number = metaRegularPrice;
   let isExtended: 'pre' | 'post' | null = null;
-  if (postMarketPrice != null && Number.isFinite(postMarketPrice) && postMarketPrice !== regularPrice) {
-    latestPrice = postMarketPrice;
-    isExtended = 'post';
-  } else if (preMarketPrice != null && Number.isFinite(preMarketPrice) && preMarketPrice !== regularPrice) {
-    latestPrice = preMarketPrice;
-    isExtended = 'pre';
+  if (bars.latest) {
+    latestPrice = bars.latest.price;
+    isExtended = bars.latest.session === 'pre' ? 'pre'
+      : bars.latest.session === 'post' ? 'post' : null;
+  } else {
+    // No bars — fall back to meta fields.
+    if (postMarketPrice != null && Number.isFinite(postMarketPrice)) {
+      latestPrice = postMarketPrice;
+      isExtended = 'post';
+    } else if (preMarketPrice != null && Number.isFinite(preMarketPrice)) {
+      latestPrice = preMarketPrice;
+      isExtended = 'pre';
+    }
   }
 
-  console.log('[stocksTicker] yahoo ok:', ySymbol, 'regular=', regularPrice, 'pre=', preMarketPrice, 'post=', postMarketPrice, 'extended=', isExtended);
+  console.log('[stocksTicker] yahoo ok:', ySymbol,
+    'regular=', regularPrice,
+    'pre=', preMarketPrice,
+    'post=', postMarketPrice,
+    'latest=', latestPrice,
+    'extended=', isExtended,
+    'bars:', bars.latest ? `${bars.latest.session}@${bars.latest.price}` : 'none');
 
   return {
     regularPrice,
