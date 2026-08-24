@@ -23,7 +23,16 @@ export function isUp(q: Quote): boolean {
 }
 
 export function formatPrice(q: Quote): string {
-  return q.price.toFixed(q.symbol.market === 'us' ? 2 : 3);
+  return formatPriceByMarket(q.price, q.symbol.market);
+}
+
+/**
+ * Format a raw price with market-appropriate precision.
+ * US stocks use 2 decimals, HK uses 3 — single source of truth so target
+ * prices and live prices render with identical precision.
+ */
+export function formatPriceByMarket(price: number, market: Market): string {
+  return price.toFixed(market === 'us' ? 2 : 3);
 }
 
 export function formatMarketTag(market: Market): string {

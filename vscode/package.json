@@ -2,7 +2,7 @@
   "name": "stocks-ticker",
   "displayName": "股票行情",
   "description": "在命令面板查询港股/美股实时行情，状态栏轮播 + 侧边栏自选股列表。",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "publisher": "robbie",
   "engines": {
     "vscode": "^1.80.0"
@@ -105,6 +105,29 @@
         "title": "移出轮播",
         "category": "股票行情",
         "icon": "$(remove)"
+      },
+      {
+        "command": "stocksTicker.addAlert",
+        "title": "设置价格提醒",
+        "category": "股票行情",
+        "icon": "$(bell)"
+      },
+      {
+        "command": "stocksTicker.toggleAlert",
+        "title": "启用/停用提醒",
+        "category": "股票行情",
+        "icon": "$(bell)"
+      },
+      {
+        "command": "stocksTicker.removeAlert",
+        "title": "删除提醒",
+        "category": "股票行情",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "stocksTicker.clearAlerts",
+        "title": "清空价格提醒",
+        "category": "股票行情"
       }
     ],
     "keybindings": [
@@ -130,6 +153,10 @@
           "name": "自选股"
         },
         {
+          "id": "stocksTicker.alerts",
+          "name": "价格提醒"
+        },
+        {
           "id": "stocksTicker.welcome",
           "name": "股票行情",
           "when": "stocksTicker.watchlistEmpty"
@@ -146,6 +173,11 @@
         "view": "stocksTicker.watchlist",
         "contents": "自选股为空。\n\n[查询并添加股票](command:stocksTicker.query)\n[直接添加代码](command:stocksTicker.addToWatchlist)",
         "when": "stocksTicker.watchlistEmpty"
+      },
+      {
+        "view": "stocksTicker.alerts",
+        "contents": "还没有价格提醒。\n\n[设置价格提醒](command:stocksTicker.addAlert)\n\n也可在自选股上右键 →「设置价格提醒」。",
+        "when": "stocksTicker.alertsEmpty"
       }
     ],
     "menus": {
@@ -179,6 +211,16 @@
           "command": "stocksTicker.importJson",
           "when": "view == stocksTicker.watchlist",
           "group": "1_actions@3"
+        },
+        {
+          "command": "stocksTicker.addAlert",
+          "when": "view == stocksTicker.alerts",
+          "group": "navigation@1"
+        },
+        {
+          "command": "stocksTicker.clearAlerts",
+          "when": "view == stocksTicker.alerts",
+          "group": "1_actions@1"
         }
       ],
       "view/item/context": [
@@ -204,7 +246,7 @@
         },
         {
           "command": "stocksTicker.showDetail",
-          "when": "view == stocksTicker.watchlist && viewItem =~ /^stock(Pinned|WithQuote)$/",
+          "when": "view == stocksTicker.watchlist && viewItem =~ /^stock/",
           "group": "navigation@1"
         },
         {
@@ -226,6 +268,31 @@
           "command": "stocksTicker.removeFromWatchlist",
           "when": "view == stocksTicker.watchlist && viewItem =~ /^stock/",
           "group": "9_delete@1"
+        },
+        {
+          "command": "stocksTicker.addAlert",
+          "when": "view == stocksTicker.watchlist && viewItem =~ /^stock/",
+          "group": "navigation@2"
+        },
+        {
+          "command": "stocksTicker.toggleAlert",
+          "when": "view == stocksTicker.alerts && viewItem =~ /^alert/",
+          "group": "inline@1"
+        },
+        {
+          "command": "stocksTicker.removeAlert",
+          "when": "view == stocksTicker.alerts && viewItem =~ /^alert/",
+          "group": "inline@2"
+        },
+        {
+          "command": "stocksTicker.toggleAlert",
+          "when": "view == stocksTicker.alerts && viewItem =~ /^alert/",
+          "group": "navigation@1"
+        },
+        {
+          "command": "stocksTicker.removeAlert",
+          "when": "view == stocksTicker.alerts && viewItem =~ /^alert/",
+          "group": "9_delete@1"
         }
       ],
       "commandPalette": [
@@ -239,6 +306,14 @@
         },
         {
           "command": "stocksTicker.leaveRotation",
+          "when": "false"
+        },
+        {
+          "command": "stocksTicker.toggleAlert",
+          "when": "false"
+        },
+        {
+          "command": "stocksTicker.removeAlert",
           "when": "false"
         }
       ]

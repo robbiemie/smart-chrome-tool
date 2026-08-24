@@ -1,8 +1,11 @@
 import * as vscode from 'vscode';
 import { execSync } from 'child_process';
 import { WatchlistStore } from './storage/watchlistStore';
+import { AlertStore } from './storage/alertStore';
 import { StatusBarController } from './ui/statusBar';
 import { WatchlistTreeProvider, TreeNode, isStockNode } from './ui/watchlistTreeProvider';
+import { AlertTreeProvider, AlertNode } from './ui/alertTreeProvider';
+import { AlertEngine } from './alert/alertEngine';
 import { Poller } from './poll/poller';
 import { queryCommand } from './commands/query';
 import { addToWatchlistCommand } from './commands/addToWatchlist';
@@ -15,11 +18,13 @@ import { clearAllCommand } from './commands/clearAll';
 import { showDetailCommand } from './commands/showDetail';
 import { exportJsonCommand, importJsonCommand } from './commands/importExport';
 import { joinRotationCommand, leaveRotationCommand } from './commands/rotation';
+import { addAlertCommand, toggleAlertCommand, removeAlertCommand, clearAlertsCommand } from './commands/alert';
 import { fetchQuote } from './providers/tencent';
-import type { Quote, WatchlistItem } from './types/stock';
+import type { Quote, StockSymbol, WatchlistItem } from './types/stock';
 
 let statusBar: StatusBarController | undefined;
 let tree: WatchlistTreeProvider | undefined;
+let alertTree: AlertTreeProvider | undefined;
 let poller: Poller | undefined;
 let latestQuotes: Quote[] = [];
 /** Cached watchlist — used to filter quotes into the rotation subset. */
@@ -154,11 +159,18 @@ export function activate(context: vscode.ExtensionContext): void {
   detectAndSetProxy();
 
   const store = new WatchlistStore(context.globalState);
+  const alertStore = new AlertStore(context.globalState);
   statusBar = new StatusBarController();
   tree = new WatchlistTreeProvider();
+  alertTree = new AlertTreeProvider();
 
   const treeView = vscode.window.createTreeView<TreeNode>('stocksTicker.watchlist', {
     treeDataProvider: tree,
+    canSelectMany: false,
+  });
+
+  const alertView = vscode.window.createTreeView<AlertNode>('stocksTicker.alerts', {
+    treeDataProvider: alertTree,
     canSelectMany: false,
   });
 
@@ -179,8 +191,23 @@ export function activate(context: vscode.ExtensionContext): void {
     poller?.refreshNow();
   };
 
+  /** Reload alerts from storage into the alert tree + update empty-state context. */
+  const syncAlertsToTree = async () => {
+    const list = await alertStore.getAll();
+    alertTree?.setAlerts(list);
+    void vscode.commands.executeCommand('setContext', 'stocksTicker.alertsEmpty', list.length === 0);
+  };
+
   /** Find the latest quote for a symbol (from cached latestQuotes). */
   const findQuote = (raw: string): Quote | undefined => latestQuotes.find((q) => q.symbol.raw === raw);
+
+  // Alert engine: declared before the poller so the onQuotes closure can reference
+  // it. Edge-triggered evaluation; refreshes the alert tree on state changes and
+  // peeks the status bar when the user clicks「查看」on a fired toast.
+  const alertEngine = new AlertEngine(alertStore, {
+    onChanged: () => void syncAlertsToTree(),
+    onFollow: (q) => statusBar?.showSingle(q),
+  });
 
   poller = new Poller(store, {
     onQuotes: (quotes) => {
@@ -193,12 +220,18 @@ export function activate(context: vscode.ExtensionContext): void {
       });
       statusBar?.update(rotationQuotes);
       tree?.setQuotes(quotes);
+      // Feed live prices to the alert tree (shows current price next to target).
+      alertTree?.setQuotes(quotes);
+      // Evaluate price alerts against the fresh quotes (fires toasts if triggered).
+      void alertEngine.evaluate(quotes);
     },
     onError: (msg) => statusBar?.setError(msg),
   }, getConfig);
 
   // Initial sync + start polling.
   void syncWatchlistToTree().then(() => poller?.start());
+  // Load existing alerts into the tree + set empty-state context.
+  void syncAlertsToTree();
 
   // Apply status-bar visibility from config.
   statusBar.setEnabled(getConfig().statusBarEnabled);
@@ -259,7 +292,23 @@ export function activate(context: vscode.ExtensionContext): void {
         statusBar?.showSingle(q);
       });
     }),
+    // ---- Price alerts ----
+    // Add an alert. From the alert view title → pick a stock from the watchlist;
+    // from a watchlist stock's context menu → that stock is preselected.
+    vscode.commands.registerCommand('stocksTicker.addAlert', (node?: { symbol?: StockSymbol; label?: string }) =>
+      void addAlertCommand(alertStore, () => currentWatchlist, node, () => void syncAlertsToTree())
+    ),
+    vscode.commands.registerCommand('stocksTicker.toggleAlert', (node?: AlertNode) =>
+      void toggleAlertCommand(alertStore, node, () => void syncAlertsToTree())
+    ),
+    vscode.commands.registerCommand('stocksTicker.removeAlert', (node?: AlertNode) =>
+      void removeAlertCommand(alertStore, node, () => void syncAlertsToTree())
+    ),
+    vscode.commands.registerCommand('stocksTicker.clearAlerts', () =>
+      void clearAlertsCommand(alertStore, () => void syncAlertsToTree())
+    ),
     treeView,
+    alertView,
     statusBar
   );
 
