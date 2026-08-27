@@ -30,6 +30,4 @@ export interface PriceAlert {
    * Once-mode alerts ignore this field (they fire unconditionally when triggered).
    */
   armed: boolean;
-  /** Optional user note shown in the toast. */
-  note?: string;
 }

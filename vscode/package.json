@@ -2,7 +2,7 @@
   "name": "stocks-ticker",
   "displayName": "股票行情",
   "description": "在命令面板查询港股/美股实时行情，状态栏轮播 + 侧边栏自选股列表。",
-  "version": "0.1.8",
+  "version": "0.3.4",
   "publisher": "robbie",
   "engines": {
     "vscode": "^1.80.0"
@@ -111,6 +111,12 @@
         "title": "设置价格提醒",
         "category": "股票行情",
         "icon": "$(bell)"
+      },
+      {
+        "command": "stocksTicker.editAlert",
+        "title": "编辑提醒",
+        "category": "股票行情",
+        "icon": "$(edit)"
       },
       {
         "command": "stocksTicker.toggleAlert",
@@ -275,7 +281,7 @@
           "group": "navigation@2"
         },
         {
-          "command": "stocksTicker.toggleAlert",
+          "command": "stocksTicker.editAlert",
           "when": "view == stocksTicker.alerts && viewItem =~ /^alert/",
           "group": "inline@1"
         },
@@ -285,9 +291,14 @@
           "group": "inline@2"
         },
         {
-          "command": "stocksTicker.toggleAlert",
+          "command": "stocksTicker.editAlert",
           "when": "view == stocksTicker.alerts && viewItem =~ /^alert/",
           "group": "navigation@1"
+        },
+        {
+          "command": "stocksTicker.toggleAlert",
+          "when": "view == stocksTicker.alerts && viewItem =~ /^alert/",
+          "group": "navigation@2"
         },
         {
           "command": "stocksTicker.removeAlert",
@@ -313,6 +324,10 @@
           "when": "false"
         },
         {
+          "command": "stocksTicker.editAlert",
+          "when": "false"
+        },
+        {
           "command": "stocksTicker.removeAlert",
           "when": "false"
         }
@@ -325,7 +340,13 @@
           "type": "number",
           "default": 8000,
           "minimum": 1000,
-          "description": "交易时段刷新间隔（毫秒）。各市场独立判断：开市时用此值，闭市时用非交易时段间隔。"
+          "description": "港股交易时段刷新间隔（毫秒）。港股开市时用此值，闭市时用非交易时段间隔。"
+        },
+        "stocksTicker.usRefreshIntervalMs": {
+          "type": "number",
+          "default": 3000,
+          "minimum": 1000,
+          "description": "美股交易时段刷新间隔（毫秒）。美股开市时用此值（含盘前/盘后），闭市时用非交易时段间隔。"
         },
         "stocksTicker.offHoursRefreshIntervalMs": {
           "type": "number",

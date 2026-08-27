@@ -82,6 +82,14 @@ export class AlertTreeProvider implements vscode.TreeDataProvider<AlertNode> {
 
     const quote = this.quotes.get(alert.symbol.raw);
 
+    // HK alerts show the live Chinese name from EastMoney (e.g. "美团-W")
+    // instead of the bare code. The stored alert.name may be a code if it was
+    // captured before quote data arrived. US alerts keep their stored ticker
+    // name — unchanged.
+    const isHk = alert.symbol.market === 'hk';
+    const liveName = quote?.name;
+    const displayName = isHk && liveName ? liveName : alert.name;
+
     // ── Engine state derivation (must match AlertEngine.evaluate exactly) ──
     // `triggered` mirrors the engine's condition; `willFire` mirrors whether
     // the engine would actually act on the next tick (once always fires when
@@ -116,16 +124,20 @@ export class AlertTreeProvider implements vscode.TreeDataProvider<AlertNode> {
       liveBlock = '等待行情';
     }
 
-    const noteSuffix = alert.note ? ` · ${alert.note}` : '';
-    const label = `${alert.name} ${dirIcon}${dirWord} ${targetStr}`;
+    const label = `${displayName} ${dirIcon}${dirWord} ${targetStr}`;
+    // HK: show market tag + Chinese name (no bare code).
+    // US: keep the original `美股 AAPL` format.
+    const idPart = isHk
+      ? `${formatMarketTag(alert.symbol.market)} ${displayName}`
+      : `${formatMarketTag(alert.symbol.market)} ${alert.symbol.code}`;
     const description =
-      `${formatMarketTag(alert.symbol.market)} ${alert.symbol.code} · ${liveBlock} · ${modeTag} · ${statusTag}${noteSuffix}`;
+      `${idPart} · ${liveBlock} · ${modeTag} · ${statusTag}`;
 
     const node = new AlertNode(label, alert.id, vscode.TreeItemCollapsibleState.None);
     node.description = description;
 
     // ── Tooltip: full state detail for hover ──
-    const lines: string[] = [`${alert.name} (${alert.symbol.code})`];
+    const lines: string[] = [`${displayName} (${alert.symbol.code})`];
     lines.push(`${dirWord} ${targetStr} · ${modeTag} · ${statusTag}`);
     if (quote) {
       lines.push(`现价 ${formatPrice(quote)}（昨收 ${quote.prevClose}）${triggered ? ' · 条件已满足' : ' · 条件未满足'}`);

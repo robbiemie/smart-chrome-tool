@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { fetchQuotes } from '../providers/tencent';
+import { fetchQuotes } from '../providers';
 import { resolveSymbol } from '../providers/stockSearch';
 import { suggest } from '../providers/suggest';
 import { formatMarketTag } from '../utils/format';

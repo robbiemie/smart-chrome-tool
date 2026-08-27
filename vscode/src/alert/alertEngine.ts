@@ -107,10 +107,9 @@ export class AlertEngine {
     // a VSCode toast, since QuickPick/toast text cannot be tinted via API.
     const badge = isUp ? '🔴 ▲' : '🟢 ▼';
     const verb = isUp ? '涨到' : '跌到';
-    const noteSuffix = alert.note ? ` · ${alert.note}` : '';
     const message =
       `${badge} ${quote.name} (${quote.symbol.code}) 已${verb} ${alert.targetPrice}，` +
-      `现价 ${quote.price}${noteSuffix}`;
+      `现价 ${quote.price}`;
     void vscode.window.showWarningMessage(message, '查看').then((action) => {
       if (action === '查看') {
         this.callbacks.onFollow?.(quote);

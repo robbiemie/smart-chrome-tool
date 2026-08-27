@@ -1,4 +1,4 @@
-import { fetchQuotes } from '../providers/tencent';
+import { fetchQuotes } from '../providers';
 import { isMarketOpen } from '../utils/marketHours';
 import type { Market } from '../types/stock';
 import type { WatchlistStore } from '../storage/watchlistStore';
@@ -29,7 +29,7 @@ export class Poller {
   constructor(
     private readonly store: WatchlistStore,
     private readonly callbacks: PollerCallbacks,
-    private readonly getConfig: () => { on: number; off: number }
+    private readonly getConfig: () => Record<Market, { on: number; off: number }>
   ) {}
 
   start(): void {
@@ -62,8 +62,10 @@ export class Poller {
     if (this.stopped) {
       return;
     }
-    const { on, off } = this.getConfig();
-    const interval = isMarketOpen(market) ? on : off;
+    const { on, off } = this.getConfig()[market];
+    const open = isMarketOpen(market);
+    const interval = open ? on : off;
+    console.log('[stocksTicker] schedule next', market, 'in', interval, 'ms (open=', open, ')');
     this.timers[market] = setTimeout(() => void this.tick(market), interval);
   }
 
@@ -72,6 +74,8 @@ export class Poller {
       return;
     }
     this.running[market] = true;
+    const open = isMarketOpen(market);
+    console.log('[stocksTicker] tick start', market, 'open=', open, 'at', new Date().toISOString());
     try {
       const list = await this.store.getAll();
       const marketItems = list.filter((it) => it.symbol.market === market);
@@ -79,7 +83,14 @@ export class Poller {
         this.quotesByMarket[market] = [];
       } else {
         const quotes = await fetchQuotes(marketItems.map((it) => it.symbol));
-        this.quotesByMarket[market] = quotes;
+        // Only overwrite when we got fresh data. If the fetch returned empty
+        // (rate-limited / transient network error), keep the previous quotes
+        // so the UI does not flash to "no data" and back. A short-lived stale
+        // price beats a flickering code↔name toggle.
+        if (quotes.length > 0) {
+          this.quotesByMarket[market] = quotes;
+        }
+        console.log('[stocksTicker] tick got', quotes.length, 'quotes for', market, 'from', marketItems.length, 'items');
       }
       // Merge both markets' quotes and deliver the full picture.
       const all: Quote[] = [

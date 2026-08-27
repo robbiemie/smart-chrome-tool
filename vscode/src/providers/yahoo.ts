@@ -1,7 +1,5 @@
-import * as http from 'http';
-import * as https from 'https';
-import * as tls from 'tls';
 import type { StockSymbol } from '../types/stock';
+import { fetchJson, getProxyUrl } from '../utils/proxyFetch';
 
 /**
  * Yahoo Finance chart API — supplements Tencent for US pre/post-market prices.
@@ -45,123 +43,6 @@ function toYahooSymbol(symbol: StockSymbol): string {
   }
   // HK: strip leading zeros, append ".HK"
   return `${Number(symbol.code)}.HK`;
-}
-
-/** Resolve an HTTP(S) proxy URL from the environment (set by extension.ts). */
-function getProxyUrl(): string | undefined {
-  return (
-    process.env.HTTPS_PROXY || process.env.https_proxy ||
-    process.env.HTTP_PROXY || process.env.http_proxy || undefined
-  );
-}
-
-/** Whether `hostname` should bypass the proxy per NO_PROXY. Simple suffix match. */
-function isNoProxy(hostname: string): boolean {
-  const noProxy = (process.env.NO_PROXY || process.env.no_proxy || '').toLowerCase();
-  if (!noProxy) {
-    return false;
-  }
-  const host = hostname.toLowerCase();
-  return noProxy.split(',')
-    .map((s) => s.trim())
-    .filter(Boolean)
-    .some((entry) => {
-      if (entry === '*') {
-        return true;
-      }
-      const e = entry.startsWith('.') ? entry.slice(1) : entry;
-      return host === e || host.endsWith('.' + e);
-    });
-}
-
-/**
- * Fetch text from a URL, routing through an HTTP CONNECT proxy when
- * `https_proxy`/`http_proxy` is set (and not bypassed via NO_PROXY).
- *
- * Steps when a proxy is configured:
- *   1. TCP-connect to the proxy and issue `CONNECT host:443`.
- *   2. Upgrade the tunneled socket to TLS.
- *   3. Run the HTTPS GET over that TLS socket via `createConnection`.
- *
- * Only HTTP CONNECT proxies are supported (the common `http://host:port` form).
- * SOCKS proxies (`socks5://...`) are not handled — point `https_proxy` at the
- * HTTP proxy port instead (e.g. Clash/Surge's mixed/http port).
- */
-function fetchText(urlStr: string): Promise<string> {
-  const target = new URL(urlStr);
-  const proxyUrlStr = getProxyUrl();
-  const useProxy = !!proxyUrlStr && !isNoProxy(target.hostname);
-
-  return new Promise<string>((resolve, reject) => {
-    const ok = (text: string): void => resolve(text);
-    const fail = (err: Error): void => reject(err);
-
-    const handleResponse = (httpRes: http.IncomingMessage): void => {
-      if (httpRes.statusCode && (httpRes.statusCode < 200 || httpRes.statusCode >= 300)) {
-        httpRes.resume();
-        fail(new Error(`HTTP ${httpRes.statusCode}`));
-        return;
-      }
-      const chunks: Buffer[] = [];
-      httpRes.on('data', (c) => chunks.push(c));
-      httpRes.on('end', () => ok(Buffer.concat(chunks).toString('utf8')));
-      httpRes.on('error', fail);
-    };
-
-    if (useProxy) {
-      const proxy = new URL(proxyUrlStr as string);
-      const connectReq = http.request({
-        host: proxy.hostname,
-        port: Number(proxy.port) || (proxy.protocol === 'https:' ? 443 : 80),
-        method: 'CONNECT',
-        path: `${target.hostname}:443`,
-        headers: { Host: `${target.hostname}:443` },
-      });
-      connectReq.once('error', fail);
-      connectReq.once('connect', (res, socket) => {
-        if (res.statusCode !== 200) {
-          socket.destroy();
-          fail(new Error(`proxy CONNECT ${res.statusCode}`));
-          return;
-        }
-        const tlsSocket = tls.connect({ socket, servername: target.hostname }, () => {
-          const getReq = https.request(
-            {
-              createConnection: () => tlsSocket,
-              hostname: target.hostname,
-              path: target.pathname + target.search,
-              method: 'GET',
-              headers: { 'User-Agent': 'Mozilla/5.0', Host: target.hostname },
-            },
-            handleResponse
-          );
-          getReq.once('error', fail);
-          getReq.end();
-        });
-        tlsSocket.once('error', fail);
-      });
-      connectReq.end();
-    } else {
-      const req = https.request(
-        {
-          hostname: target.hostname,
-          port: 443,
-          path: target.pathname + target.search,
-          method: 'GET',
-          agent: new https.Agent({ keepAlive: false }),
-          headers: { 'User-Agent': 'Mozilla/5.0', Host: target.hostname },
-        },
-        handleResponse
-      );
-      req.once('error', fail);
-      req.end();
-    }
-  });
-}
-
-async function fetchJson(url: string): Promise<any> {
-  const text = await fetchText(url);
-  return JSON.parse(text);
 }
 
 /**
@@ -247,6 +128,8 @@ function parseChartBars(result: any): {
 export async function fetchYahooQuote(symbol: StockSymbol): Promise<YahooQuote | null> {
   const ySymbol = toYahooSymbol(symbol);
   const url = `${CHART_ENDPOINT}/${encodeURIComponent(ySymbol)}?interval=2m&range=1d&includePrePost=true`;
+  const proxy = getProxyUrl();
+  console.log('[stocksTicker] yahoo fetch start', ySymbol, 'proxy=', proxy ? proxy : 'off (direct — Yahoo unreachable in mainland CN without proxy)');
   let data: any;
   try {
     data = await fetchJson(url);

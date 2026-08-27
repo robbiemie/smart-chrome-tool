@@ -132,10 +132,10 @@ export async function fetchQuotes(symbols: StockSymbol[]): Promise<Quote[]> {
     if (!parsed) {
       continue;
     }
-    // Debug: dump field layout for HK quotes to diagnose format issues.
-    if (parsed.raw.toLowerCase().startsWith('hk')) {
+    // Debug: dump field layout for every parsed quote to diagnose format issues.
+    {
       const fields = line.match(/v_\w+\s*=\s*"([^"]*)"/)?.[1]?.split('~') ?? [];
-      console.log(`[stocksTicker] HK ${parsed.raw} name="${fields[1]}" code="${fields[2]}" price="${fields[3]}" prevClose="${fields[4]}" total fields: ${fields.length}`);
+      console.log(`[stocksTicker] raw ${parsed.raw} name="${fields[1]}" code="${fields[2]}" price="${fields[3]}" prevClose="${fields[4]}" open="${fields[5]}" vol="${fields[6]}" datetime="${fields[30]}" high="${fields[33]}" low="${fields[34]}" fields=${fields.length}`);
     }
     const symbol = splitMarket(parsed.raw);
     if (!symbol) {
@@ -167,6 +167,12 @@ export async function fetchQuotes(symbols: StockSymbol[]): Promise<Quote[]> {
       } else {
         q.isExtended = null;
       }
+    }
+  }
+
+  for (const q of out) {
+    if (q.symbol.market === 'us') {
+      console.log('[stocksTicker] US final', q.symbol.raw, 'price=', q.price, 'prevClose=', q.prevClose, 'pre=', q.preMarketPrice ?? '-', 'post=', q.postMarketPrice ?? '-', 'ext=', q.isExtended, 'ts=', q.timestamp ?? '-');
     }
   }
 

@@ -18,8 +18,8 @@ import { clearAllCommand } from './commands/clearAll';
 import { showDetailCommand } from './commands/showDetail';
 import { exportJsonCommand, importJsonCommand } from './commands/importExport';
 import { joinRotationCommand, leaveRotationCommand } from './commands/rotation';
-import { addAlertCommand, toggleAlertCommand, removeAlertCommand, clearAlertsCommand } from './commands/alert';
-import { fetchQuote } from './providers/tencent';
+import { addAlertCommand, editAlertCommand, toggleAlertCommand, removeAlertCommand, clearAlertsCommand } from './commands/alert';
+import { fetchQuote } from './providers';
 import type { Quote, StockSymbol, WatchlistItem } from './types/stock';
 
 let statusBar: StatusBarController | undefined;
@@ -105,21 +105,31 @@ function detectShellProxy(): string | undefined {
 }
 
 /**
- * Detect proxy from multiple sources and inject into process.env so the Yahoo
- * provider (which reads env vars) can route through it. Logs the result for
- * diagnostics.
+ * Detect proxy from multiple sources and inject into process.env so the
+ * Yahoo provider (which reads env vars) can route through it. Logs the
+ * result for diagnostics.
+ *
+ * Priority (highest first):
+ *   1. VSCode `http.proxy` setting — user-configured, most reliable. Covers
+ *      env vars (which may be stale inherited values from a prior shell).
+ *   2. Env vars already set (shell-inherited).
+ *   3. macOS system proxy (scutil — System Preferences / Clash "system proxy").
+ *   4. Shell dotfiles (spawn login shell to read ~/.zshrc etc.).
  */
 function detectAndSetProxy(): void {
-  // 1. Already in env (shell-inherited) — nothing to do.
-  if (hasProxyEnv()) {
-    console.log('[stocksTicker] proxy: env (', getProxyEnvValue(), ')');
-    return;
-  }
-  // 2. VSCode's http.proxy setting.
+  // 1. VSCode's http.proxy setting — highest priority, overrides stale env.
   const httpProxy = vscode.workspace.getConfiguration('http').get<string>('proxy');
   if (httpProxy) {
-    setProxyEnv(httpProxy);
+    process.env.HTTPS_PROXY = httpProxy;
+    process.env.https_proxy = httpProxy;
+    process.env.HTTP_PROXY = httpProxy;
+    process.env.http_proxy = httpProxy;
     console.log('[stocksTicker] proxy: VSCode http.proxy setting (', httpProxy, ')');
+    return;
+  }
+  // 2. Already in env (shell-inherited).
+  if (hasProxyEnv()) {
+    console.log('[stocksTicker] proxy: env (', getProxyEnvValue(), ')');
     return;
   }
   // 3. macOS system proxy (scutil — System Preferences / Clash "system proxy").
@@ -137,7 +147,7 @@ function detectAndSetProxy(): void {
     console.log('[stocksTicker] proxy: shell dotfiles (', shellProxy, ')');
     return;
   }
-  console.log('[stocksTicker] proxy: none detected — Yahoo extended-hours will fail in mainland China. Set http.proxy in VSCode settings or https_proxy in shell.');
+  console.log('[stocksTicker] proxy: none detected — Yahoo will fail in mainland China. Set http.proxy in VSCode settings or https_proxy in shell.');
 }
 
 function getProxyEnvValue(): string | undefined {
@@ -176,9 +186,12 @@ export function activate(context: vscode.ExtensionContext): void {
 
   const getConfig = () => {
     const cfg = vscode.workspace.getConfiguration('stocksTicker');
+    const hkOn = cfg.get<number>('refreshIntervalMs', 8000);
+    const usOn = cfg.get<number>('usRefreshIntervalMs', 3000);
+    const off = cfg.get<number>('offHoursRefreshIntervalMs', 3600000);
     return {
-      on: cfg.get<number>('refreshIntervalMs', 5000),
-      off: cfg.get<number>('offHoursRefreshIntervalMs', 30000),
+      hk: { on: hkOn, off },
+      us: { on: usOn, off },
       statusBarEnabled: cfg.get<boolean>('statusBarEnabled', true),
     };
   };
@@ -297,6 +310,9 @@ export function activate(context: vscode.ExtensionContext): void {
     // from a watchlist stock's context menu → that stock is preselected.
     vscode.commands.registerCommand('stocksTicker.addAlert', (node?: { symbol?: StockSymbol; label?: string }) =>
       void addAlertCommand(alertStore, () => currentWatchlist, node, () => void syncAlertsToTree())
+    ),
+    vscode.commands.registerCommand('stocksTicker.editAlert', (node?: AlertNode) =>
+      void editAlertCommand(alertStore, node, () => void syncAlertsToTree())
     ),
     vscode.commands.registerCommand('stocksTicker.toggleAlert', (node?: AlertNode) =>
       void toggleAlertCommand(alertStore, node, () => void syncAlertsToTree())
