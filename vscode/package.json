@@ -2,7 +2,7 @@
   "name": "stocks-ticker",
   "displayName": "股票行情",
   "description": "在命令面板查询港股/美股实时行情，状态栏轮播 + 侧边栏自选股列表。",
-  "version": "0.3.4",
+  "version": "0.3.7",
   "publisher": "robbie",
   "engines": {
     "vscode": "^1.80.0"

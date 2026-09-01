@@ -47,4 +47,38 @@ export class AlertStore {
   async clear(): Promise<void> {
     await this.storage.update(STORAGE_KEY, []);
   }
+
+  /**
+   * One-shot migration: drop the legacy `mode` field and revive alerts that
+   * were auto-disabled by the old `once` mode (which fired once then set
+   * `enabled=false`). After migration every alert behaves as edge-triggered
+   * (the only behavior now), so spent one-shots are re-enabled + re-armed to
+   * keep watching. Idempotent — runs on every activation but only writes when
+   * a legacy record is actually touched.
+   */
+  async migrate(): Promise<void> {
+    const list = await this.getAll();
+    // Loose-typed read: legacy records may carry `mode` / be disabled by the
+    // old once-mode auto-disable. We narrow them back to the current shape.
+    const legacy = list as Array<PriceAlert & { mode?: string }>;
+    let dirty = false;
+    const next = legacy.map((a) => {
+      if (a.mode === undefined && a.enabled !== false) {
+        return a;
+      }
+      dirty = true;
+      // Strip the legacy `mode` field; revive once-mode spent alerts.
+      const { mode: _drop, ...rest } = a;
+      return {
+        ...rest,
+        // Re-enable + re-arm any alert disabled by the old once-mode auto-disable,
+        // so it resumes watching under the new edge-triggered behavior.
+        enabled: true,
+        armed: true,
+      };
+    });
+    if (dirty) {
+      await this.storage.update(STORAGE_KEY, next);
+    }
+  }
 }

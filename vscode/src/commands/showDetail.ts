@@ -6,12 +6,19 @@ import type { Quote, StockSymbol } from '../types/stock';
  * Show a stock's detail in a Quick Pick.
  * Triggered by right-click →「查看详情」.
  *
- * Fires `onFollow` so the caller can peek the stock in the status bar.
+ * `onFreshQuote` fires right after a successful fetch so the caller can sync
+ * the sidebar list / status bar with the just-fetched quote — this prevents
+ * the list-vs-detail price drift caused by the list showing a stale poller
+ * cache while the detail view shows a live fetch.
+ *
+ * `onFollow` fires only when the user picks「在状态栏查看」(peeks the stock
+ * in the status bar without disturbing rotation afterwards).
  */
 export async function showDetailCommand(
   symbol: StockSymbol,
   fetchQuote: (s: StockSymbol) => Promise<Quote | null>,
-  onFollow?: (q: Quote) => void
+  onFollow?: (q: Quote) => void,
+  onFreshQuote?: (q: Quote) => void
 ): Promise<void> {
   let quote: Quote | null;
   try {
@@ -23,6 +30,9 @@ export async function showDetailCommand(
     vscode.window.showWarningMessage(`未获取到 ${symbol.code} 的行情数据。`);
     return;
   }
+  // Propagate the fresh quote so the caller can merge it into the sidebar
+  // cache + re-render the list, keeping detail and list prices in sync.
+  onFreshQuote?.(quote);
 
   const up = isUp(quote);
   const arrow = up ? '▲' : '▼';

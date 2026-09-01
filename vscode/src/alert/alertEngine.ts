@@ -6,8 +6,6 @@ import type { AlertStore } from '../storage/alertStore';
 interface AlertEngineCallbacks {
   /** Called after alert state changed (fire / disarm / re-arm) so the UI can refresh. */
   onChanged?: () => void;
-  /** Called when the user clicks「查看」on a fired toast; lets the caller peek the status bar. */
-  onFollow?: (quote: Quote) => void;
 }
 
 /**
@@ -19,12 +17,10 @@ interface AlertEngineCallbacks {
  *   - `up`   : price >= targetPrice
  *   - `down` : price <= targetPrice
  *
- * Fire modes:
- *   - `once`     : fires the first time the condition holds, then auto-disables.
- *   - `recurring`: edge-triggered — fires only on the false→true transition
- *                  (tracked via the `armed` flag), re-arms when the condition
- *                  goes false again. Prevents a toast on every poll tick while
- *                  the price stays beyond the threshold.
+ * Edge-triggered: fires only on the false→true transition (tracked via the
+ * `armed` flag), then disarms until the condition goes false again. Prevents
+ * a toast on every poll tick while the price stays beyond the threshold;
+ * re-arms on retreat so each subsequent crossing fires again.
  */
 export class AlertEngine {
   private running = false;
@@ -61,15 +57,8 @@ export class AlertEngine {
             : quote.price <= alert.targetPrice;
 
         if (triggered) {
-          if (alert.mode === 'once') {
-            // One-shot: fire immediately, then disable so it never fires again.
-            this.fire(alert, quote);
-            alert.enabled = false;
-            alert.fireCount += 1;
-            alert.lastFiredAt = Date.now();
-            dirty = true;
-          } else if (alert.armed) {
-            // Recurring + edge-triggered: fire only on the armed→triggered transition,
+          if (alert.armed) {
+            // Edge-triggered: fire only on the armed→triggered transition,
             // then disarm until the condition goes false again (re-armed below).
             this.fire(alert, quote);
             alert.armed = false;
@@ -77,7 +66,7 @@ export class AlertEngine {
             alert.lastFiredAt = Date.now();
             dirty = true;
           }
-        } else if (alert.mode === 'recurring' && !alert.armed) {
+        } else if (!alert.armed) {
           // Condition no longer holds: re-arm so the next crossing fires again.
           alert.armed = true;
           dirty = true;
@@ -93,27 +82,27 @@ export class AlertEngine {
   }
 
   /**
-   * Show the bottom-right toast for a fired alert.
+   * Show the alert as a status-bar message that auto-dismisses after 10s.
    *
-   * VSCode's native toast API (showWarningMessage) does NOT support custom
-   * colors or icons — every message uses the same yellow "!" glyph. To
-   * differentiate rise vs fall we prefix a colored emoji badge matching the
-   * status bar's A-share convention (🔴 red = up, 🟢 green = down), the same
-   * palette used in the add-alert direction picker for consistency.
+   * VSCode's native toast (showWarningMessage) cannot be dismissed
+   * programmatically — it lingers until the user clicks it. To honor the
+   * "auto-close after 10s" requirement we use setStatusBarMessage with a
+   * timeout instead. Trade-off: the「查看」follow action is dropped (status-
+   * bar messages don't support action buttons), but the message still carries
+   * the full symbol / target / live price, and the colored emoji badge keeps
+   * the A-share up/down convention (🔴 ▲ red = up, 🟢 ▼ green = down).
    */
   private fire(alert: PriceAlert, quote: Quote): void {
     const isUp = alert.direction === 'up';
     // Colored badge + arrow: the only reliable cross-platform way to colorize
-    // a VSCode toast, since QuickPick/toast text cannot be tinted via API.
+    // a VSCode message, since status-bar text cannot be tinted via API.
     const badge = isUp ? '🔴 ▲' : '🟢 ▼';
     const verb = isUp ? '涨到' : '跌到';
     const message =
       `${badge} ${quote.name} (${quote.symbol.code}) 已${verb} ${alert.targetPrice}，` +
       `现价 ${quote.price}`;
-    void vscode.window.showWarningMessage(message, '查看').then((action) => {
-      if (action === '查看') {
-        this.callbacks.onFollow?.(quote);
-      }
-    });
+    // Auto-dismiss after 10 seconds. The returned Disposable is intentionally
+    // not held — VSCode tears the message down itself when the timeout elapses.
+    void vscode.window.setStatusBarMessage(message, 10000);
   }
 }

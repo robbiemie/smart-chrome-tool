@@ -17,11 +17,11 @@ function mediaIcon(name: string): vscode.Uri {
  * engine reads, so what the user sees always matches what the engine will do
  * on the next poll tick.
  *
- * ── Icon (reflects "will the engine act next tick?") ─────────────────────
- *   enabled && (once || armed)        → up.svg / down.svg by alert direction
- *                                        (actively watching — will fire on hit)
- *   enabled && recurring && !armed    → flat.svg (fired, holding for a retreat
- *                                        to re-arm; will NOT fire next tick)
+ * ── Icon (reflects "is the alert still alive?") ─────────────────────────
+ *   enabled                           → up.svg / down.svg by alert direction
+ *                                        (stays colored even while a recurring
+ *                                        alert waits for a retreat to re-arm;
+ *                                        only disabled alerts go flat)
  *   !enabled                          → flat.svg (manually off or spent)
  *
  * ── ✓ marker (mirrors the engine's `triggered` formula) ──────────────────
@@ -30,14 +30,13 @@ function mediaIcon(name: string): vscode.Uri {
  *     down : price <= targetPrice
  *
  * ── Status tag (exhaustive over engine states) ───────────────────────────
- *   !enabled + once + fireCount>0     → 已用完   (spent one-shot)
- *   !enabled + otherwise              → 已停用   (manually disabled)
- *   enabled + recurring + !armed      → 待回落   (fired, waiting to re-arm)
- *   enabled + (once || armed)         → 监听中   (actively watching)
+ *   !enabled                          → 已停用   (manually disabled)
+ *   enabled + !armed                  → 待回落   (fired, waiting to re-arm)
+ *   enabled + armed                   → 监听中   (actively watching)
  *
  * contextValue taxonomy (drives menu visibility):
  *   - alertOn  : enabled alert (can toggle off / remove)
- *   - alertOff : disabled alert — manually off or a spent once-mode (can toggle on / remove)
+ *   - alertOff : disabled alert (can toggle on / remove)
  */
 export class AlertTreeProvider implements vscode.TreeDataProvider<AlertNode> {
   private readonly _onDidChange = new vscode.EventEmitter<AlertNode | undefined>();
@@ -76,7 +75,6 @@ export class AlertTreeProvider implements vscode.TreeDataProvider<AlertNode> {
   private buildNode(alert: PriceAlert): AlertNode {
     const dirIcon = alert.direction === 'up' ? '▲' : '▼';
     const dirWord = alert.direction === 'up' ? '涨到' : '跌到';
-    const modeTag = alert.mode === 'once' ? '单次' : '多次';
     // Target price uses the same market-aware precision as live prices.
     const targetStr = formatPriceByMarket(alert.targetPrice, alert.symbol.market);
 
@@ -91,21 +89,21 @@ export class AlertTreeProvider implements vscode.TreeDataProvider<AlertNode> {
     const displayName = isHk && liveName ? liveName : alert.name;
 
     // ── Engine state derivation (must match AlertEngine.evaluate exactly) ──
-    // `triggered` mirrors the engine's condition; `willFire` mirrors whether
-    // the engine would actually act on the next tick (once always fires when
-    // triggered; recurring only fires when armed).
+    // `triggered` mirrors the engine's condition (used for the ✓ marker and
+    // tooltip). The icon no longer tracks the armed/disarmed state — recurring
+    // alerts stay colored while waiting for a retreat to re-arm, so users see
+    // the alert is still alive and will fire again on the next crossing.
     const triggered = quote
       ? alert.direction === 'up'
         ? quote.price >= alert.targetPrice
         : quote.price <= alert.targetPrice
       : false;
-    const willFire = alert.enabled && (alert.mode === 'once' || alert.armed);
 
     // ── Status tag (exhaustive state matrix, see class doc) ──
     let statusTag: string;
     if (!alert.enabled) {
-      statusTag = alert.mode === 'once' && alert.fireCount > 0 ? '已用完' : '已停用';
-    } else if (alert.mode === 'recurring' && !alert.armed) {
+      statusTag = '已停用';
+    } else if (!alert.armed) {
       statusTag = '待回落';
     } else {
       statusTag = '监听中';
@@ -131,20 +129,20 @@ export class AlertTreeProvider implements vscode.TreeDataProvider<AlertNode> {
       ? `${formatMarketTag(alert.symbol.market)} ${displayName}`
       : `${formatMarketTag(alert.symbol.market)} ${alert.symbol.code}`;
     const description =
-      `${idPart} · ${liveBlock} · ${modeTag} · ${statusTag}`;
+      `${idPart} · ${liveBlock} · ${statusTag}`;
 
     const node = new AlertNode(label, alert.id, vscode.TreeItemCollapsibleState.None);
     node.description = description;
 
     // ── Tooltip: full state detail for hover ──
     const lines: string[] = [`${displayName} (${alert.symbol.code})`];
-    lines.push(`${dirWord} ${targetStr} · ${modeTag} · ${statusTag}`);
+    lines.push(`${dirWord} ${targetStr} · ${statusTag}`);
     if (quote) {
       lines.push(`现价 ${formatPrice(quote)}（昨收 ${quote.prevClose}）${triggered ? ' · 条件已满足' : ' · 条件未满足'}`);
     }
-    if (!alert.enabled && alert.mode === 'recurring') {
+    if (!alert.enabled) {
       lines.push(alert.armed ? '已装填' : '待回落重新装填');
-    } else if (alert.enabled && alert.mode === 'recurring') {
+    } else {
       lines.push(alert.armed ? '已装填 · 等待穿越触发' : '已触发 · 等待价格回落重新装填');
     }
     if (alert.fireCount > 0) {
@@ -153,8 +151,11 @@ export class AlertTreeProvider implements vscode.TreeDataProvider<AlertNode> {
     }
     node.tooltip = lines.join('\n');
 
-    // ── Icon: aligned with "will the engine act next tick?" ──
-    node.iconPath = mediaIcon(willFire ? (alert.direction === 'up' ? 'up.svg' : 'down.svg') : 'flat.svg');
+    // ── Icon: enabled alerts stay colored (up/down) even while disarmed
+    // (待回落); only disabled alerts (manually off) go flat. This keeps the
+    // alert visually "alive" so users know it will fire again on the next
+    // threshold crossing.
+    node.iconPath = mediaIcon(alert.enabled ? (alert.direction === 'up' ? 'up.svg' : 'down.svg') : 'flat.svg');
 
     node.contextValue = alert.enabled ? 'alertOn' : 'alertOff';
     return node;

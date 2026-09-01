@@ -215,11 +215,11 @@ export function activate(context: vscode.ExtensionContext): void {
   const findQuote = (raw: string): Quote | undefined => latestQuotes.find((q) => q.symbol.raw === raw);
 
   // Alert engine: declared before the poller so the onQuotes closure can reference
-  // it. Edge-triggered evaluation; refreshes the alert tree on state changes and
-  // peeks the status bar when the user clicks「查看」on a fired toast.
+  // it. Edge-triggered evaluation; refreshes the alert tree on state changes.
+  // Fired alerts surface as an auto-dismissing status-bar message (see
+  // AlertEngine.fire), so no follow callback is needed here.
   const alertEngine = new AlertEngine(alertStore, {
     onChanged: () => void syncAlertsToTree(),
-    onFollow: (q) => statusBar?.showSingle(q),
   });
 
   poller = new Poller(store, {
@@ -243,8 +243,9 @@ export function activate(context: vscode.ExtensionContext): void {
 
   // Initial sync + start polling.
   void syncWatchlistToTree().then(() => poller?.start());
-  // Load existing alerts into the tree + set empty-state context.
-  void syncAlertsToTree();
+  // Migrate legacy once-mode alerts (drop `mode`, revive spent one-shots) then
+  // load the cleaned list into the tree + set empty-state context.
+  void alertStore.migrate().then(() => syncAlertsToTree());
 
   // Apply status-bar visibility from config.
   statusBar.setEnabled(getConfig().statusBarEnabled);
@@ -286,7 +287,12 @@ export function activate(context: vscode.ExtensionContext): void {
       void vscode.workspace.getConfiguration('stocksTicker').update('statusBarEnabled', enabled, true);
       statusBar?.setEnabled(enabled);
     }),
-    vscode.commands.registerCommand('stocksTicker.refresh', () => poller?.refreshNow()),
+    vscode.commands.registerCommand('stocksTicker.refresh', () => {
+      // Immediate visual feedback so the click is never perceived as a no-op;
+      // update()/setError() overwrites this once the fresh quotes arrive.
+      statusBar?.setRefreshing();
+      poller?.refreshNow();
+    }),
     vscode.commands.registerCommand('stocksTicker.rename', (node?: { symbol?: { raw?: string }; label?: string }) => renameCommand(store, node, () => void syncWatchlistToTree())),
     vscode.commands.registerCommand('stocksTicker.pin', (node?: { symbol?: { raw?: string } }) => pinCommand(store, node, () => void syncWatchlistToTree())),
     vscode.commands.registerCommand('stocksTicker.unpin', (node?: { symbol?: { raw?: string } }) => unpinCommand(store, node, () => void syncWatchlistToTree())),
@@ -301,9 +307,26 @@ export function activate(context: vscode.ExtensionContext): void {
       if (!node || !isStockNode(node)) {
         return;
       }
-      void showDetailCommand(node.symbol, fetchQuote, (q) => {
-        statusBar?.showSingle(q);
-      });
+      void showDetailCommand(
+        node.symbol,
+        fetchQuote,
+        // onFollow: user picked「在状态栏查看」— peek without disturbing rotation.
+        (q) => statusBar?.showSingle(q),
+        // onFreshQuote: merge the just-fetched quote into the sidebar cache and
+        // re-render the list so it matches the detail view. The next poller tick
+        // overwrites this with fresh data; an empty fetch won't overwrite it
+        // (see poller.ts), so the list never regresses to a staler price.
+        (q) => {
+          const idx = latestQuotes.findIndex((x) => x.symbol.raw === q.symbol.raw);
+          if (idx >= 0) {
+            latestQuotes[idx] = q;
+          } else {
+            latestQuotes.push(q);
+          }
+          tree?.setQuotes(latestQuotes);
+          alertTree?.setQuotes(latestQuotes);
+        }
+      );
     }),
     // ---- Price alerts ----
     // Add an alert. From the alert view title → pick a stock from the watchlist;

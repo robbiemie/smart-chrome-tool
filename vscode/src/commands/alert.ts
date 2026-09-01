@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import { formatMarketTag } from '../utils/format';
-import type { AlertDirection, AlertMode, PriceAlert } from '../types/alert';
+import type { AlertDirection, PriceAlert } from '../types/alert';
 import type { WatchlistItem } from '../types/stock';
 import type { AlertStore } from '../storage/alertStore';
 
@@ -19,8 +19,7 @@ function buildAlert(
   symbol: WatchlistItem['symbol'],
   name: string,
   targetPrice: number,
-  direction: AlertDirection,
-  mode: AlertMode
+  direction: AlertDirection
 ): PriceAlert {
   return {
     id: makeAlertId(),
@@ -28,7 +27,6 @@ function buildAlert(
     name,
     targetPrice,
     direction,
-    mode,
     enabled: true,
     createdAt: Date.now(),
     fireCount: 0,
@@ -42,7 +40,6 @@ function buildAlert(
  *      from the watchlist).
  *   2. Enter target price (validated as a positive number).
  *   3. Pick direction: 涨到 / 跌到.
- *   4. Pick mode: 单次 / 多次.
  */
 export async function addAlertCommand(
   store: AlertStore,
@@ -112,36 +109,24 @@ export async function addAlertCommand(
     return;
   }
 
-  // --- Step 4: mode. ---
-  const modePicked = await vscode.window.showQuickPick(
-    [
-      { label: '单次', description: '触发一次后自动停用（止盈/止损单）', mode: 'once' as AlertMode },
-      { label: '多次', description: '每次穿越阈值都提醒（边沿触发，不刷屏）', mode: 'recurring' as AlertMode },
-    ],
-    { placeHolder: '选择提醒模式' }
-  );
-  if (!modePicked) {
-    return;
-  }
-
-  const alert = buildAlert(symbol, name ?? symbol.code, targetPrice, dirPicked.direction, modePicked.mode);
+  const alert = buildAlert(symbol, name ?? symbol.code, targetPrice, dirPicked.direction);
   await store.add(alert);
   vscode.window.showInformationMessage(
-    `已设置提醒：${alert.name} ${dirPicked.direction === 'up' ? '涨到' : '跌到'} ${targetPrice}（${modePicked.mode === 'once' ? '单次' : '多次'}）`
+    `已设置提醒：${alert.name} ${dirPicked.direction === 'up' ? '涨到' : '跌到'} ${targetPrice}`
   );
   onChanged?.();
 }
 
 /**
- * Edit an existing alert's trigger config (target price / direction / mode).
+ * Edit an existing alert's trigger config (target price / direction).
  *
  * The stock itself is NOT editable — changing the underlying symbol would be a
  * different alert, so delete + add is the intended path for that.
  *
  * Completing the flow re-arms AND re-enables the alert. This makes edit double
- * as a "revive" action: a spent once-mode alert (已用完) or a paused alert can
- * be reactivated by simply re-confirming or adjusting its config. The historical
- * fireCount / lastFiredAt are preserved as a record.
+ * as a "revive" action: a paused alert can be reactivated by simply
+ * re-confirming or adjusting its config. The historical fireCount /
+ * lastFiredAt are preserved as a record.
  */
 export async function editAlertCommand(
   store: AlertStore,
@@ -189,30 +174,17 @@ export async function editAlertCommand(
     return;
   }
 
-  // --- Step 3: mode (current selection marked with「当前」). ---
-  const modeItems = [
-    { label: `单次${mark(alert.mode === 'once')}`, description: '触发一次后自动停用（止盈/止损单）', mode: 'once' as AlertMode },
-    { label: `多次${mark(alert.mode === 'recurring')}`, description: '每次穿越阈值都提醒（边沿触发，不刷屏）', mode: 'recurring' as AlertMode },
-  ];
-  const modePicked = await vscode.window.showQuickPick(modeItems, {
-    placeHolder: '选择提醒模式',
-  });
-  if (!modePicked) {
-    return;
-  }
-
   // Apply the new config and re-arm + re-enable so the alert is ready to fire
-  // under its new settings (also revives spent / paused alerts).
+  // under its new settings (also revives paused alerts).
   await store.update(alert.id, {
     targetPrice,
     direction: dirPicked.direction,
-    mode: modePicked.mode,
     enabled: true,
     armed: true,
   });
 
   vscode.window.showInformationMessage(
-    `已更新提醒：${alert.name} ${dirPicked.direction === 'up' ? '涨到' : '跌到'} ${targetPrice}（${modePicked.mode === 'once' ? '单次' : '多次'}）`
+    `已更新提醒：${alert.name} ${dirPicked.direction === 'up' ? '涨到' : '跌到'} ${targetPrice}`
   );
   onChanged?.();
 }

@@ -131,6 +131,20 @@ export class StatusBarController {
     this.priceItem.show();
   }
 
+  /**
+   * Show a transient "refreshing" state right after the user clicks the
+   * status bar. The next update()/setError() call overwrites it, so no
+   * explicit restore is needed.
+   */
+  setRefreshing(): void {
+    this.nameItem.text = '$(loading~spin) 刷新中…';
+    this.nameItem.color = undefined;
+    this.nameItem.tooltip = '正在拉取最新行情…';
+    this.priceItem.text = '';
+    this.priceItem.color = undefined;
+    this.priceItem.hide();
+  }
+
   setError(message: string): void {
     this.nameItem.text = `$(error) ${message}`;
     this.nameItem.color = undefined;

@@ -25,6 +25,13 @@ export class Poller {
   private running: Partial<Record<Market, boolean>> = {};
   private stopped = false;
   private quotesByMarket: Partial<Record<Market, Quote[]>> = {};
+  /**
+   * Per-market "refresh requested while a tick was running" flag. Set by
+   * refreshNow() when the running-guard would otherwise drop the click; the
+   * in-flight tick honors it in finally by re-fetching immediately instead
+   * of scheduling the next slow tick.
+   */
+  private pendingRefresh: Partial<Record<Market, boolean>> = {};
 
   constructor(
     private readonly store: WatchlistStore,
@@ -52,10 +59,20 @@ export class Poller {
     });
   }
 
-  /** Trigger an immediate refresh out-of-cycle (both markets, does not reset scheduled timers). */
+  /**
+   * Trigger an immediate refresh out-of-cycle (both markets). If a tick is
+   * already running for a market, mark it pending so the in-flight tick will
+   * re-fetch right after it finishes — the user's explicit refresh click is
+   * never silently dropped by the running-guard.
+   */
   refreshNow(): void {
-    void this.tick('hk');
-    void this.tick('us');
+    (['hk', 'us'] as Market[]).forEach((m) => {
+      if (this.running[m]) {
+        this.pendingRefresh[m] = true;
+      } else {
+        void this.tick(m);
+      }
+    });
   }
 
   private scheduleNext(market: Market): void {
@@ -102,7 +119,15 @@ export class Poller {
       this.callbacks.onError(String(err));
     } finally {
       this.running[market] = false;
-      this.scheduleNext(market);
+      // If a refresh was requested while this tick was running, run one more
+      // tick now instead of scheduling the next slow tick — honors the user's
+      // explicit refresh click without dropping it.
+      if (this.pendingRefresh[market]) {
+        delete this.pendingRefresh[market];
+        void this.tick(market);
+      } else {
+        this.scheduleNext(market);
+      }
     }
   }
 }
